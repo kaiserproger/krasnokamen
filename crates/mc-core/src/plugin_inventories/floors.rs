@@ -79,7 +79,7 @@ pub(crate) fn below_block_floors(
 }
 pub(crate) fn below_player_floors(
     state: &TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     candidate: &[ItemStack],
 ) -> bool {
     let Some(connection) = state.connections.entity_connection(entity) else {
@@ -97,7 +97,7 @@ pub(crate) fn below_player_floors(
 /// Evaluates a sparse native cost plan without cloning component-bearing stacks.
 pub(crate) fn below_player_debit_floors(
     state: &TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     debits: &[(usize, u32)],
     broken_slot: Option<usize>,
 ) -> bool {
@@ -160,7 +160,7 @@ pub(crate) fn below_player_debit_floors(
 /// Applies borrowed slot overlays to ordinary stock; no full inventory image.
 pub(crate) fn below_player_replacement_floors(
     state: &TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     replacements: &[(usize, &ItemStack)],
 ) -> bool {
     let Some(connection) = state.connections.entity_connection(entity) else {

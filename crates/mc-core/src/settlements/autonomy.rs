@@ -536,7 +536,7 @@ pub(crate) struct StorageChestSite {
 
 pub(crate) fn storage_chest_site(
     state: &TickState,
-    executor: crate::boundary::EntityId,
+    executor: mc_domain::EntityId,
     anchor: [i32; 3],
 ) -> Option<StorageChestSite> {
     let chest = mc_data::Identifier::parse("minecraft:chest")

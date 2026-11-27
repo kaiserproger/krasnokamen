@@ -2,9 +2,10 @@
 //! ([`next_publication`], including its stale branch and `Lagged`) and the real
 //! publish path, not a hand-built index.
 use super::*;
-use mc_core::boundary::{ChangeSet, EntityAppearance, EntityId, TickOutput, WorldSnapshot};
+use mc_core::boundary::{ChangeSet, EntityAppearance, TickOutput, WorldSnapshot};
 use mc_core::dimensions::Dimension;
 use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+use mc_domain::EntityId;
 
 fn cow_type_id() -> u32 {
     mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")

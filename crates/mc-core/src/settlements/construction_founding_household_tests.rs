@@ -1,12 +1,13 @@
 //! Founding households from ordinary births (D44): household-less adults and
 //! the native courtship birth branch only. No test creates a household.
 use super::*;
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::entities::EntitySlot;
 use crate::settlements::allocator::PoiCache;
 use crate::settlements::allocator::tests::{roofed_bed, test_state, villager};
 use crate::settlements::households::HouseholdOrigin;
 use crate::tick_budget::Consumer;
+use mc_domain::EntityId;
 
 struct Town {
     state: TickState,

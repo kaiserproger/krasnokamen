@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::blueprint::MobCategory;
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 fn test_state(sim_distance: i32) -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry loads"));

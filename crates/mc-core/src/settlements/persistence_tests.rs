@@ -44,7 +44,7 @@ fn town(state: &mut TickState, name: &str) -> SettlementId {
         .unwrap()
 }
 
-fn resident(state: &mut TickState, pos: [f64; 3]) -> crate::boundary::EntityId {
+fn resident(state: &mut TickState, pos: [f64; 3]) -> mc_domain::EntityId {
     let type_id = state
         .registry
         .entity_types

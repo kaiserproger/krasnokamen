@@ -53,8 +53,9 @@ variables are described in
 
 ## Redeploy, keeping the world
 
-1. Build locally with `cargo build --release --locked -p mc-edge --bin krasnokamen`,
-   and check the glibc requirement:
+1. Pin the release binary with Main's `tools/dev/pin-release <tree>` (the runner
+   refuses ad-hoc `cargo build --release`) and check the glibc requirement of
+   the printed `KRASNOKAMEN_SERVER_BINARY`:
    `objdump -T <bin> | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1`.
 2. Smoke locally **with the exact plugin set you will deploy**: a temp dir with
    the server's `server.toml` changed to a private port, a private dashboard
@@ -107,10 +108,10 @@ exact reset, verified installed unit/account/world identity and a verified
 restorable backup. Release upgrade and `WORLDGEN_REVISION` guidance is in
 [releases](release-and-tags.md#core-release-cut); use the actual service user.
 
-## Pitfalls
+## Watching a restart
 
-- Never combine `set -e` with a `| grep -v` filter whose output may be empty:
-  the filter exits 1.
+- `set -e` scripts follow the [pipeline pitfall](../PITFALLS.md#claims-commits-and-pipelines):
+  a `| grep -v` filter with empty output exits 1.
 - During restart the old process logs `ERROR` lines ("journal work channel
   closed") and `journalctl --since` has one-second granularity. Match only
   `is listening`, `failed to start` and `panic`, and follow from `-n 0`.
@@ -145,10 +146,8 @@ restorable backup. Release upgrade and `WORLDGEN_REVISION` guidance is in
   no Xvfb or GPU, about 2% CPU and 170 MB idle. Windowed only for captures, on a
   private Xvfb display. Launch as a long-lived service, not `&` in a one-shot
   shell; one client per agent.
-- Fifteen swarm players on the 2-vCPU host held TPS 20 with p99 at most 21 ms
-  (2026-10).
-- **No bots on the live world** (2026-10-24, newer than the 24-hour soak
-  practice of 2026-10-23). The soak driver
+- **No bots on the live world** without owner approval (owner rule, 2026-10-24,
+  replacing the 24-hour soak practice of 2026-10-23). The soak driver
   [`tools/dev/test-server/soak.py`](../../tools/dev/test-server/soak.py)
   remains for owner-approved runs: start `player-scale-bots`, send
   `{"event":"run"}` on `ready`, `{"event":"stop"}` on `schedule_complete`, wait

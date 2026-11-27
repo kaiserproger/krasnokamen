@@ -28,10 +28,11 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{EntityEvent, EntityId, TickOutput};
+use crate::boundary::{EntityEvent, TickOutput};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::journal::{JournalEntry, entity_id_int};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Persisted pose at the last full image; batch time is not a change key.
 #[derive(Debug, PartialEq)]

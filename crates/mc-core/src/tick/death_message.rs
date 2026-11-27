@@ -1,8 +1,9 @@
 //! Vanilla death components and server-side team broadcast visibility.
-use crate::boundary::{EntityId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::intent::DamageSource;
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
 
 pub(super) fn component(

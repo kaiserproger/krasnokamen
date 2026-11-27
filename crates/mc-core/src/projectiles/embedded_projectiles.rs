@@ -2,11 +2,11 @@
 //! Neither counts nor removal timers occur in LivingEntity save/load methods.
 use std::sync::Arc;
 
-use crate::boundary::EntityId;
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::intent::DamageSource;
 use crate::projectiles::{ProjectileKind, ProjectileState};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 fn living(state: &TickState, slot: EntitySlot) -> bool {
     match state.entities.body(slot).kind {

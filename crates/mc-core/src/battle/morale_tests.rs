@@ -2,7 +2,7 @@ use super::*;
 use crate::battle::formation::{
     FormationRuntime, Order, PULSE_MORALE_FLOOR, RegimentSpec, SoldierSample,
 };
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 
 #[test]
 fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {

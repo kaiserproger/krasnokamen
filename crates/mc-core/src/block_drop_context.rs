@@ -206,7 +206,7 @@ pub(crate) fn roll(
 
 pub(crate) fn player_drops(
     state: &TickState,
-    actor: crate::boundary::EntityId,
+    actor: mc_domain::EntityId,
     pos: BlockPos,
     block: u32,
 ) -> Result<Vec<mc_data::ItemStack>, crate::CoreError> {

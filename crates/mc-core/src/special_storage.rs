@@ -1,10 +1,11 @@
 //! Decorated pots: native single-slot custody, no menu.
 //! Chiseled-bookcase custody lives in VanillaB-owned code; this module
 //! must not claim it (Main ruling 2026-10-26).
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::tick::{BlockEntityState, TickState};
 use mc_data::ItemStack;
 use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 
 pub(crate) fn owns(path: &str) -> bool {

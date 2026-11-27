@@ -1,6 +1,6 @@
 use super::*;
 use crate::battle::formation::{Order, RegimentSpec, SoldierSample};
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 use rustc_hash::FxHashMap;
 
 fn single(runtime: &mut FormationRuntime, id: i32, faction: u16, x: f64, order: Order) {

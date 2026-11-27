@@ -249,7 +249,7 @@ pub(crate) fn frame(channel: Identifier, payload: Vec<u8>) -> anyhow::Result<byt
 pub(crate) struct LodConnection {
     inflight: Arc<AtomicUsize>,
     /// This connection's player in the root world's committed snapshots.
-    entity: mc_core::boundary::EntityId,
+    entity: mc_domain::EntityId,
     /// Committed tick outputs since the last request. Long-lived: a fresh
     /// subscriber sees only later outputs, never the current position.
     ticks: tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
@@ -260,7 +260,7 @@ pub(crate) struct LodConnection {
 impl LodConnection {
     pub(crate) fn new(
         spawn: [f64; 3],
-        entity: mc_core::boundary::EntityId,
+        entity: mc_domain::EntityId,
         ticks: tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
     ) -> Self {
         Self {
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn distance_bound_measures_the_nearest_tile_point() {
         let (_, ticks) = tokio::sync::broadcast::channel(1);
-        let lod = LodConnection::new([0.0, 64.0, 0.0], mc_core::boundary::EntityId(1), ticks);
+        let lod = LodConnection::new([0.0, 64.0, 0.0], mc_domain::EntityId(1), ticks);
         let tile = |tile_x, level| TileRequest {
             tile_x,
             tile_z: 0,
@@ -515,7 +515,8 @@ mod tests {
     /// per request saw none and refused every tile).
     #[test]
     fn anchor_follows_committed_outputs_published_after_open() {
-        use mc_core::boundary::{ChangeSet, EntityId, EntityView, TickOutput, WorldSnapshot};
+        use mc_core::boundary::{ChangeSet, EntityView, TickOutput, WorldSnapshot};
+        use mc_domain::EntityId;
         let output = |entities: Vec<EntityView>| TickOutput {
             tick: 1,
             snapshot: Arc::new(WorldSnapshot {

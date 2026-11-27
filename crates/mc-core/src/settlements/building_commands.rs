@@ -5,8 +5,8 @@
 //! Replies are formatted for chat; world checks and mutation belong to
 //! `settlements::buildings`.
 
-use crate::boundary::EntityId;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Nobody here: the executor stands outside every settlement radius sphere
 /// (or has no position at all, e.g. the console).

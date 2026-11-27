@@ -2,7 +2,7 @@ use super::*;
 use crate::crafter::tests::{block, fixture, stack};
 use mc_data::ItemStack;
 
-fn setup() -> (TickState, crate::boundary::EntityId, BlockPos, u32) {
+fn setup() -> (TickState, mc_domain::EntityId, BlockPos, u32) {
     let (mut state, actor) = fixture(None);
     let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     state.registry =

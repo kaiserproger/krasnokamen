@@ -16,7 +16,7 @@ all existing versions**, never replacing the previous profile. See
   the bundle's `META-INF/versions` and `META-INF/libraries` jars and JDK 25.
 - Never ids or layouts from memory. Facts may be read from local jars; Mojang
   bytes and values copied from decompiled or `javap` output never enter Git
-  (AGENTS.md; client provenance rule in [real-client gates](real-client-gates.md)).
+  ([decision C1](../../DECISIONS.md#content-and-protocol); client provenance rule in [real-client gates](real-client-gates.md)).
 
 ## Server (this repository)
 

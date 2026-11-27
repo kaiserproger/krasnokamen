@@ -1,6 +1,6 @@
 # Worktrees, patches and integration
 
-[AGENTS](../../AGENTS.md) owns Git authorization: Main's standing commit/push
+The [owner rules](../RULES.md#commits-reviews-and-publication) own Git authorization: Main's standing commit/push
 permission does not extend to workers; preserve owner dirt. `<work>` and
 [historical provenance](README.md) are defined by the development index.
 

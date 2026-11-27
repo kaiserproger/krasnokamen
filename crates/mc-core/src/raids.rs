@@ -659,8 +659,8 @@ pub(crate) fn restore(state: &mut TickState) -> Result<(), crate::config::CoreEr
 
 pub(crate) fn killed(
     state: &mut TickState,
-    victim: crate::boundary::EntityId,
-    killer: Option<crate::boundary::EntityId>,
+    victim: mc_domain::EntityId,
+    killer: Option<mc_domain::EntityId>,
 ) {
     let Some(killer) = killer.filter(|id| state.players.contains_key(id)) else {
         return;

@@ -9,9 +9,10 @@ use mc_data::item_components::{CustomItemDefinition, ItemFacts};
 use mc_data::{Identifier, ItemStack};
 
 use crate::block_tools::BlockToolTable;
-use crate::boundary::{BlockPos, ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::{TickState, run_tick};
+use mc_domain::EntityId;
 
 const TOOL: &str = "chisel:chisel";
 const OWNER: &str = "chisel";

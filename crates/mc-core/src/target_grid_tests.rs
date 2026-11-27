@@ -1,7 +1,7 @@
 //! TargetGrid must return exactly what the linear scans it replaced returned.
 
-use crate::boundary::EntityId;
 use crate::target_grid::{Nearest, Target, TargetGrid, distance};
+use mc_domain::EntityId;
 
 /// splitmix64: seeded, dependency-free.
 struct Rng(u64);

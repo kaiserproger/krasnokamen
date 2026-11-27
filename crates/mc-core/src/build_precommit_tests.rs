@@ -12,10 +12,11 @@ use mc_script::{
 };
 
 use super::*;
-use crate::boundary::{EntityId, TickOutput};
+use crate::boundary::TickOutput;
 use crate::crafter::tests::{block, stack};
 use crate::journal::JournalEntry;
 use crate::tick::run_tick;
+use mc_domain::EntityId;
 
 const CONNECTION: ConnectionId = ConnectionId(1);
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };

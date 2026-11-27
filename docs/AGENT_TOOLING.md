@@ -1,6 +1,6 @@
 # Agent tooling
 
-[AGENTS.md](../AGENTS.md) holds the rules and the L0–L2 levels; this page is the
+[CONTRIBUTING](../CONTRIBUTING.md#validation) holds the L0–L2 levels; this page is the
 wiring around the validation harness. `python3 -m tools.harness list` (profiles)
 and `python3 -m tools.harness explain` (scenarios) are authoritative; prose here
 never overrides them. Never invoke `tools/harness/backends/` directly: those
@@ -182,7 +182,7 @@ with exact command, cited policy `why`, strictest run count (variable profiles
 several risk domains need manual classification.
 
 `tools/harness/plan.py` `RULES` restates policy and never creates it: change a
-rule only together with the AGENTS, persistence, protocol, real-client, ledger
+rule only together with the contributing, persistence, protocol, real-client, ledger
 or sibling document it cites. `AREAS`, `BACKEND_PROFILES` and the scenario
 catalogue supply mapped gates (otherwise `no mapped gate`); `VARIABLE_PROFILES`
 follows [gate hygiene](QA_AGENT_PROTOCOL.md#gate-hygiene). A new dependency,
@@ -445,8 +445,16 @@ calls are not statically proven.
   halves, then require the exact bed raycast and rendered capture; a found path,
   bed row or wall screenshot does not replace that, and saved-world route proofs
   are not fresh-seed acceptance.
-- Graphical failures: [real-client gates](development/real-client-gates.md),
-  [live-gate triage](development/live-gate-triage.md).
+- Verify each hypothesis in source or logs before spending another 5–60 minute
+  run. Stacked causes hide each other: fix them in the order they appear and
+  rerun once per fix; when many fixtures fail the same way, look for the shared
+  source state, not each target.
+- When the harness cannot reach crate-private state, add temporary
+  `eprintln!`/`tracing` lines with one unique marker, run one serial gate so
+  stderr lands in the server log, turn the finding into a failing-first test,
+  then remove every trace (grep for zero markers) and rerun.
+- Graphical failures: [real-client gates](development/real-client-gates.md);
+  causes already seen: [pitfalls](PITFALLS.md#live-gates-and-plugins).
 
 ## Java and Loader client launch (`client`)
 
@@ -556,7 +564,7 @@ ledger rows; never bundle parser fixes into fuzz-tooling changes.
 
 ## Negative-code gate
 
-The reviewer AGENTS.md requires (promotion batches of five or more rows;
+The reviewer the [owner rules](RULES.md#commits-reviews-and-publication) require (promotion batches of five or more rows;
 persistence, protocol, custody or battle-core changes before commit; releases)
 also checks: scope fit, duplicate mechanisms (not repeated call-site code), fake
 or wrong abstractions (caller-specific flags or branches in shared code),

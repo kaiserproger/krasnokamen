@@ -2,8 +2,9 @@
 //! publication and best-effort delivery. Policy lives in `voice.rs`.
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use mc_core::boundary::{ConnectionId, EntityId, TickOutput};
+use mc_core::boundary::{ConnectionId, TickOutput};
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_protocol::packets::{CustomPayload, Packet, play::ServerboundCustomPayload};
 use uuid::Uuid;
 

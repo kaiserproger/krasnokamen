@@ -1,11 +1,8 @@
 //! Village defense targets; friendly villagers and creepers are never attacked.
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
-use crate::{
-    boundary::{ChunkPos, EntityId},
-    entities::EntityKind,
-    tick::TickState,
-};
+use crate::{boundary::ChunkPos, entities::EntityKind, tick::TickState};
+use mc_domain::EntityId;
 
 /// Reputation at or below which villagers treat a nearby player as hostile.
 const HOSTILE_REPUTATION: i32 = -100;

@@ -2,9 +2,10 @@
 //! publication and delivery. Policy lives in `screen.rs`; never on the tick.
 use std::{collections::HashMap, sync::OnceLock, time::Instant};
 
-use mc_core::boundary::{ConnectionId, EntityId, TickOutput};
+use mc_core::boundary::{ConnectionId, TickOutput};
 use mc_core::dimensions::Dimension;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_protocol::packets::{CustomPayload, Packet, play::ServerboundCustomPayload};
 use uuid::Uuid;
 

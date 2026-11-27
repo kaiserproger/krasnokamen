@@ -1,11 +1,12 @@
 //! Zombie infection and weakness/golden-apple cure on the single tick owner.
 use super::{Gossip, VillagerState};
 use crate::{
-    boundary::{EntityId, Hand},
+    boundary::Hand,
     effects::{ActiveEffect, EffectId},
     entities::{EntityKind, EntitySlot},
     tick::TickState,
 };
+use mc_domain::EntityId;
 
 fn type_id(state: &TickState, name: &str) -> Option<u32> {
     state

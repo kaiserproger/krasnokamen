@@ -36,7 +36,7 @@ fn assert_bulk_frames(bytes: bytes::Bytes) {
 fn scoreboard_bulk_join_replay_fits_reliable_queue() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
-    let entity = mc_core::boundary::EntityId(1);
+    let entity = mc_domain::EntityId(1);
     let mut changes = vec![mc_core::boundary::PlayerChange::Joined {
         entity,
         dimension: Default::default(),
@@ -65,7 +65,7 @@ fn scoreboard_bulk_join_replay_fits_reliable_queue() {
 #[test]
 fn scoreboard_bulk_live_updates_fit_reliable_queue() {
     let id = ConnectionId(1);
-    let mut viewer = crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(1), [0.0; 3]);
+    let mut viewer = crate::plan::ViewerState::new(id, mc_domain::EntityId(1), [0.0; 3]);
     let packets = crate::plan::plan_player_changes(&bulk_score_changes(), &mut viewer);
     let (tx, mut rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
     for packet in packets {
@@ -79,7 +79,7 @@ fn scoreboard_bulk_live_updates_fit_reliable_queue() {
 fn text_burst_live_updates_fit_reliable_queue() {
     use mc_protocol::packets::{Packet, play::ClientboundSystemChat};
     let id = ConnectionId(1);
-    let mut viewer = crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(1), [0.0; 3]);
+    let mut viewer = crate::plan::ViewerState::new(id, mc_domain::EntityId(1), [0.0; 3]);
     let lines = (0..601)
         .map(|i| mc_core::boundary::PlayerChange::Chat {
             message: format!("line {i:04}"),
@@ -109,7 +109,7 @@ fn text_burst_live_updates_fit_reliable_queue() {
 fn removed_registration_fails_join_replay_without_panicking() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
-    let entity = mc_core::boundary::EntityId(1);
+    let entity = mc_domain::EntityId(1);
     let mut changes = vec![
         mc_core::boundary::PlayerChange::Joined {
             entity,
@@ -277,7 +277,7 @@ async fn removed_join_rejects_late_join_reason_waiter_and_registration() {
     registry.stash_join(
         id,
         JoinedSpawn {
-            entity: mc_core::boundary::EntityId(1),
+            entity: mc_domain::EntityId(1),
             position: [0.0; 3],
             rotation: [0.0, 0.0],
             game_mode: 0,

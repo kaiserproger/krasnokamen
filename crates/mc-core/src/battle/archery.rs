@@ -25,7 +25,7 @@ pub(super) const LETHAL_ARROW_ROLLS: u32 = 150;
 pub(super) const LETHAL_ARROW_BASE_DAMAGE: f32 = 25.0;
 
 /// Stateless per-shot choice: stable across worker count and hash order.
-pub(super) fn arrow_damage(owner: crate::boundary::EntityId, tick: u64) -> f32 {
+pub(super) fn arrow_damage(owner: mc_domain::EntityId, tick: u64) -> f32 {
     if super::combat::roll(owner, tick, 0x4b49_4c4c) < LETHAL_ARROW_ROLLS {
         LETHAL_ARROW_BASE_DAMAGE
     } else {

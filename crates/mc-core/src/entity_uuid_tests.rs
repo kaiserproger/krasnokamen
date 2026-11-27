@@ -1,7 +1,7 @@
-use crate::boundary::EntityId;
 use crate::config::CoreConfig;
 use crate::core::Core;
 use crate::entity_uuid::{SALT_LEN, derive};
+use mc_domain::EntityId;
 
 #[test]
 fn derived_uuids_are_stable_v4_and_distinct() {

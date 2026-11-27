@@ -23,27 +23,27 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
   [state ownership](architecture/state-ownership.md), [mutation paths](architecture/mutations.md),
   [persistence](architecture/persistence.md), [residency](architecture/residency.md),
   [settlements](architecture/settlements.md).
-- [ADRs](decisions/README.md): binding decisions and their supersession status.
+- [Decisions](../DECISIONS.md): one row per choice with its reason; long records in [decisions/](decisions/README.md).
 - Source-derived navigation: [crate graph](generated/crate-graph.md),
   [contract index](generated/contract-index.md), [scenario index](generated/scenario-index.md).
 - [Settlements owner decisions](settlements/OWNER_DECISIONS.md): binding owner text.
 
 ## Development and validation
 
-- [Contributing](../CONTRIBUTING.md) (prerequisites, build, L0–L2, pull requests)
-  and [agent working rules](../AGENTS.md) with its task routing table.
+- [Contributing](../CONTRIBUTING.md) (prerequisites, build, L0–L2, where tests go,
+  pull requests) and the [agent entry file](../AGENTS.md).
 - [Development playbooks](development/README.md): feature and protocol work, the
   owner-host runner, worktrees and integration, real-client gates, releases,
-  test server, client QA, reviews, lessons.
+  test server, client QA, reviews.
 - [Agent tooling and harness](AGENT_TOOLING.md): profiles, evidence boundaries,
   receipts, code-health ratchets, resource bounds.
-- [Agent Constitution](AGENT_CONSTITUTION.md) (binding for every agent),
+- [Owner rules](RULES.md) and [pitfalls](PITFALLS.md) (every agent reads both),
   [definition of done](DEFINITION_OF_DONE.md), [bug ledger](bugs/README.md) and
   [break-it QA protocol](QA_AGENT_PROTOCOL.md).
 - [Status and client coverage](STATUS.md),
   [quirk and farm parity gate](QUIRK_PARITY.md), [physics oracles](physics-oracles.md).
 - Performance: [reproducible profiles](performance/PROFILES.md),
-  [benchmarks](performance/BENCHMARKS.md), [player capacity](performance/PLAYER_CAPACITY.md).
+  [benchmarks and the player-capacity ladder](performance/BENCHMARKS.md).
 - Tool inputs: [playable scenarios](playable/README.md),
   [real-client regression manifests](real-client-regression/README.md),
   [worldgen evidence](evidence/worldgen-diff/README.md).

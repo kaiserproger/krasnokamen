@@ -1,8 +1,9 @@
 //! Client-driven elytra motion; the tick owns admission, pose and equipment wear.
 use super::{TickState, update_player_crouching};
-use crate::boundary::{ConnectionId, EntityId};
+use crate::boundary::ConnectionId;
 use crate::effects::EffectId;
 use crate::entities::EntitySlot;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 const CHEST_SLOT: usize = 38;

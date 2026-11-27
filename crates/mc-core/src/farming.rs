@@ -17,11 +17,12 @@ use mc_world::{BlockRegistry, BlockStateId, Chunk, ChunkSection, SECTION_DIM};
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::boundary::{BlockPos, ChunkPos, EntityId, Hand};
+use crate::boundary::{BlockPos, ChunkPos, Hand};
 use crate::config::CoreError;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::placement::Face;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// What a block state means to farming.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

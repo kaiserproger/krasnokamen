@@ -6,9 +6,9 @@ use super::exposure::{Plan, Sample};
 use super::formation::Regiment;
 use super::steering::NEIGHBOURS;
 use super::{BattleState, Frame};
-use crate::boundary::EntityId;
 use crate::entities::EntityKind;
 use crate::{CoreError, tick::TickState};
+use mc_domain::EntityId;
 use mc_physics::mth;
 
 pub const CHARGE_DECAY_TICKS: u64 = 260;
