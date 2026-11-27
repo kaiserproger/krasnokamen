@@ -1067,7 +1067,7 @@ pub(crate) fn damage(
     state: &mut TickState,
     victim: EntityId,
     source: Option<crate::intent::DamageSource>,
-    kind: crate::survival::DamageKind,
+    kind: mc_survival::DamageKind,
     amounts: (f32, f32),
     killed: bool,
     blocked: bool,
@@ -1091,7 +1091,8 @@ pub(crate) fn damage(
     if let Some(attacker) = attacker {
         source_evidence["source_entity"] = entity_snapshot(state, attacker);
     }
-    let damage_id = kind.type_name(
+    let damage_id = crate::intent::hit_type_name(
+        kind,
         source,
         attacker.is_some_and(|id| state.players.contains_key(&id)),
     );

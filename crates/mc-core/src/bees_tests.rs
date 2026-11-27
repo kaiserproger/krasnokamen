@@ -286,7 +286,7 @@ fn bottle_and_shears_harvest_and_smoke_prevents_anger() {
 fn nectar_grows_crops_and_sting_poisons_then_bee_dies() {
     let mut state = state(None);
     let actor = joined(&mut state);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     place(&mut state, POS, "minecraft:wheat");
     let id = mob(&mut state, "minecraft:bee", [4.5, 202.5, 4.5]);
     let slot = state.entities.slot_of(id).unwrap();

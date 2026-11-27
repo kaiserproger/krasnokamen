@@ -369,7 +369,7 @@ pub(in crate::tick) fn join(
             },
         },
     );
-    if state.difficulty != crate::survival::Difficulty::Easy {
+    if state.difficulty != mc_survival::Difficulty::Easy {
         state.push_player(
             *connection,
             PlayerChange::DifficultyChanged {

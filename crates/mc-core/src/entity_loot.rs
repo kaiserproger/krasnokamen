@@ -1,7 +1,6 @@
 //! Native contextual mob death, retained attributes, equipment and on-hit effects.
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::intent::DamageSource;
-use crate::survival::{DamageKind, Difficulty};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::loot::entity_26_1_2::{
@@ -11,6 +10,7 @@ use mc_data::loot::{LootContextItem, LootEnchantments};
 use mc_data::{Identifier, ItemStack};
 use mc_domain::EntityId;
 use mc_inventory::ItemRules;
+use mc_survival::{DamageKind, Difficulty};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -504,7 +504,7 @@ fn reduce_damage_impl(
     let reduced = if bypass {
         amount
     } else {
-        crate::enchantments::breach_damage(
+        mc_survival::breach_damage(
             amount,
             mc_data::armor::armor_reduced_damage(
                 amount,
@@ -1209,7 +1209,7 @@ fn wear_equipment_impl(
     kind: DamageKind,
     physical: bool,
 ) {
-    let wear = crate::survival::armor_wear(amount, kind);
+    let wear = mc_survival::armor_wear(amount, kind);
     if wear == 0 {
         return;
     }

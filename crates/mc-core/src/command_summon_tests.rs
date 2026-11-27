@@ -390,7 +390,7 @@ fn invulnerable_is_applied() {
     assert_eq!(
         state
             .entities
-            .land_hit(slot, 1000, 4.0, crate::survival::DamageKind::Melee),
+            .land_hit(slot, 1000, 4.0, mc_survival::DamageKind::Melee),
         0.0
     );
 }
@@ -443,7 +443,7 @@ fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     assert_eq!(
         state
             .entities
-            .land_hit(slot, 1000, 4.0, crate::survival::DamageKind::Melee),
+            .land_hit(slot, 1000, 4.0, mc_survival::DamageKind::Melee),
         0.0,
     );
     for _ in 0..20 {

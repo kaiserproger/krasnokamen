@@ -1124,7 +1124,7 @@ pub(crate) fn run(
                             physical: None,
                             custom_armor: false,
                             amount: 2.0,
-                            kind: crate::survival::DamageKind::Melee,
+                            kind: mc_survival::DamageKind::Melee,
                             source: Some(crate::intent::DamageSource::Melee {
                                 attacker: id,
                                 position: p,
@@ -1418,8 +1418,8 @@ pub(crate) fn accepted_hit(
         bee.angry_at = None;
         crate::projectiles::embedded_projectiles::sting(state, victim);
         let duration = match state.difficulty {
-            crate::survival::Difficulty::Hard => 360,
-            crate::survival::Difficulty::Normal => 200,
+            mc_survival::Difficulty::Hard => 360,
+            mc_survival::Difficulty::Normal => 200,
             _ => 0,
         };
         if duration > 0 {

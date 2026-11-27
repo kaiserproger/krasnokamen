@@ -242,7 +242,7 @@ fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
             prey,
             crate::tick::DamagePiece {
                 amount: 10.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 physical: None,
                 custom_armor: false,
                 source: Some(crate::intent::DamageSource::Melee {

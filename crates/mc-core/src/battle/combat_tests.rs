@@ -424,7 +424,7 @@ fn kill_intents(out: &Output, victim: EntityId) -> usize {
         .filter(|intent| {
             matches!(intent.kind, IntentKind::DamageEntity {
                 target,
-                kind: crate::survival::DamageKind::GenericKill,
+                kind: mc_survival::DamageKind::GenericKill,
                 ..
             } if target == victim)
         })

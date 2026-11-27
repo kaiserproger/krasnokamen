@@ -433,7 +433,7 @@ fn committed_mob_death_near_catalyst_suppresses_orbs_and_spreads_once() {
         kind: crate::intent::IntentKind::DamageEntity {
             target: entity,
             amount: 1000.0,
-            kind: crate::survival::DamageKind::Magic,
+            kind: mc_survival::DamageKind::Magic,
             source: None,
         },
         footprint: crate::intent::Footprint {

@@ -429,7 +429,7 @@ fn can_spawn(
         .registry
         .blueprint(type_id)
         .expect("admitted blueprint");
-    if state.difficulty == crate::survival::Difficulty::Peaceful
+    if state.difficulty == mc_survival::Difficulty::Peaceful
         && bp.category == crate::blueprint::MobCategory::Monster
     {
         return false;

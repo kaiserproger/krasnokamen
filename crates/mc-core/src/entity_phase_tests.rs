@@ -2315,7 +2315,7 @@ fn sensors_damage_commit_replaces_target_with_attacker() {
             physical: None,
             custom_armor: false,
             amount: 1.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: second,
                 position: [15.5, 101.0, 8.5],

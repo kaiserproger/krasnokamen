@@ -1,9 +1,9 @@
 use super::super::{flight_tests::setup, launch};
 use super::*;
 use crate::boundary::EntityAppearance;
-use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, run_tick};
 use mc_data::{Identifier, ItemStack};
+use mc_survival::DamageKind;
 
 fn target(state: &mut TickState, centre: [f64; 3]) -> EntityId {
     let cow = state

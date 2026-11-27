@@ -3,10 +3,10 @@ use crate::boundary::{ChangeSet, PlayerChange};
 use crate::command_context::{Context, run};
 use crate::command_execution::supports_store_result;
 use crate::commands::{Command, parse};
-use crate::survival::Difficulty;
 use crate::tick::TickState;
 use mc_domain::ConnectionId;
 use mc_nbt::{ListTag, Tag, tag_type};
+use mc_survival::Difficulty;
 
 fn fixture() -> (TickState, Context) {
     let (mut state, executor, _) = crate::hostile_tests::setup(8.0);

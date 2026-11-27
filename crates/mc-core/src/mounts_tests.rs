@@ -851,7 +851,7 @@ fn equipped_saddle_and_armor_death_drop_once_and_release_rider_and_leash() {
             physical: None,
             custom_armor: false,
             amount: 1000.0,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -1103,7 +1103,7 @@ fn armadillo_curls_against_undead_and_halves_melee_damage() {
             physical: None,
             custom_armor: false,
             amount: 10.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
     ));
@@ -1225,7 +1225,7 @@ fn wolf_body_armor_absorbs_melee_damage_and_wears() {
             physical: None,
             custom_armor: false,
             amount: 4.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
     ));

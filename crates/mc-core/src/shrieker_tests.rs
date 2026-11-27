@@ -3,7 +3,7 @@ use crate::boundary::PlayerChange;
 use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 fn fixture(can_summon: bool) -> (TickState, EntityId, BlockPos) {
     let (mut state, player, at) = crate::hostile_tests::setup(8.0);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     let pos = BlockPos {
         x: at[0] as i32,
         y: at[1] as i32,

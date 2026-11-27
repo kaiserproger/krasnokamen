@@ -183,7 +183,7 @@ fn every_assigned_species_spawns_locomotes_and_dies_through_native_merge() {
             kind: IntentKind::DamageEntity {
                 target: id,
                 amount: 1000.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: None,
             },
             footprint: Footprint {

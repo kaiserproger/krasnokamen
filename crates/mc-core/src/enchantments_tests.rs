@@ -191,7 +191,7 @@ fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage()
     let plain = ItemStack::new(sword, 1);
     let mut knockback = enchanted("knockback", 2);
     knockback.item_id = sword;
-    let swing = crate::combat::Swing {
+    let swing = mc_survival::combat::Swing {
         ticks_since_reset: 20,
         falling: false,
         on_ground: true,
@@ -200,8 +200,8 @@ fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage()
         melee_bonus: 0.0,
         attack_speed_multiplier: 1.0,
     };
-    let base = crate::combat::melee_hit(&rules, &plain, swing);
-    let pushed = crate::combat::melee_hit(&rules, &knockback, swing);
+    let base = mc_survival::combat::melee_hit(&rules, &plain, swing);
+    let pushed = mc_survival::combat::melee_hit(&rules, &knockback, swing);
     assert_eq!(pushed.damage, base.damage);
     assert_eq!(pushed.bonus_knockback, base.bonus_knockback + 1.0);
 }

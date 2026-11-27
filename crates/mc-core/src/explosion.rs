@@ -19,9 +19,9 @@ use crate::entities::EntityKind;
 use crate::hostile::{Special, sight_clear, special_of};
 use crate::natural_spawn::Rng;
 use crate::registry::CoreRegistry;
-use crate::survival::DamageKind;
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_survival::DamageKind;
 
 /// Blast resistance of unbreakable blocks (bedrock).
 const IMMUNE: f32 = 3_600_000.0;

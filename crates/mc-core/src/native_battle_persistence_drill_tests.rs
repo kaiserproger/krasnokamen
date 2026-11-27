@@ -430,7 +430,7 @@ fn charged_push(drill: &mut Drill, charged: u64) -> f32 {
             victim_slot,
             crate::tick::DamagePiece {
                 amount: 1.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: Some(crate::intent::DamageSource::Melee {
                     attacker: actor,
                     position,
@@ -723,7 +723,7 @@ fn battle_resume_sigkill_during_dying_body_keeps_tombstone_authority() {
             slot,
             crate::tick::DamagePiece {
                 amount: 1000.0,
-                kind: crate::survival::DamageKind::GenericKill,
+                kind: mc_survival::DamageKind::GenericKill,
                 source: None,
                 physical: None,
                 custom_armor: false,
@@ -918,7 +918,7 @@ fn queue_ground_death(drill: &mut Drill, victim: EntityId) {
         slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,
@@ -1187,7 +1187,7 @@ fn fresh_soldier(state: &TickState, side: u16) -> crate::entities::EntitySlot {
 fn melee_blow(attacker: EntityId) -> crate::tick::DamagePiece {
     crate::tick::DamagePiece {
         amount: 1.0,
-        kind: crate::survival::DamageKind::Melee,
+        kind: mc_survival::DamageKind::Melee,
         source: Some(crate::intent::DamageSource::Melee {
             attacker,
             position: [0.0; 3],

@@ -39,7 +39,7 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) chunk_revision: &'a (dyn Fn(i32, i32) -> u64 + Sync),
     /// World revision the previous entity phase read.
     pub(in crate::tick) unchanged_since: u64,
-    pub(in crate::tick) difficulty: crate::survival::Difficulty,
+    pub(in crate::tick) difficulty: mc_survival::Difficulty,
     pub(in crate::tick) sky_darken: u8,
 }
 
@@ -377,7 +377,7 @@ pub(in crate::tick) fn step_entity(
                             } else {
                                 attack_damage
                             },
-                            kind: crate::survival::DamageKind::Melee,
+                            kind: mc_survival::DamageKind::Melee,
                             source: Some(crate::intent::DamageSource::Melee {
                                 attacker: row.id,
                                 position: row.pos,
@@ -575,7 +575,7 @@ pub(in crate::tick) fn step_entity(
             kind: IntentKind::DamageEntity {
                 target: row.id,
                 amount: 2.0,
-                kind: crate::survival::DamageKind::Drowning,
+                kind: mc_survival::DamageKind::Drowning,
                 source: None,
             },
             footprint: Footprint {

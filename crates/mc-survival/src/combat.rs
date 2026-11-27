@@ -90,7 +90,7 @@ pub fn melee_hit_with_attributes(
     melee_hit_with_effective_attributes(rules, held, attribute_held, swing, None)
 }
 
-pub(crate) fn melee_hit_with_effective_attributes(
+pub fn melee_hit_with_effective_attributes(
     rules: &ItemRules<'_>,
     held: &ItemStack,
     attribute_held: &ItemStack,
@@ -164,7 +164,7 @@ fn swing_speed(
 
 /// Vanilla `Player.cannotAttackWithItem(stack, 5)`: the swing's charge five
 /// ticks ahead is below the held item's `minimum_attack_charge`.
-pub(crate) fn below_minimum_charge(
+pub fn below_minimum_charge(
     rules: &ItemRules<'_>,
     held: &ItemStack,
     attribute_held: &ItemStack,
@@ -189,7 +189,7 @@ pub struct MaceAttack {
 }
 
 /// MaceItem.canSmashAttack: strictly above 1.5 blocks, never while gliding.
-pub(crate) fn mace_attack(
+pub fn mace_attack(
     rules: &ItemRules<'_>,
     held: &ItemStack,
     fall_distance: f64,
@@ -209,7 +209,7 @@ pub(crate) fn mace_attack(
     })
 }
 
-pub(crate) fn smash_damage(held: &ItemStack, attack: MaceAttack) -> f32 {
+pub fn smash_damage(held: &ItemStack, attack: MaceAttack) -> f32 {
     let distance = attack.fall_distance;
     let base = if distance <= 3.0 {
         distance * 4.0
@@ -218,7 +218,12 @@ pub(crate) fn smash_damage(held: &ItemStack, attack: MaceAttack) -> f32 {
     } else {
         22.0 + distance - 8.0
     };
-    base as f32 + crate::enchantments::density_damage(held, distance)
+    base as f32 + density_damage(held, distance)
+}
+
+/// Authored 26.1.2 density: half a damage point per level and fallen block.
+fn density_damage(stack: &ItemStack, distance: f64) -> f32 {
+    (0.5 * f64::from(mc_inventory::enchanting::level(stack, "density")) * distance) as f32
 }
 
 /// Vanilla `LivingEntity.knockback`: new velocity of a target pushed with
@@ -281,7 +286,7 @@ fn enchantment_bonus(held: &ItemStack) -> f32 {
     }
 }
 
-pub(crate) fn fire_aspect_ticks(held: &ItemStack) -> u32 {
+pub fn fire_aspect_ticks(held: &ItemStack) -> u32 {
     (level(held, "minecraft:fire_aspect").max(0) as u32).saturating_mul(80)
 }
 

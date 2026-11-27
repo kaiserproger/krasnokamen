@@ -191,7 +191,7 @@ pub(crate) fn use_on(
     if crate::trial_spawner::block(state, clicked, "spawner").is_some() {
         return configure_spawner(state, actor, hand, clicked, type_id, &stack_snapshot, false);
     }
-    if state.difficulty == crate::survival::Difficulty::Peaceful
+    if state.difficulty == mc_survival::Difficulty::Peaceful
         && blueprint.category == crate::blueprint::MobCategory::Monster
     {
         return true;

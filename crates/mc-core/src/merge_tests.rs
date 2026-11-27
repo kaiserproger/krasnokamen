@@ -69,7 +69,7 @@ fn two_attackers_both_apply_in_stable_order() {
             IntentKind::DamageEntity {
                 target,
                 amount: 3.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: None,
             },
             Footprint {

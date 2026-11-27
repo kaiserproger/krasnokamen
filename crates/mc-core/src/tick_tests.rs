@@ -77,7 +77,7 @@ fn integrity_lethal_damage_rejects_staged_pickup_before_respawn() {
         player_slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
             physical: None,
             custom_armor: false,
@@ -3638,7 +3638,7 @@ fn kill_died_respawn_drops_once_and_revives() {
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -5463,7 +5463,7 @@ fn default_weather_durations_use_each_vanilla_distribution_deterministically() {
 
 #[test]
 fn damage_rules_only_bypass_their_player_damage_types() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for (rule, kind) in [
         ("fall_damage", DamageKind::Fall),
         ("drowning_damage", DamageKind::Drowning),
@@ -5540,7 +5540,7 @@ fn keep_inventory_and_immediate_respawn_retain_xp_and_inventory_without_death_ch
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -5585,7 +5585,7 @@ fn mob_drops_rule_suppresses_death_loot_without_suppressing_death() {
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -6079,7 +6079,7 @@ fn sign_placement_opens_owned_editor_and_text_is_journaled() {
 fn accepted_mob_hits_push_players_once_per_hurt_window() {
     use crate::boundary::{EntityEvent, PlayerChange};
     let (mut state, player, pos) = flat_player_fixture();
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.day_time = 14_000;
     let zombie_type = state
         .registry
@@ -6348,8 +6348,8 @@ fn bottom_slab_accepts_player_step_and_supports_mob_at_half_height() {
 #[test]
 fn nonlethal_player_damage_publishes_committed_health_without_waiting_for_death() {
     use crate::boundary::PlayerChange;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
 
     let (mut state, player, _) = flat_player_fixture();
     let slot = state.entities.slot_of(player).unwrap();
@@ -6424,9 +6424,9 @@ fn nonlethal_player_damage_publishes_committed_health_without_waiting_for_death(
 fn accepted_melee_wears_and_breaks_armor_and_syncs_the_inventory() {
     use crate::boundary::PlayerChange;
     use crate::commands::GameMode;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
     use mc_data::item_components::{ItemArmorFacts, ItemFacts, ItemFactsTable};
+    use mc_survival::DamageKind;
 
     for (kind, mode, breaks) in [
         (DamageKind::Melee, GameMode::Survival, true),
@@ -6519,7 +6519,7 @@ fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
         (Hand::Off, 4, true, false),
     ] {
         let (mut state, player, pos) = flat_player_fixture();
-        state.difficulty = crate::survival::Difficulty::Normal;
+        state.difficulty = mc_survival::Difficulty::Normal;
         state.day_time = 14_000;
         let victim = state.entities.slot_of(player).unwrap();
         state.entities.row_mut(victim).protected_until = 0;
@@ -6613,7 +6613,6 @@ fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damag
     use crate::boundary::EntityEvent;
     use mc_domain::Hand;
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
     for (kind, velocity, blocked) in [
         (DamageKind::Projectile, [0.0, -1.0], true),
@@ -6676,7 +6675,6 @@ fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
     use crate::boundary::{EntityEvent, PlayerChange};
     use mc_domain::Hand;
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
     for breaks in [false, true] {
         let (mut state, player, pos) = flat_player_fixture();
@@ -6775,8 +6773,8 @@ fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
 #[test]
 fn team_join_and_friendly_fire_block_melee_and_projectiles_without_hurt_side_effects() {
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     let (mut state, victim, pos) = flat_player_fixture();
     let attacker = join(&mut state, 2, "Attacker");
     let victim_name = state.connections.name_of(victim).unwrap().to_owned();
@@ -7059,7 +7057,7 @@ fn zombie_player_kill_spawns_five_experience_in_vanilla_buckets() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: player,
                 position: pos,
@@ -7884,7 +7882,7 @@ fn placement_obstruction_bound_follows_wide_body_dimension_transfer() {
 /// publishes the grave to that package only.
 #[test]
 fn grave_custody_buries_drops_keeps_experience_and_publishes_the_grave() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -7970,7 +7968,7 @@ fn grave_custody_buries_drops_keeps_experience_and_publishes_the_grave() {
 /// vanilla drop: the inventory never leaves the player and no container appears.
 #[test]
 fn keep_inventory_bypasses_grave_custody() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8074,7 +8072,7 @@ fn hopper_at(state: &mut TickState, cell: (i32, i32, i32)) -> u32 {
 /// inventory stays empty across the pull cycles that follow.
 #[test]
 fn grave_placement_avoids_an_existing_hopper_below_the_death_cell() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8166,7 +8164,7 @@ fn grave_placement_avoids_an_existing_hopper_below_the_death_cell() {
 /// so the grave moves to the first fully grounded ring cell.
 #[test]
 fn grave_placement_avoids_a_partial_block_below_the_death_cell() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8240,7 +8238,7 @@ fn grave_placement_avoids_a_partial_block_below_the_death_cell() {
 /// ring cell that does, and the cart's own inventory stays empty while it tries.
 #[test]
 fn grave_placement_avoids_a_cell_a_hopper_minecart_occupies() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules

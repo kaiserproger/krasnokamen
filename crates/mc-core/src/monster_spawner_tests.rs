@@ -175,7 +175,7 @@ fn regular_spawner_rejects_light_solid_space_and_peaceful() {
         at[2] as i32,
         state.registry.states.air,
     );
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     assert!((0..64).all(|seed| !can_spawn(
         &state,
         type_id,
@@ -236,7 +236,7 @@ fn regular_spawner_counts_monsters_in_resident_index() {
 #[test]
 fn fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful() {
     let (mut state, _, key) = fixture("cow");
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     state.day_time = 6000;
     for x in key.0 - 5..=key.0 + 5 {
         for z in key.2 - 5..=key.2 + 5 {
@@ -296,7 +296,7 @@ fn fix_mobs_spawner_accepts_custom_light_rules() {
         &mut crate::natural_spawn::Rng(1),
         Some([[1, 15], [0, 15]])
     ));
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     assert!(!can_spawn(
         &state,
         spawner.type_id,

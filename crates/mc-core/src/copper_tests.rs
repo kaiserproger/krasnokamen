@@ -1476,7 +1476,7 @@ fn copper_carried_items_drop_on_non_player_death_once_after_double_wal_replay() 
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));

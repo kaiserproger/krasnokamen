@@ -8,6 +8,8 @@ use mc_data::food::FoodEntry;
 
 use mc_inventory::ItemRules;
 
+pub mod combat;
+
 pub const MAX_HEALTH: f32 = 20.0;
 pub const MAX_FOOD: i32 = 20;
 pub const MAX_AIR: i32 = 300;
@@ -152,90 +154,58 @@ impl DamageKind {
         ]
         .into_iter()
         .find_map(|kind| {
-            let identity = kind.type_name(None, false);
+            let identity = kind.type_name(false);
             (identity == name).then_some((kind, identity))
         })
     }
 
-    /// Shared vanilla damage identity for wire publication and advancement tags.
-    pub(crate) fn type_name(
-        self,
-        source: Option<crate::intent::DamageSource>,
-        player_attack: bool,
-    ) -> &'static str {
-        use crate::intent::DamageSource;
-        match (self, source) {
-            (_, Some(DamageSource::Command { damage_type, .. })) => damage_type,
-            (Self::Melee, Some(DamageSource::Mace { attack, .. }))
-                if attack.fall_distance > 0.0 =>
-            {
-                "minecraft:mace_smash"
-            }
-            (Self::Melee, _) if player_attack => "minecraft:player_attack",
-            (Self::Melee, _) => "minecraft:mob_attack",
-            (Self::Projectile, Some(DamageSource::Projectile { direct_type_id, .. })) => {
-                match mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(
-                    direct_type_id,
-                )
-                .map(|contract| contract.name)
-                {
-                    Some("minecraft:trident") => "minecraft:trident",
-                    Some("minecraft:arrow" | "minecraft:spectral_arrow") => "minecraft:arrow",
-                    _ => "minecraft:thrown",
-                }
-            }
-            (Self::Fireball, _) => "minecraft:fireball",
-            (Self::Lightning, _) => "minecraft:lightning_bolt",
-            (Self::Explosion, _) => "minecraft:explosion",
-            (Self::InFire, _) => "minecraft:in_fire",
-            (Self::OnFire, _) => "minecraft:on_fire",
-            (Self::Lava, _) => "minecraft:lava",
-            (Self::Suffocation, _) => "minecraft:in_wall",
-            (Self::OutsideBorder, _) => "minecraft:outside_border",
-            (Self::Cactus, _) => "minecraft:cactus",
-            (Self::SweetBerryBush, _) => "minecraft:sweet_berry_bush",
-            (Self::HotFloor, _) => "minecraft:hot_floor",
-            (Self::Campfire, _) => "minecraft:campfire",
-            (Self::Fall, _) => "minecraft:fall",
-            (Self::FallingAnvil, _) => "minecraft:falling_anvil",
-            (Self::FallingStalactite, _) => "minecraft:falling_stalactite",
-            (Self::Drowning, _) => "minecraft:drown",
-            (Self::Starvation, _) => "minecraft:starve",
-            (Self::Wither, _) => "minecraft:wither",
-            (Self::Poison | Self::Magic, _) => "minecraft:magic",
-            (Self::Void, _) => "minecraft:out_of_world",
-            (Self::GenericKill, _) => "minecraft:generic_kill",
-            (Self::Freeze, _) => "minecraft:freeze",
-            (Self::FlyIntoWall, _) => "minecraft:fly_into_wall",
-            (Self::Cramming, _) => "minecraft:cramming",
-            (Self::SonicBoom, _) => "minecraft:sonic_boom",
-            (Self::IndirectMagic, _) => "minecraft:indirect_magic",
-            (Self::Stalagmite, _) => "minecraft:stalagmite",
-            (Self::DragonBreath, _) => "minecraft:dragon_breath",
-            (Self::Thorns, _) => "minecraft:thorns",
+    /// Vanilla damage identity for wire publication and advancement tags when
+    /// the hit's source does not name one (core's `intent::hit_type_name`
+    /// resolves command, mace-smash and projectile sources first).
+    pub fn type_name(self, player_attack: bool) -> &'static str {
+        match self {
+            Self::Melee if player_attack => "minecraft:player_attack",
+            Self::Melee => "minecraft:mob_attack",
+            Self::Fireball => "minecraft:fireball",
+            Self::Lightning => "minecraft:lightning_bolt",
+            Self::Explosion => "minecraft:explosion",
+            Self::InFire => "minecraft:in_fire",
+            Self::OnFire => "minecraft:on_fire",
+            Self::Lava => "minecraft:lava",
+            Self::Suffocation => "minecraft:in_wall",
+            Self::OutsideBorder => "minecraft:outside_border",
+            Self::Cactus => "minecraft:cactus",
+            Self::SweetBerryBush => "minecraft:sweet_berry_bush",
+            Self::HotFloor => "minecraft:hot_floor",
+            Self::Campfire => "minecraft:campfire",
+            Self::Fall => "minecraft:fall",
+            Self::FallingAnvil => "minecraft:falling_anvil",
+            Self::FallingStalactite => "minecraft:falling_stalactite",
+            Self::Drowning => "minecraft:drown",
+            Self::Starvation => "minecraft:starve",
+            Self::Wither => "minecraft:wither",
+            Self::Poison | Self::Magic => "minecraft:magic",
+            Self::Void => "minecraft:out_of_world",
+            Self::GenericKill => "minecraft:generic_kill",
+            Self::Freeze => "minecraft:freeze",
+            Self::FlyIntoWall => "minecraft:fly_into_wall",
+            Self::Cramming => "minecraft:cramming",
+            Self::SonicBoom => "minecraft:sonic_boom",
+            Self::IndirectMagic => "minecraft:indirect_magic",
+            Self::Stalagmite => "minecraft:stalagmite",
+            Self::DragonBreath => "minecraft:dragon_breath",
+            Self::Thorns => "minecraft:thorns",
             _ => "minecraft:generic",
         }
     }
 
-    pub(crate) fn type_id(
-        self,
-        source: Option<crate::intent::DamageSource>,
-        player_attack: bool,
-    ) -> i32 {
-        static IDS: std::sync::LazyLock<std::collections::HashMap<String, i32>> =
-            std::sync::LazyLock::new(|| {
-                (0..)
-                    .map_while(|id| {
-                        mc_data::required_registry_entry("damage_type", id)
-                            .map(|name| (name.as_str().to_owned(), id as i32))
-                    })
-                    .collect()
-            });
-        IDS[self.type_name(source, player_attack)]
+    /// Registry id of [`Self::type_name`].
+    pub fn type_id(self, player_attack: bool) -> i32 {
+        damage_type_id(self.type_name(player_attack))
     }
 
     /// Vanilla `bypasses_armor` damage types among these kinds.
-    pub(crate) fn bypasses_armor(self) -> bool {
+    pub fn bypasses_armor(self) -> bool {
         matches!(
             self,
             Self::Generic
@@ -260,7 +230,7 @@ impl DamageKind {
         )
     }
 
-    pub(crate) fn bypasses_invulnerability(self) -> bool {
+    pub fn bypasses_invulnerability(self) -> bool {
         matches!(self, Self::Void | Self::GenericKill)
     }
 
@@ -302,6 +272,20 @@ impl DamageKind {
             | Self::Void => 0.0,
         }
     }
+}
+
+/// Registry id of a vanilla `damage_type` name.
+pub fn damage_type_id(name: &str) -> i32 {
+    static IDS: std::sync::LazyLock<std::collections::HashMap<String, i32>> =
+        std::sync::LazyLock::new(|| {
+            (0..)
+                .map_while(|id| {
+                    mc_data::required_registry_entry("damage_type", id)
+                        .map(|name| (name.as_str().to_owned(), id as i32))
+                })
+                .collect()
+        });
+    IDS[name]
 }
 
 /// A player's survival state.
@@ -368,7 +352,7 @@ impl Vitals {
         )
     }
 
-    pub(crate) fn tick_with_max_health(
+    pub fn tick_with_max_health(
         &mut self,
         difficulty: Difficulty,
         eye_in_water: bool,
@@ -589,7 +573,7 @@ pub fn fall_damage(fall_distance: f64) -> f32 {
 }
 
 /// PointedDripstoneBlock.fallOn adds 2.5 blocks and doubles fall power.
-pub(crate) fn stalagmite_damage(fall_distance: f64) -> f32 {
+pub fn stalagmite_damage(fall_distance: f64) -> f32 {
     if !fall_distance.is_finite() {
         return 0.0;
     }
@@ -615,7 +599,7 @@ pub fn reduce_damage(
     reduce_damage_with_breach(rules, armor, amount, kind, 0)
 }
 
-pub(crate) fn reduce_damage_with_breach(
+pub fn reduce_damage_with_breach(
     rules: &ItemRules<'_>,
     armor: &[ItemStack],
     amount: f32,
@@ -625,7 +609,7 @@ pub(crate) fn reduce_damage_with_breach(
     reduce_damage_impl(rules, armor, amount, kind, breach, false, None)
 }
 
-pub(crate) fn reduce_damage_after_physical(
+pub fn reduce_damage_after_physical(
     rules: &ItemRules<'_>,
     armor: &[ItemStack],
     amount: f32,
@@ -635,7 +619,7 @@ pub(crate) fn reduce_damage_after_physical(
     reduce_damage_impl(rules, armor, amount, kind, breach, true, None)
 }
 
-pub(crate) fn reduce_damage_with_player_attributes(
+pub fn reduce_damage_with_player_attributes(
     rules: &ItemRules<'_>,
     armor: &[ItemStack],
     amount: f32,
@@ -722,9 +706,18 @@ fn reduce_damage_impl(
     let after_armor = if kind.bypasses_armor() {
         amount.max(0.0)
     } else {
-        crate::enchantments::breach_damage(amount, armor_reduced_damage(amount, stats), breach)
+        breach_damage(amount, armor_reduced_damage(amount, stats), breach)
     };
     protection_reduced_damage(after_armor, protection.min(20))
+}
+
+/// Breach subtracts from armor's damage fraction, not from armor points.
+pub fn breach_damage(amount: f32, armored: f32, level: u32) -> f32 {
+    if level == 0 {
+        return armored;
+    }
+    let amount = amount.max(0.0);
+    (armored + amount * 0.15 * level as f32).min(amount)
 }
 
 fn enchantment_level(stack: &ItemStack, id: &str) -> i32 {

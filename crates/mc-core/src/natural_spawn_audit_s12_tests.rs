@@ -83,7 +83,7 @@ fn old_run_with(
     let spawn_monsters =
         crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MONSTERS);
     old_census(state, &positions);
-    if spawn_monsters && state.difficulty != crate::survival::Difficulty::Peaceful {
+    if spawn_monsters && state.difficulty != mc_survival::Difficulty::Peaceful {
         phantoms::run(state, &observers, &mut rng, changes);
         patrols::run(state, &observers, &mut rng, changes);
         hostile::run(state, &positions, &mut rng, changes);

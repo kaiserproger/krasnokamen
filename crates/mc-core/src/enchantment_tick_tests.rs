@@ -2,10 +2,10 @@ use super::{flat_player_fixture, run_tick};
 use crate::boundary::{BlockPos, PlayerInput};
 use crate::enchantments;
 use crate::intent::DamageSource;
-use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
 use mc_domain::{ConnectionId, EntityId};
+use mc_survival::DamageKind;
 
 fn stack(state: &TickState, item: &str, enchants: &[(&str, i32)]) -> ItemStack {
     let mut stack = ItemStack::new(
@@ -661,20 +661,20 @@ fn existing_enchantment_protection_families_are_kind_specific_and_void_bypasses_
             ItemStack::EMPTY,
             ItemStack::EMPTY,
         ];
-        let base = crate::survival::reduce_damage(&rules, &plain, 10.0, kind);
-        let reduced = crate::survival::reduce_damage(&rules, &enchanted, 10.0, kind);
+        let base = mc_survival::reduce_damage(&rules, &plain, 10.0, kind);
+        let reduced = mc_survival::reduce_damage(&rules, &enchanted, 10.0, kind);
         assert!(
             (reduced - base * factor).abs() < 1e-5,
             "{name}: {reduced}/{base}"
         );
         assert_eq!(
-            crate::survival::reduce_damage(&rules, &enchanted, 10.0, DamageKind::Void),
+            mc_survival::reduce_damage(&rules, &enchanted, 10.0, DamageKind::Void),
             10.0
         );
         if name != "protection" {
             assert_eq!(
-                crate::survival::reduce_damage(&rules, &enchanted, 10.0, DamageKind::Melee),
-                crate::survival::reduce_damage(&rules, &plain, 10.0, DamageKind::Melee)
+                mc_survival::reduce_damage(&rules, &enchanted, 10.0, DamageKind::Melee),
+                mc_survival::reduce_damage(&rules, &plain, 10.0, DamageKind::Melee)
             );
         }
     }

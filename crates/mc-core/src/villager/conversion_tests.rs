@@ -90,7 +90,7 @@ fn zombie_and_husk_infection_preserve_identity_trade_data_and_prevent_death_drop
 
 fn assert_infection_preserves_villager(attacker_type: &str) {
     let mut state = state();
-    state.difficulty = crate::survival::Difficulty::Hard;
+    state.difficulty = mc_survival::Difficulty::Hard;
     state.world.ensure_blocking(
         &[(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
             .into_iter()
@@ -115,7 +115,7 @@ fn assert_infection_preserves_villager(attacker_type: &str) {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: zombie,
                 position: [1.0, 80.0, 0.0],
@@ -147,16 +147,16 @@ fn assert_infection_preserves_villager(attacker_type: &str) {
 #[test]
 fn villager_infection_uses_lethal_hit_not_other_damage_in_batch() {
     for (first_amount, second_kind, second_attacker, should_infect) in [
-        (1.0, crate::survival::DamageKind::Void, None, false),
+        (1.0, mc_survival::DamageKind::Void, None, false),
         (
             100.0,
-            crate::survival::DamageKind::Melee,
+            mc_survival::DamageKind::Melee,
             Some("minecraft:skeleton"),
             true,
         ),
     ] {
         let mut state = state();
-        state.difficulty = crate::survival::Difficulty::Hard;
+        state.difficulty = mc_survival::Difficulty::Hard;
         state.world.ensure_blocking(
             &[(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
                 .into_iter()
@@ -193,7 +193,7 @@ fn villager_infection_uses_lethal_hit_not_other_damage_in_batch() {
         for (amount, kind, source) in [
             (
                 first_amount,
-                crate::survival::DamageKind::Melee,
+                mc_survival::DamageKind::Melee,
                 Some(melee(husk)),
             ),
             (200.0, second_kind, other.map(melee)),

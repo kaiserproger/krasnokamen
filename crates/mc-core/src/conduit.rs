@@ -350,7 +350,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 kind: IntentKind::DamageEntity {
                     target: entity,
                     amount: 4.0,
-                    kind: crate::survival::DamageKind::Magic,
+                    kind: mc_survival::DamageKind::Magic,
                     source: None,
                 },
                 footprint: Footprint {

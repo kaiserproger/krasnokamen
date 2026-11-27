@@ -518,7 +518,7 @@ fn kill(state: &mut TickState, id: EntityId) {
         slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,
@@ -977,7 +977,7 @@ fn breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_tar
             stand,
             crate::tick::DamagePiece {
                 amount: 500.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: None,
                 physical: Some(crate::physical_defense::PhysicalImpact {
                     damage_hp: 500.0,
@@ -995,7 +995,7 @@ fn breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_tar
             cow_slot,
             crate::tick::DamagePiece {
                 amount: 5.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: None,
                 physical: None,
                 custom_armor: false,

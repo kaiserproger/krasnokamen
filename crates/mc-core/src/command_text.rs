@@ -324,7 +324,7 @@ fn target_players(
 /// deliver it as system chat. Vanilla sends no feedback to the sender.
 pub(crate) fn execute_tellraw(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: EntityId,
     target: &crate::commands::Target,
     message: &mc_nbt::Tag,

@@ -1181,13 +1181,13 @@ fn fireball_and_lightning_preserve_fire_and_armor_mitigation_categories() {
     ];
     let rules = state.registry.item_rules();
     for kind in [DamageKind::Fireball, DamageKind::Lightning] {
-        assert!(crate::survival::reduce_damage(&rules, &armor, 6.0, kind) < 6.0);
+        assert!(mc_survival::reduce_damage(&rules, &armor, 6.0, kind) < 6.0);
         let mut effects = crate::effects::ActiveEffects::default();
         effects.add(ActiveEffect::new(EffectId::FireResistance, 200, 0));
         assert_eq!(effects.reduce_damage(kind, 6.0), 0.0);
     }
     assert_eq!(
-        crate::survival::reduce_damage(&rules, &armor, 6.0, DamageKind::Generic),
+        mc_survival::reduce_damage(&rules, &armor, 6.0, DamageKind::Generic),
         6.0
     );
 }

@@ -223,7 +223,7 @@ pub(crate) use session_locks::SessionLocks;
 #[derive(Debug, Clone, Copy)]
 pub struct DamagePiece {
     pub amount: f32,
-    pub kind: crate::survival::DamageKind,
+    pub kind: mc_survival::DamageKind,
     pub source: Option<crate::intent::DamageSource>,
     pub(crate) physical: Option<crate::physical_defense::PhysicalImpact>,
     pub(crate) custom_armor: bool,
@@ -391,8 +391,8 @@ pub struct TickState {
     /// Stand-specific player double-punch window; environmental hurt is unrelated.
     pub(crate) armor_stand_hits: HashMap<EntityId, u64>,
     /// World difficulty (commands).
-    pub difficulty: crate::survival::Difficulty,
-    pub(crate) journaled_difficulty: Option<crate::survival::Difficulty>,
+    pub difficulty: mc_survival::Difficulty,
+    pub(crate) journaled_difficulty: Option<mc_survival::Difficulty>,
     pub(crate) journaled_default_game_mode: Option<crate::commands::GameMode>,
     /// Visible weather target and independent rain-clock duration.
     pub weather: (crate::commands::Weather, i64),

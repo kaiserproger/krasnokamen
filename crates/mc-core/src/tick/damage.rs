@@ -268,9 +268,7 @@ impl TickState {
                     pieces.last().and_then(|(piece, _)| piece.source),
                     pieces
                         .last()
-                        .map_or(crate::survival::DamageKind::Generic, |(piece, _)| {
-                            piece.kind
-                        }),
+                        .map_or(mc_survival::DamageKind::Generic, |(piece, _)| piece.kind),
                 );
                 let armor_stand = crate::armor_stand::is_stand(self, slot);
                 let rules = self.registry.item_rules();
@@ -316,9 +314,9 @@ impl TickState {
                     let reduced = if resists_magic
                         && matches!(
                             piece.kind,
-                            crate::survival::DamageKind::Magic
-                                | crate::survival::DamageKind::Poison
-                                | crate::survival::DamageKind::Thorns
+                            mc_survival::DamageKind::Magic
+                                | mc_survival::DamageKind::Poison
+                                | mc_survival::DamageKind::Thorns
                         ) {
                         reduced * 0.15
                     } else {
@@ -331,9 +329,9 @@ impl TickState {
                     let resisted =
                         if !matches!(
                             piece.kind,
-                            crate::survival::DamageKind::Void
-                                | crate::survival::DamageKind::GenericKill
-                                | crate::survival::DamageKind::Starvation
+                            mc_survival::DamageKind::Void
+                                | mc_survival::DamageKind::GenericKill
+                                | mc_survival::DamageKind::Starvation
                         ) && row.active_effects.has(crate::effects::EffectId::Resistance)
                         {
                             (reduced - amount - absorbed).max(0.0)
@@ -341,7 +339,7 @@ impl TickState {
                             0.0
                         };
                     let before_hit = row.health.max(0.0);
-                    row.health -= if piece.kind == crate::survival::DamageKind::Poison {
+                    row.health -= if piece.kind == mc_survival::DamageKind::Poison {
                         amount.min((row.health - 1.0).max(0.0))
                     } else {
                         amount
@@ -561,7 +559,7 @@ impl TickState {
                 .effective_attribute("armor")
                 .zip(player.effective_attribute("armor_toughness"))
             {
-                crate::survival::reduce_damage_with_player_attributes(
+                mc_survival::reduce_damage_with_player_attributes(
                     &rules,
                     &player.inventory.slots[36..40],
                     amount,
@@ -573,7 +571,7 @@ impl TickState {
                     },
                 )
             } else {
-                crate::survival::reduce_damage_with_breach(
+                mc_survival::reduce_damage_with_breach(
                     &rules,
                     &player.inventory.slots[36..40],
                     amount,
@@ -587,9 +585,9 @@ impl TickState {
             let absorbed = (absorption - player.active_effects.absorption).max(0.0);
             let resisted = if !matches!(
                 kind,
-                crate::survival::DamageKind::Void
-                    | crate::survival::DamageKind::GenericKill
-                    | crate::survival::DamageKind::Starvation
+                mc_survival::DamageKind::Void
+                    | mc_survival::DamageKind::GenericKill
+                    | mc_survival::DamageKind::Starvation
             ) && player
                 .active_effects
                 .has(crate::effects::EffectId::Resistance)
@@ -598,7 +596,7 @@ impl TickState {
             } else {
                 0.0
             };
-            let reduced = if kind == crate::survival::DamageKind::Poison {
+            let reduced = if kind == mc_survival::DamageKind::Poison {
                 reduced.min((player.vitals.health - 1.0).max(0.0))
             } else {
                 reduced
@@ -608,7 +606,7 @@ impl TickState {
             } else {
                 amount
             };
-            let wear = crate::survival::armor_wear(wear_amount, kind);
+            let wear = mc_survival::armor_wear(wear_amount, kind);
             if wear > 0 && !player.creative() && !player.spectator() && !player.vitals.is_dead() {
                 for (stack, armor_slot) in player.inventory.slots[36..40]
                     .iter_mut()
@@ -904,19 +902,17 @@ impl TickState {
         }
         if matches!(self.entities.body(slot).kind, EntityKind::Player { .. }) {
             let rule = match piece.kind {
-                crate::survival::DamageKind::Fall => {
-                    Some(crate::command_rules::BoolRule::FALL_DAMAGE)
-                }
-                crate::survival::DamageKind::Drowning => {
+                mc_survival::DamageKind::Fall => Some(crate::command_rules::BoolRule::FALL_DAMAGE),
+                mc_survival::DamageKind::Drowning => {
                     Some(crate::command_rules::BoolRule::DROWNING_DAMAGE)
                 }
-                crate::survival::DamageKind::InFire
-                | crate::survival::DamageKind::OnFire
-                | crate::survival::DamageKind::Lava
-                | crate::survival::DamageKind::HotFloor
-                | crate::survival::DamageKind::Fireball
-                | crate::survival::DamageKind::Lightning
-                | crate::survival::DamageKind::Campfire => {
+                mc_survival::DamageKind::InFire
+                | mc_survival::DamageKind::OnFire
+                | mc_survival::DamageKind::Lava
+                | mc_survival::DamageKind::HotFloor
+                | mc_survival::DamageKind::Fireball
+                | mc_survival::DamageKind::Lightning
+                | mc_survival::DamageKind::Campfire => {
                     Some(crate::command_rules::BoolRule::FIRE_DAMAGE)
                 }
                 _ => None,
@@ -927,13 +923,13 @@ impl TickState {
         }
         if matches!(
             piece.kind,
-            crate::survival::DamageKind::InFire
-                | crate::survival::DamageKind::OnFire
-                | crate::survival::DamageKind::Lava
-                | crate::survival::DamageKind::HotFloor
-                | crate::survival::DamageKind::Fireball
-                | crate::survival::DamageKind::Lightning
-                | crate::survival::DamageKind::Campfire
+            mc_survival::DamageKind::InFire
+                | mc_survival::DamageKind::OnFire
+                | mc_survival::DamageKind::Lava
+                | mc_survival::DamageKind::HotFloor
+                | mc_survival::DamageKind::Fireball
+                | mc_survival::DamageKind::Lightning
+                | mc_survival::DamageKind::Campfire
         ) {
             let body = self.entities.body(slot);
             let row = self.entities.row(slot);
@@ -1001,9 +997,9 @@ impl TickState {
         }
         if fresh && !piece.kind.bypasses_invulnerability() {
             if let Some(source) = piece.source
-                && piece.kind != crate::survival::DamageKind::Thorns
+                && piece.kind != mc_survival::DamageKind::Thorns
             {
-                self.commit_hit_knockback(slot, source, crate::combat::HIT_KNOCKBACK);
+                self.commit_hit_knockback(slot, source, mc_survival::combat::HIT_KNOCKBACK);
             }
             events.push(EntityEvent::Hurt { entity: id });
         }
@@ -1036,7 +1032,8 @@ impl TickState {
         if fresh {
             events.push(EntityEvent::Damage {
                 entity: self.entities.body(slot).id,
-                source_type_id: piece.kind.type_id(
+                source_type_id: crate::intent::hit_type_id(
+                    piece.kind,
                     piece.source,
                     cause.is_some_and(|id| self.players.contains_key(&id)),
                 ),
@@ -1110,7 +1107,7 @@ impl TickState {
         events: &mut Vec<EntityEvent>,
     ) -> bool {
         use crate::intent::DamageSource;
-        use crate::survival::DamageKind;
+        use mc_survival::DamageKind;
         if piece.amount <= 0.0
             || !matches!(
                 piece.kind,
@@ -1323,7 +1320,7 @@ impl TickState {
         {
             resistance = resistance.max(crate::battle::formation::SOLDIER_KNOCKBACK_RESISTANCE);
         }
-        let mut velocity = crate::combat::knockback_velocity(
+        let mut velocity = mc_survival::combat::knockback_velocity(
             old.map(|v| v / 20.0),
             ground,
             strength,
@@ -1333,7 +1330,7 @@ impl TickState {
         );
         if bonus > 0.0 {
             let yaw = f64::from(yaw).to_radians();
-            velocity = crate::combat::knockback_velocity(
+            velocity = mc_survival::combat::knockback_velocity(
                 velocity,
                 ground,
                 bonus,

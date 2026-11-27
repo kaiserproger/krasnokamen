@@ -399,7 +399,7 @@ fn piece(state: &TickState, slot: EntitySlot, kind: DamageKind) -> DamagePiece {
     hit.origin = [hit.point[0], hit.point[1], hit.point[2] + 3.0];
     DamagePiece {
         amount: hit.damage_hp,
-        kind: crate::survival::DamageKind::Melee,
+        kind: mc_survival::DamageKind::Melee,
         source: None,
         physical: Some(hit),
         custom_armor: false,

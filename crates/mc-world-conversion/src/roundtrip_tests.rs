@@ -287,7 +287,7 @@ pub(super) fn modern_fixture(root: &Path, config: &CoreConfig) {
         domain_versions: bridge::domain_versions(),
         world_spawn: Some([12, 75, -45]),
         world_spawn_rotation: [90.0, 15.0],
-        difficulty: mc_core::survival::Difficulty::Hard,
+        difficulty: mc_survival::Difficulty::Hard,
         climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
             game_clock: Default::default(),

@@ -323,7 +323,7 @@ fn piercing_crossbow_arrow_hits_multiple_distinct_bodies_without_repeat_damage()
 #[test]
 fn player_arrow_damage_is_not_scaled_by_peaceful_difficulty() {
     let (mut state, player, centre) = setup();
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     let cow = state
         .registry
         .entity_types

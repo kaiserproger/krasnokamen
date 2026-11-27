@@ -860,14 +860,14 @@ fn auth_gate_blocks_ambient_damage_and_item_custody_until_unlock() {
         physical: None,
         custom_armor: false,
         amount: 2.0,
-        kind: crate::survival::DamageKind::Melee,
+        kind: mc_survival::DamageKind::Melee,
         source: None,
     };
     for kind in [
-        crate::survival::DamageKind::Melee,
-        crate::survival::DamageKind::Lava,
-        crate::survival::DamageKind::Fall,
-        crate::survival::DamageKind::Drowning,
+        mc_survival::DamageKind::Melee,
+        mc_survival::DamageKind::Lava,
+        mc_survival::DamageKind::Fall,
+        mc_survival::DamageKind::Drowning,
     ] {
         state
             .merge_damage

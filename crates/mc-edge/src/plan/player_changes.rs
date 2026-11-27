@@ -934,7 +934,7 @@ fn plan_roster(
 fn plan_scoreboard_events(
     viewer: &mut ViewerState,
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: mc_domain::ConnectionId,
     events: &[mc_core::scoreboard::ScoreboardEvent],
 ) {
     let start = out.len();
@@ -959,7 +959,7 @@ fn plan_text_burst(lines: &[PlayerChange], viewer: &mut ViewerState, out: &mut V
 /// the wire, so a short core inventory is padded rather than rejected.
 fn plan_menu_contents(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: mc_domain::ConnectionId,
     window: u8,
     state_id: i32,
     slots: &[Option<ItemStack>],
@@ -983,7 +983,7 @@ fn plan_menu_contents(
 
 fn plan_merchant_offers(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: mc_domain::ConnectionId,
     window: u8,
     offers: &[mc_core::villager::VillagerTradeOffer],
     level: u8,

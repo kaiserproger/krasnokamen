@@ -336,7 +336,7 @@ fn death_drops_every_stack_exactly_once() {
     assert!(p.inventory.slots.iter().all(ItemStack::is_empty));
     assert_eq!(total(&p, &died, STONE), 12);
     assert_eq!(total(&p, &died, APPLE), 4);
-    assert_eq!(p.vitals.experience, crate::survival::Experience::default());
+    assert_eq!(p.vitals.experience, mc_survival::Experience::default());
 }
 
 #[test]

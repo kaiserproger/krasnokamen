@@ -55,8 +55,11 @@ fn damage_command_parses_vanilla_forms_and_rejects_before_mutation() {
                 cause: None,
                 position: None,
             });
-            assert_eq!(kind.type_name(source, true), name.as_str());
-            assert_eq!(kind.type_id(source, true), id as i32);
+            assert_eq!(
+                crate::intent::hit_type_name(kind, source, true),
+                name.as_str()
+            );
+            assert_eq!(crate::intent::hit_type_id(kind, source, true), id as i32);
         }
     }
 }

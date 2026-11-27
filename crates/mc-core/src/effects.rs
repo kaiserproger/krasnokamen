@@ -1,7 +1,7 @@
 //! Living-entity status effects: vanilla 26.1.2 identities and pure transitions.
-use crate::survival::{DamageKind, Vitals};
 pub use mc_data::mob_effects_26_1_2::MobEffect as EffectId;
 use mc_physics::mth;
+use mc_survival::{DamageKind, Vitals};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

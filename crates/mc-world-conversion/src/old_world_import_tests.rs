@@ -1498,7 +1498,7 @@ fn java118_old_layout_import_anvil_upgrades_all_records_and_native_readback() {
         );
     }
     assert_eq!(manifest.domain_versions, bridge::domain_versions());
-    assert_eq!(manifest.difficulty, mc_core::survival::Difficulty::Hard);
+    assert_eq!(manifest.difficulty, mc_survival::Difficulty::Hard);
     assert_eq!(manifest.world_spawn, Some([12, 75, -45]));
     assert_eq!(manifest.world_spawn_rotation, [90.0, 0.0]);
     let climate = manifest.climate.unwrap();

@@ -722,7 +722,7 @@ fn a_grudge_forgets_only_an_attacker_who_left_the_columns() {
         horse,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,

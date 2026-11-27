@@ -152,9 +152,9 @@ fn fix_mobs_spawn_egg_configures_spawner_without_spawning_adjacent_mob() {
         .world
         .set_block(clicked.x, clicked.y, clicked.z, spawner);
     for (name, difficulty) in [
-        ("zombie", crate::survival::Difficulty::Normal),
-        ("cow", crate::survival::Difficulty::Peaceful),
-        ("zombie", crate::survival::Difficulty::Peaceful),
+        ("zombie", mc_survival::Difficulty::Normal),
+        ("cow", mc_survival::Difficulty::Peaceful),
+        ("zombie", mc_survival::Difficulty::Peaceful),
     ] {
         state.difficulty = difficulty;
         let egg = state

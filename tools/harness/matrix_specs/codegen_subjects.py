@@ -11,6 +11,7 @@ CORE = SOL / "crates/mc-core/src"
 EDGE = SOL / "crates/mc-edge/src"
 DATA = SOL / "crates/mc-data/src"
 INVENTORY = SOL / "crates/mc-inventory/src"
+SURVIVAL = SOL / "crates/mc-survival/src"
 
 
 def read(p):
@@ -406,7 +407,7 @@ def build():
         (k, f"/tp or /effect with {s} against several players/entities", f"targets = {o} per vanilla EntitySelector",
          {"op": 0 if k == "nonop_selector_msg" else 2, "console": k != "nonop_selector_msg", **({"mp": True} if k in ("at_a", "at_r", "at_p", "sort_random") else {})})
         for k, s, o in sel])
-    kinds = enum_variants(CORE / "survival.rs", "DamageKind")
+    kinds = enum_variants(SURVIVAL / "lib.rs", "DamageKind")
     domain("damage", ["core:survival.rs", "core:tick/damage.rs"], ["read_world_state"],
            [(k, DMG[k][0], f"{DMG[k][1]}; death message + damage type id on wire", {}) for k in kinds] +
            [(f"vanilla_{k}", v[0], f"vanilla: {v[1]}", {"status": "no_code_hit"}) for k, v in VANILLA_DMG_GAPS.items()])
@@ -471,7 +472,7 @@ def build():
             "goal_kinds": enum_variants(CORE / "blueprint.rs", "GoalKind"),
             "dimensions": enum_variants(CORE / "dimensions.rs", "Dimension"),
             "game_modes": enum_variants(CORE / "commands.rs", "GameMode"),
-            "difficulties": enum_variants(CORE / "survival.rs", "Difficulty"),
+            "difficulties": enum_variants(SURVIVAL / "lib.rs", "Difficulty"),
             "weathers": enum_variants(CORE / "commands.rs", "Weather"),
             "mob_categories": enum_variants(DATA / "entity_contract_26_1_2.rs", "MobCategory"),
             "plugins": plugin_manifests(), "map_nonliving": map_nonliving}

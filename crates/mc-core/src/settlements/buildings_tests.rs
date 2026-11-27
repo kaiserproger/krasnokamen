@@ -417,7 +417,7 @@ fn roof_intersecting_villagers_die_and_release_membership_not_despawn() {
                 intent.kind,
                 crate::intent::IntentKind::DamageEntity {
                     target,
-                    kind: crate::survival::DamageKind::Suffocation,
+                    kind: mc_survival::DamageKind::Suffocation,
                     ..
                 } if target == id
             )

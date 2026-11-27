@@ -360,7 +360,7 @@ fn generic_damage_never_kills_or_loots_nonliving_primed_tnt() {
         kind: IntentKind::DamageEntity {
             target: id,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Explosion,
+            kind: mc_survival::DamageKind::Explosion,
             source: None,
         },
         footprint: Footprint {

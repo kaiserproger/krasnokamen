@@ -148,7 +148,7 @@ fn multipart_damage_routes_head_and_reduces_body_and_reserves_ids() {
         kind: IntentKind::DamageEntity {
             target: EntityId(id.0 + 3),
             amount: 20.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
         footprint: Footprint {
@@ -430,7 +430,7 @@ fn config(root: &std::path::Path) -> crate::config::CoreConfig {
 fn peaceful_end_checkpoint_reopens_with_the_same_dragon() {
     let mut s = running();
     let uuid = s.end_fight.dragon_uuid.unwrap();
-    s.difficulty = crate::survival::Difficulty::Peaceful;
+    s.difficulty = mc_survival::Difficulty::Peaceful;
     run_tick(&mut s, &[]);
     let directory = tempfile::tempdir().unwrap();
     native_fixture(&s, directory.path());
@@ -453,7 +453,7 @@ fn checkpoint_reopens_live_and_dead_dragon_fights() {
                 death_tick(&mut state, &mut ChangeSet::default(), slot);
             }
         } else {
-            state.difficulty = crate::survival::Difficulty::Peaceful;
+            state.difficulty = mc_survival::Difficulty::Peaceful;
             run_tick(&mut state, &[]);
         }
         let directory = tempfile::tempdir().unwrap();
@@ -652,12 +652,12 @@ fn perched_projectiles_are_immune_and_only_committed_damage_triggers_takeoff() {
         physical: None,
         custom_armor: false,
         amount: 20.0,
-        kind: crate::survival::DamageKind::Projectile,
+        kind: mc_survival::DamageKind::Projectile,
         source: None,
     };
     assert!(!damage_allowed(&mut s, slot, &mut piece));
     assert_eq!(s.end_fight.perched_damage, 0.0);
-    piece.kind = crate::survival::DamageKind::Melee;
+    piece.kind = mc_survival::DamageKind::Melee;
     assert!(damage_allowed(&mut s, slot, &mut piece));
     assert_eq!(s.end_fight.perched_damage, 0.0);
     damage_committed(&mut s, slot, 50.0);
@@ -783,7 +783,7 @@ fn crystal_hit_is_lethal_and_chained_explosion_does_not_emit_second_blast() {
             physical: None,
             custom_armor: false,
             amount: 1.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
     ));

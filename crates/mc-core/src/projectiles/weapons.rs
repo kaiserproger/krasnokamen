@@ -979,7 +979,7 @@ pub(crate) fn tick(state: &mut TickState, intents: &mut Vec<crate::intent::Inten
                         target,
                         amount: 9.0
                             + crate::enchantments::target_damage(state, target, &spin.stack),
-                        kind: crate::survival::DamageKind::Melee,
+                        kind: mc_survival::DamageKind::Melee,
                         source: Some(crate::intent::DamageSource::Melee {
                             attacker: actor,
                             position: spin.previous,

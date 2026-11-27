@@ -10,7 +10,7 @@ fn fixture(
     [f64; 3],
 ) {
     let (mut state, player, pos) = crate::hostile_tests::setup(range);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.gamerules.insert("spawn_mobs".into(), "false".into());
     state.players.get_mut(&player).unwrap().vitals.food = 17;
     let type_id = state

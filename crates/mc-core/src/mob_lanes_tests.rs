@@ -716,7 +716,7 @@ fn hurt_axolotl_in_water_plays_dead_and_regenerates() {
                 physical: None,
                 custom_armor: false,
                 amount: 1.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: Some(crate::intent::DamageSource::Melee {
                     attacker: player,
                     position: [8.5, 80.0, 8.5],

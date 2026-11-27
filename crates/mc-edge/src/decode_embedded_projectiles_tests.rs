@@ -167,7 +167,7 @@ fn natural_skeleton_arrow_publishes_causal_damage_before_removal() {
     };
     let (mut state, _, player) = super::stream_tests::full_data_fixture();
     state.day_time = 18_000;
-    state.difficulty = mc_core::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.players.get_mut(&player).unwrap().vitals.food = 17;
     let position = [2.5, 201.0, 8.5];
     state

@@ -105,7 +105,7 @@ fn is_air(state: &TickState, pos: BlockPos) -> bool {
 #[test]
 fn player_places_final_skull_and_summons_wither() {
     let mut state = fixture();
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     run_tick(
         &mut state,
         &[PlayerInput::Join {
@@ -405,7 +405,7 @@ fn iron_ingot_repairs_golem_from_either_hand_without_overhealing() {
 
 #[test]
 fn natural_golem_player_damage_scales_with_difficulty() {
-    use crate::survival::Difficulty;
+    use mc_survival::Difficulty;
     let mut damage = Vec::new();
     for difficulty in [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard] {
         let mut state = fixture();
@@ -449,7 +449,7 @@ fn natural_golem_player_damage_scales_with_difficulty() {
 
 #[test]
 fn golem_damage_to_mobs_is_independent_of_difficulty() {
-    use crate::survival::Difficulty;
+    use mc_survival::Difficulty;
     let mut damage = Vec::new();
     for difficulty in [Difficulty::Easy, Difficulty::Normal, Difficulty::Hard] {
         let mut state = fixture();

@@ -1,9 +1,9 @@
 //! Spawn-finalized vanilla held items and regional-difficulty equipment rolls.
 use crate::entities::EntitySlot;
 use crate::natural_spawn::Rng;
-use crate::survival::Difficulty;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_survival::Difficulty;
 use std::sync::Arc;
 
 fn stack(state: &TickState, name: &str) -> Option<ItemStack> {

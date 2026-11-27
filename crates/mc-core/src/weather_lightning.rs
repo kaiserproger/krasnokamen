@@ -46,7 +46,7 @@ pub(crate) fn strike_blocks(state: &mut TickState, position: [f64; 3]) {
     }
     if !matches!(
         state.difficulty,
-        crate::survival::Difficulty::Normal | crate::survival::Difficulty::Hard
+        mc_survival::Difficulty::Normal | mc_survival::Difficulty::Hard
     ) {
         return;
     }
@@ -145,7 +145,7 @@ pub(crate) fn strike_entity(state: &mut TickState, id: mc_domain::EntityId) -> b
             return true;
         }
         "minecraft:pig" => "minecraft:zombified_piglin",
-        "minecraft:villager" if state.difficulty != crate::survival::Difficulty::Peaceful => {
+        "minecraft:villager" if state.difficulty != mc_survival::Difficulty::Peaceful => {
             "minecraft:witch"
         }
         _ => return false,

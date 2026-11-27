@@ -636,7 +636,7 @@ fn player_armor_attribute_changes_native_damage() {
             physical: None,
             custom_armor: false,
             amount: 10.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
     ));
@@ -751,7 +751,7 @@ fn vanilla_player_armor_and_regeneration_through_native_tick() {
                 physical: None,
                 custom_armor: false,
                 amount: 10.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: None,
             },
         ));
@@ -879,8 +879,7 @@ fn command_parity_nearest_entity_selects_closest_alive() {
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
     command(&mut state, alice, "kill @n[type=minecraft:cow]");
     assert!(state.merge_damage.iter().any(|(slot, damage)| {
-        state.entities.body(*slot).id == cow
-            && damage.kind == crate::survival::DamageKind::GenericKill
+        state.entities.body(*slot).id == cow && damage.kind == mc_survival::DamageKind::GenericKill
     }));
     assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
 }
@@ -962,7 +961,7 @@ fn command_parity_repeated_negative_type_name_clauses() {
     for id in [cow, calf] {
         assert!(state.merge_damage.iter().any(|(slot, damage)| {
             state.entities.body(*slot).id == id
-                && damage.kind == crate::survival::DamageKind::GenericKill
+                && damage.kind == mc_survival::DamageKind::GenericKill
         }));
     }
 }
@@ -1368,7 +1367,7 @@ fn command_parity_selector_box_intersects_body_and_defaults_missing_axes() {
         matches!(
             state.entities.body(*slot).kind,
             crate::entities::EntityKind::Mob { .. }
-        ) && damage.kind == crate::survival::DamageKind::GenericKill
+        ) && damage.kind == mc_survival::DamageKind::GenericKill
     }));
 }
 
@@ -1725,7 +1724,7 @@ fn time_weather_difficulty_gamerule_and_seed_have_real_mutations() {
             })
     }));
     command(&mut state, alice, "difficulty hard");
-    assert_eq!(state.difficulty, crate::survival::Difficulty::Hard);
+    assert_eq!(state.difficulty, mc_survival::Difficulty::Hard);
     command(&mut state, alice, "difficulty");
     assert!(has_translation(
         &state,
@@ -1767,7 +1766,7 @@ fn summon_uses_executor_position_and_kill_stages_canonical_damage() {
             .merge_damage
             .iter()
             .any(|(slot, damage)| state.entities.body(*slot).id == cow
-                && damage.kind == crate::survival::DamageKind::GenericKill)
+                && damage.kind == mc_survival::DamageKind::GenericKill)
     );
     assert!(has_translation(
         &state,
@@ -2419,13 +2418,13 @@ fn summon_snbt_initializes_native_flags_motion_sheep_age_and_restart_image() {
     assert_eq!(
         state
             .entities
-            .land_hit(slot, 1000, 5.0, crate::survival::DamageKind::Melee),
+            .land_hit(slot, 1000, 5.0, mc_survival::DamageKind::Melee),
         0.0
     );
     assert_eq!(
         state
             .entities
-            .land_hit(slot, 1000, 5.0, crate::survival::DamageKind::Void),
+            .land_hit(slot, 1000, 5.0, mc_survival::DamageKind::Void),
         5.0
     );
     let image = crate::journal::EntityStateImage::from_row(

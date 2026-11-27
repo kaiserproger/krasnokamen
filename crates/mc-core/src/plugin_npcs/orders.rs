@@ -669,7 +669,7 @@ pub(super) fn advance(
                     victim,
                     crate::tick::DamagePiece {
                         amount: damage,
-                        kind: crate::survival::DamageKind::Melee,
+                        kind: mc_survival::DamageKind::Melee,
                         source: Some(source),
                         physical: None,
                         custom_armor: false,

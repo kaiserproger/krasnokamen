@@ -1020,9 +1020,9 @@ fn strike(
             target,
             amount,
             kind: if result == Outcome::Kill {
-                crate::survival::DamageKind::GenericKill
+                mc_survival::DamageKind::GenericKill
             } else {
-                crate::survival::DamageKind::Melee
+                mc_survival::DamageKind::Melee
             },
             source: Some(DamageSource::Melee {
                 attacker: actor,

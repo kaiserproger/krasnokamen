@@ -66,8 +66,8 @@ pub(crate) fn infect(state: &mut TickState, slot: EntitySlot, attacker: Option<E
         return false;
     }
     let chance = match state.difficulty {
-        crate::survival::Difficulty::Hard => true,
-        crate::survival::Difficulty::Normal => {
+        mc_survival::Difficulty::Hard => true,
+        mc_survival::Difficulty::Normal => {
             (state.tick ^ state.entities.row(slot).uuid.as_u128() as u64).is_multiple_of(2)
         }
         _ => false,

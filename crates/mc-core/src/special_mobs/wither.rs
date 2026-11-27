@@ -205,7 +205,7 @@ fn breakable(state: &TickState, block: u32) -> bool {
 /// the same journal tick; loaded templates and already completed claims cannot
 /// duplicate a boss. Both orientations and soul sand/soil are accepted.
 pub(crate) fn after_blocks(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
-    if state.difficulty == crate::survival::Difficulty::Peaceful {
+    if state.difficulty == mc_survival::Difficulty::Peaceful {
         return;
     }
     let Some(type_id) = summons::type_id(state, "minecraft:wither") else {

@@ -168,9 +168,9 @@ mod coreperf_counter_tests {
     #[test]
     fn damage_merge_counts_distinct_accepted_groups_in_authoritative_fixture_regions() {
         use crate::intent::DamageSource;
-        use crate::survival::DamageKind;
         use crate::tick::DamagePiece;
         use mc_data::{Identifier, ItemEnchantment, ItemStack};
+        use mc_survival::DamageKind;
 
         let (mut state, _, pos) = crate::hostile_tests::setup(8.0);
         state.tick = 20;

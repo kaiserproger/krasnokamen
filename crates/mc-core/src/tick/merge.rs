@@ -145,7 +145,7 @@ impl TickState {
                         slot,
                         DamagePiece {
                             amount: impact.damage_hp,
-                            kind: crate::survival::DamageKind::Melee,
+                            kind: mc_survival::DamageKind::Melee,
                             source: Some(source),
                             physical: Some(impact),
                             custom_armor: false,
@@ -163,7 +163,7 @@ impl TickState {
                         slot,
                         DamagePiece {
                             amount: impact.damage_hp,
-                            kind: crate::survival::DamageKind::Projectile,
+                            kind: mc_survival::DamageKind::Projectile,
                             source: *source,
                             physical: Some(*impact),
                             custom_armor: false,

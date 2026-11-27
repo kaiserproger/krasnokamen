@@ -15,10 +15,10 @@ use crate::boundary::{BlockPos, ExplosionEvent, PlayerChange};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntityKind;
 use crate::intent::{Footprint, Intent, IntentKind};
-use crate::survival::DamageKind;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
+use mc_survival::DamageKind;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CloudState {
@@ -1048,7 +1048,7 @@ fn pearl(
     // only on non-Peaceful with monster spawning, at the owner's pre-teleport
     // position. Needs a live player owner, not a dispenser throw.
     if state.players.contains_key(&owner)
-        && state.difficulty != crate::survival::Difficulty::Peaceful
+        && state.difficulty != mc_survival::Difficulty::Peaceful
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MOBS)
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MONSTERS)
     {
@@ -1435,7 +1435,7 @@ pub(crate) fn impact(
                             punch: 0,
                             flame: false,
                         },
-                        crate::combat::HIT_KNOCKBACK,
+                        mc_survival::combat::HIT_KNOCKBACK,
                     );
                     zero_damage_reaction(state, intents, id, record, target, velocity);
                 }

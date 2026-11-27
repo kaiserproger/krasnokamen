@@ -282,15 +282,15 @@ fn mode_name(mode: crate::commands::GameMode) -> Tag {
     )
 }
 
-fn difficulty_name(difficulty: crate::survival::Difficulty) -> Tag {
+fn difficulty_name(difficulty: mc_survival::Difficulty) -> Tag {
     translated(
         format!(
             "options.difficulty.{}",
             match difficulty {
-                crate::survival::Difficulty::Peaceful => "peaceful",
-                crate::survival::Difficulty::Easy => "easy",
-                crate::survival::Difficulty::Normal => "normal",
-                crate::survival::Difficulty::Hard => "hard",
+                mc_survival::Difficulty::Peaceful => "peaceful",
+                mc_survival::Difficulty::Easy => "easy",
+                mc_survival::Difficulty::Normal => "normal",
+                mc_survival::Difficulty::Hard => "hard",
             }
         ),
         Vec::new(),
@@ -582,7 +582,7 @@ pub(crate) fn execute(
             let accepts = |state: &TickState, id: &EntityId| {
                 *levels
                     || *amount
-                        < crate::survival::Experience::points_for_level(
+                        < mc_survival::Experience::points_for_level(
                             state.players[id].vitals.experience.level,
                         )
             };
@@ -618,7 +618,7 @@ pub(crate) fn execute(
                 (
                     "commands.experience.query.points",
                     (experience.progress
-                        * crate::survival::Experience::points_for_level(experience.level) as f32)
+                        * mc_survival::Experience::points_for_level(experience.level) as f32)
                         .floor() as i32,
                 )
             };
@@ -1014,8 +1014,7 @@ pub(crate) fn execute(
                 feedback(state, connection, "commands.summon.failed", Vec::new());
                 return Failed;
             }
-            if state.difficulty == crate::survival::Difficulty::Peaceful
-                && facts.category.is_hostile()
+            if state.difficulty == mc_survival::Difficulty::Peaceful && facts.category.is_hostile()
             {
                 feedback(
                     state,
@@ -1148,7 +1147,7 @@ pub(crate) fn execute(
                             physical: None,
                             custom_armor: false,
                             amount: f32::MAX,
-                            kind: crate::survival::DamageKind::GenericKill,
+                            kind: mc_survival::DamageKind::GenericKill,
                             source: None,
                         },
                     ));

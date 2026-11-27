@@ -526,7 +526,7 @@ pub(crate) fn shriek(state: &mut TickState, pos: BlockPos, player: EntityId) -> 
     }
     let centre = vibration::centre(pos);
     let respond = property(state, pos, "can_summon")
-        && state.difficulty != crate::survival::Difficulty::Peaceful
+        && state.difficulty != mc_survival::Difficulty::Peaceful
         && crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_WARDENS);
     let mut level = 0;
     if respond {
@@ -588,7 +588,7 @@ fn respond(state: &mut TickState, pos: BlockPos, level: u32) {
     if level == 0
         || !property(state, pos, "can_summon")
         || !crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_WARDENS)
-        || state.difficulty == crate::survival::Difficulty::Peaceful
+        || state.difficulty == mc_survival::Difficulty::Peaceful
     {
         return;
     }

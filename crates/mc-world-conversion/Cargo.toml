@@ -30,4 +30,5 @@ rustix = { version = "1.1", features = ["fs"] }
 [dev-dependencies]
 tempfile = "3"
 mc-inventory = { path = "../mc-inventory" }
+mc-survival = { path = "../mc-survival" }
 tokio.workspace = true

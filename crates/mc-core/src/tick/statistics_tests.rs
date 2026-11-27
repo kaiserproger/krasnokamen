@@ -421,7 +421,7 @@ fn statistics_damage_absorption_resistance_death_and_breakage() {
             physical: None,
             custom_armor: false,
             amount: 10.0,
-            kind: crate::survival::DamageKind::Generic,
+            kind: mc_survival::DamageKind::Generic,
             source: None,
         },
     ));
@@ -594,7 +594,7 @@ fn statistics_kills_and_damage_credit_actual_attacker_and_entity_type() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: melee(player, pos),
         },
     ));
@@ -611,7 +611,7 @@ fn statistics_kills_and_damage_credit_actual_attacker_and_entity_type() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: melee(killer, [pos[0] + 1.0, pos[1], pos[2]]),
         },
     ));
@@ -638,7 +638,7 @@ fn statistics_ownerless_projectile_does_not_become_living_kill_credit() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Projectile,
+            kind: mc_survival::DamageKind::Projectile,
             source: Some(crate::intent::DamageSource::Projectile {
                 projectile,
                 direct_type_id: arrow,
@@ -694,7 +694,7 @@ fn statistics_recent_player_hit_credits_environmental_finishing_kill() {
             physical: None,
             custom_armor: false,
             amount: 1.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: player,
                 position: pos,
@@ -714,7 +714,7 @@ fn statistics_recent_player_hit_credits_environmental_finishing_kill() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Generic,
+            kind: mc_survival::DamageKind::Generic,
             source: None,
         },
     ));

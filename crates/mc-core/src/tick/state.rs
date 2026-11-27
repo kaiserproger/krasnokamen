@@ -109,7 +109,7 @@ impl TickState {
             last_swing: HashMap::default(),
             armor_stand_hits: HashMap::default(),
             // Vanilla dedicated-server default; the join sends it.
-            difficulty: crate::survival::Difficulty::Easy,
+            difficulty: mc_survival::Difficulty::Easy,
             journaled_difficulty: None,
             journaled_default_game_mode: None,
             weather: (crate::commands::Weather::Clear, 0),

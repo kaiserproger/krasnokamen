@@ -191,7 +191,7 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         ("entities.rs", 852),
     ],
     // Domain crates split from core keep contributing to the anti-pattern counts.
-    split_crates: &["mc-inventory", "mc-light", "mc-placement"],
+    split_crates: &["mc-inventory", "mc-light", "mc-placement", "mc-survival"],
 };
 
 /// The cycle's production lines on ffd52010: the reference of a diagnostic

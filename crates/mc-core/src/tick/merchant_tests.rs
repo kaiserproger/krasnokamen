@@ -160,7 +160,7 @@ fn nonlethal_environmental_damage_closes_merchant_menu() {
         slot,
         crate::tick::DamagePiece {
             amount: 1.0,
-            kind: crate::survival::DamageKind::Lava,
+            kind: mc_survival::DamageKind::Lava,
             source: None,
             physical: None,
             custom_armor: false,

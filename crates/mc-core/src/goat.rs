@@ -370,7 +370,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>, changes: &mu
                         kind: IntentKind::DamageEntity {
                             target: victim,
                             amount: damage,
-                            kind: crate::survival::DamageKind::Melee,
+                            kind: mc_survival::DamageKind::Melee,
                             source: Some(DamageSource::Melee {
                                 attacker: id,
                                 position: pos,

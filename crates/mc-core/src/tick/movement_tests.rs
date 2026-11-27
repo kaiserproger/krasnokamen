@@ -169,7 +169,7 @@ fn physics_landing_blocks_reduce_damage_without_trusting_ground_claims() {
 #[test]
 fn pointed_dripstone_tip_landing_emits_stalagmite_damage_not_fall() {
     use crate::boundary::EntityEvent;
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for (direction, thickness, waterlogged, kind) in [
         ("up", "tip", "false", Some(DamageKind::Stalagmite)),
         ("up", "tip", "true", None),
@@ -213,7 +213,7 @@ fn pointed_dripstone_tip_landing_emits_stalagmite_damage_not_fall() {
             assert!(
                 output.changes.entity_events.iter().any(|event| matches!(
                     event, EntityEvent::Damage { entity, source_type_id, .. }
-                        if *entity == player && *source_type_id == kind.type_id(None, false)
+                        if *entity == player && *source_type_id == kind.type_id(false)
                 )),
                 "{direction} {thickness} {waterlogged}"
             );

@@ -339,9 +339,9 @@ pub(in crate::tick) fn move_input(
         let dz = new_pos[2] - old[2];
         let horizontal = (dx * dx + dz * dz).sqrt() as f32;
         let rate = if in_water {
-            crate::survival::SWIM_EXHAUSTION_PER_METER
+            mc_survival::SWIM_EXHAUSTION_PER_METER
         } else if player.sprinting {
-            crate::survival::SPRINT_EXHAUSTION_PER_METER
+            mc_survival::SPRINT_EXHAUSTION_PER_METER
         } else {
             0.0
         };
@@ -355,9 +355,9 @@ pub(in crate::tick) fn move_input(
         player.vitals.add_exhaustion(distance * rate);
         if !in_water && was_grounded && new_pos[1] > old[1] && !on_ground {
             player.vitals.add_exhaustion(if player.sprinting {
-                crate::survival::SPRINT_JUMP_EXHAUSTION
+                mc_survival::SPRINT_JUMP_EXHAUSTION
             } else {
-                crate::survival::JUMP_EXHAUSTION
+                mc_survival::JUMP_EXHAUSTION
             });
         }
         if before != (player.vitals.food, player.vitals.saturation) {
@@ -423,9 +423,9 @@ pub(in crate::tick) fn move_input(
                 target: entity,
                 amount: damage,
                 kind: if stalagmite {
-                    crate::survival::DamageKind::Stalagmite
+                    mc_survival::DamageKind::Stalagmite
                 } else {
-                    crate::survival::DamageKind::Fall
+                    mc_survival::DamageKind::Fall
                 },
                 source: None,
             },

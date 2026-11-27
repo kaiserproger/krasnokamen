@@ -83,7 +83,7 @@ pub(super) struct CheckpointJob {
     pub(super) debt: Vec<crate::journal::SimDebtImage>,
     pub(super) climate: crate::weather::ClimateImage,
     pub(super) border: crate::command_border::Border,
-    pub(super) difficulty: crate::survival::Difficulty,
+    pub(super) difficulty: mc_survival::Difficulty,
     pub(super) default_game_mode: crate::commands::GameMode,
     pub(super) gamerules: std::collections::BTreeMap<String, String>,
     /// Dimension-local native gameplay globals: settlement records/sequence

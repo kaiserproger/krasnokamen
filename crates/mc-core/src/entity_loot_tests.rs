@@ -4,7 +4,6 @@ use crate::entities::EntityKind;
 use crate::entity_loot::*;
 use crate::intent::DamageSource;
 use crate::registry::CoreRegistry;
-use crate::survival::{DamageKind, Difficulty};
 use crate::tick::{DamagePiece, TickState};
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::loot::entity_26_1_2::{

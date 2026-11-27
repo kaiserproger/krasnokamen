@@ -216,7 +216,7 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 4,
                 4,
                 &[JournalEntry::Difficulty {
-                    value: crate::survival::Difficulty::Hard,
+                    value: mc_survival::Difficulty::Hard,
                 }],
             )
             .unwrap();
@@ -270,7 +270,7 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
         assert_eq!(recovered.manifest.tick, 2);
         for replay in recovered.dimensions.values() {
             assert_eq!(replay.tick, 4);
-            assert_eq!(replay.difficulty, crate::survival::Difficulty::Hard);
+            assert_eq!(replay.difficulty, mc_survival::Difficulty::Hard);
         }
     }
 }

@@ -4,10 +4,10 @@ use crate::command_context::{Context, run};
 use crate::command_execution::{CommandResult, execute, supports_store_result};
 use crate::commands::{Command, parse};
 use crate::scoreboard::ScoreboardEvent;
-use crate::survival::Difficulty;
 use crate::tick::TickState;
 use mc_domain::ConnectionId;
 use mc_nbt::{ListTag, Tag, tag_type};
+use mc_survival::Difficulty;
 
 // Independently established from the official Java 26.1.2 Difficulty IDs.
 const DIFFICULTIES: [(Difficulty, &str, i32); 4] = [

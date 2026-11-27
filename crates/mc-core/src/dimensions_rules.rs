@@ -226,7 +226,7 @@ pub(crate) fn void_intents(state: &mut TickState, intents: &mut Vec<Intent>) {
             kind: IntentKind::DamageEntity {
                 target: actor,
                 amount: 4.0,
-                kind: crate::survival::DamageKind::Void,
+                kind: mc_survival::DamageKind::Void,
                 source: None,
             },
             footprint: Footprint {
