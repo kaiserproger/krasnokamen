@@ -188,7 +188,7 @@ pub struct ClientboundUpdateEntityAttributes {
 
 impl Packet for ClientboundUpdateEntityAttributes {
     // `.analysis/protocol-dump.txt`: CLIENTBOUND_UPDATE_ATTRIBUTES is game-CB
-    // index 131 = wire id 0x83. Both collections use VarInt counts.
+    // index 134 = wire id 0x86. Both collections use VarInt counts.
     const ID: i32 = 0x86;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -286,7 +286,7 @@ pub struct ClientboundSetEntityEquipment {
 
 impl Packet for ClientboundSetEntityEquipment {
     // `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_EQUIPMENT is game-CB
-    // index 102 = wire id 0x66. Bit 7 means another entry follows.
+    // index 104 = wire id 0x68. Bit 7 means another entry follows.
     const ID: i32 = 0x68;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -376,7 +376,7 @@ pub struct ClientboundUpdateEntityEffect {
 
 impl Packet for ClientboundUpdateEntityEffect {
     // `.analysis/protocol-dump.txt`: CLIENTBOUND_UPDATE_MOB_EFFECT is game-CB
-    // index 132 = wire id 0x84.
+    // index 135 = wire id 0x87.
     const ID: i32 = 0x87;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -407,7 +407,7 @@ pub struct ClientboundRemoveEntityEffect {
 
 impl Packet for ClientboundRemoveEntityEffect {
     // `.analysis/protocol-dump.txt`: CLIENTBOUND_REMOVE_MOB_EFFECT is game-CB
-    // index 78 = wire id 0x4E.
+    // index 79 = wire id 0x4F.
     const ID: i32 = 0x4F;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -433,7 +433,7 @@ pub struct ClientboundSetEntityLeash {
 
 impl Packet for ClientboundSetEntityLeash {
     // `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_ENTITY_LINK is game-CB
-    // index 100 = wire id 0x64. Both ids are fixed-width big-endian ints.
+    // index 102 = wire id 0x66. Both ids are fixed-width big-endian ints.
     const ID: i32 = 0x66;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

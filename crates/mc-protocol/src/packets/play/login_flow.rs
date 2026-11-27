@@ -283,8 +283,8 @@ pub struct SetDefaultSpawnPosition {
 
 impl Packet for SetDefaultSpawnPosition {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION sits at game-CB index 96
-    // (skipping `CLIENTBOUND_BUNDLE` at index 0) = wire id 0x61.
+    // CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION sits at game-CB index 99
+    // (skipping `CLIENTBOUND_BUNDLE` at index 0) = wire id 0x63.
     const ID: i32 = 0x63;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -372,7 +372,7 @@ pub struct ClientboundKeepAlive {
 
 impl Packet for ClientboundKeepAlive {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_KEEP_ALIVE at game-CB index 44 = wire id 0x2C.
+    // CLIENTBOUND_KEEP_ALIVE at game-CB index 45 = wire id 0x2D.
     const ID: i32 = 0x2D;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -431,7 +431,7 @@ pub struct ClientboundTransfer {
 
 impl Packet for ClientboundTransfer {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_TRANSFER at game-CB index 129 = wire id 0x81.
+    // CLIENTBOUND_TRANSFER at game-CB index 132 = wire id 0x84.
     const ID: i32 = 0x84;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

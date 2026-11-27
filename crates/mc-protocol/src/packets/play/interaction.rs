@@ -9,7 +9,7 @@ pub struct ServerboundResourcePack {
 
 impl Packet for ServerboundResourcePack {
     // `.analysis/protocol-dump.txt`: game SERVERBOUND_RESOURCE_PACK is
-    // serverbound registration index 49, wire id 0x31. Body is local decompiled
+    // serverbound registration index 50, wire id 0x32. Body is local decompiled
     // `ServerboundResourcePackPacket(UUID id, Action action)`.
     const ID: i32 = 0x32;
 

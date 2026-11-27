@@ -989,8 +989,8 @@ pub struct ClientboundSystemChat {
 
 impl Packet for ClientboundSystemChat {
     // `.analysis/protocol-dump.txt` / `GameProtocols`: game
-    // CLIENTBOUND_SYSTEM_CHAT is clientbound registration index 121, wire id
-    // 0x79. `ClientboundSystemChatPacket` writes trusted Component NBT then a
+    // CLIENTBOUND_SYSTEM_CHAT is clientbound registration index 124, wire id
+    // 0x7C. `ClientboundSystemChatPacket` writes trusted Component NBT then a
     // bool overlay flag.
     const ID: i32 = 0x7C;
 
@@ -1027,9 +1027,9 @@ pub struct ClientboundTabList {
 
 impl Packet for ClientboundTabList {
     // Verified against the local vanilla 26.1.2 jars: `GameProtocols`
-    // registers CLIENTBOUND_TAB_LIST at clientbound index 122 = wire id
-    // 0x7A (between CLIENTBOUND_SYSTEM_CHAT at 0x79 and
-    // CLIENTBOUND_TAG_QUERY), and `ClientboundTabListPacket` is a
+    // registers CLIENTBOUND_TAB_LIST at clientbound index 125 = wire id
+    // 0x7D (between CLIENTBOUND_SYSTEM_CHAT at 0x7C and
+    // CLIENTBOUND_TAG_QUERY at 0x7E), and `ClientboundTabListPacket` is a
     // record of two `Component`s written with the trusted NBT stream codec.
     const ID: i32 = 0x7D;
 
