@@ -25,12 +25,8 @@ use mc_domain::EntityId;
 pub(crate) const BOW_BACKOFF: f64 = 7.5;
 /// Back-off walks at half speed.
 pub(crate) const BACKOFF_SPEED: f64 = 0.5;
-/// Creeper fuse length in ticks (vanilla `maxSwell`).
-pub const FUSE_TICKS: u32 = 30;
 /// A lit fuse burns down while the target is farther than this.
 const FUSE_KEEP_DISTANCE: f64 = 7.0;
-/// Vanilla creeper blast power (`explosionRadius` 3, uncharged).
-pub const CREEPER_POWER: f32 = 3.0;
 
 /// Arrow launch speed in blocks per tick (vanilla skeleton `shoot` 1.6).
 const ARROW_SPEED: f64 = 1.6;

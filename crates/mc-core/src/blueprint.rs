@@ -374,6 +374,11 @@ pub struct Explosion {
     pub griefing: bool,
 }
 
+/// Creeper fuse length in ticks (vanilla `maxSwell`).
+pub const FUSE_TICKS: u32 = 30;
+/// Vanilla creeper blast power (`explosionRadius` 3, uncharged).
+pub const CREEPER_POWER: f32 = 3.0;
+
 /// Vanilla categories, caps and despawn distances share the data contract.
 pub use mc_data::entity_types::MobCategory;
 
@@ -1444,8 +1449,8 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
             _ => AquaticControl::Other,
         },
         explodes: (name == "minecraft:creeper").then_some(Explosion {
-            power: crate::hostile::CREEPER_POWER,
-            fuse_ticks: crate::hostile::FUSE_TICKS,
+            power: CREEPER_POWER,
+            fuse_ticks: FUSE_TICKS,
             griefing: true,
         }),
         temptable: blueprint.has_goal(GoalKind::Breed) && !blueprint.breed_food.is_empty(),

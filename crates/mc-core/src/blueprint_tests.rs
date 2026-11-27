@@ -311,7 +311,7 @@ fn vanilla_capability_tables_name_registered_blueprints() {
         capable("minecraft:creeper")
             .explodes
             .map(|blast| blast.fuse_ticks),
-        Some(crate::hostile::FUSE_TICKS)
+        Some(crate::blueprint::FUSE_TICKS)
     );
     for name in [
         "minecraft:cod",
