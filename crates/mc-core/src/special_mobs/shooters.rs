@@ -92,208 +92,257 @@ pub(crate) fn run(
         }
         return;
     };
-    let pos = state.entities.pos(slot);
-    let dist = distance_sq(pos, at).sqrt();
     match kind {
         GoalKind::Crossbow => crossbow(state, id, slot, at),
-        GoalKind::BlazeBurst => {
-            if state.tick < attack.deadline {
-                return;
-            }
-            if dist < 2.0 {
-                damage(
-                    state,
-                    intents,
-                    id,
-                    target_id,
-                    state.entities.row(slot).attack_damage,
-                    DamageKind::Melee,
-                );
-                attack.deadline = state.tick + 20;
-            } else {
-                match attack.stage {
-                    0 => {
-                        attack.stage = 1;
-                        attack.deadline = state.tick + 60;
-                        metadata(state, slot, 16, EntityDataValue::Byte(1));
-                    }
-                    1..=3 => {
-                        let from = [pos[0], pos[1] + 1.4, pos[2]];
-                        if shoot(
-                            state,
-                            id,
-                            ProjectileKind::SmallFireball,
-                            from,
-                            [at[0], at[1] + 0.9, at[2]],
-                            0.1,
-                            None,
-                        )
-                        .is_some()
-                        {
-                            attack.stage += 1;
-                            attack.deadline = state.tick + 6;
-                        }
-                    }
-                    _ => {
-                        attack.stage = 0;
-                        attack.deadline = state.tick + 100;
-                        metadata(state, slot, 16, EntityDataValue::Byte(0));
-                    }
-                }
-            }
-        }
-        GoalKind::SiegeShot => {
-            attack.stage += 1;
-            metadata(state, slot, 16, EntityDataValue::Boolean(attack.stage > 10));
-            if attack.stage == 20 {
-                let horizontal = mth::length2(at[0] - pos[0], at[2] - pos[2]);
-                if horizontal > 1e-9 {
-                    let from = [
-                        pos[0] + (at[0] - pos[0]) / horizontal * 4.0,
-                        pos[1] + 2.5,
-                        pos[2] + (at[2] - pos[2]) / horizontal * 4.0,
-                    ];
-                    if shoot(
-                        state,
-                        id,
-                        ProjectileKind::Fireball,
-                        from,
-                        [at[0], at[1] + 0.9, at[2]],
-                        0.1,
-                        None,
-                    )
-                    .is_some()
-                    {
-                        attack.stage = -40;
-                    } else {
-                        attack.stage = 19;
-                    }
-                } else {
-                    attack.stage = 19;
-                }
-            }
-        }
-        GoalKind::WindCharge => {
-            if attack.stage == 0 {
+        GoalKind::BlazeBurst => blaze_burst(state, intents, id, slot, attack, at, target_id),
+        GoalKind::SiegeShot => siege_shot(state, id, slot, attack, at),
+        GoalKind::WindCharge => wind_charge(state, id, slot, attack, at, target_id),
+        GoalKind::Alchemist => alchemist_shot(state, id, slot, attack, at, target_id),
+        GoalKind::HomingShot => homing_shot(state, id, slot, attack, at, target_id),
+        _ => {}
+    }
+}
+fn blaze_burst(
+    state: &mut TickState,
+    intents: &mut Vec<Intent>,
+    id: EntityId,
+    slot: EntitySlot,
+    attack: &mut Attack,
+    at: [f64; 3],
+    target_id: EntityId,
+) {
+    if state.tick < attack.deadline {
+        return;
+    }
+    let pos = state.entities.pos(slot);
+    let dist = distance_sq(pos, at).sqrt();
+    if dist < 2.0 {
+        damage(
+            state,
+            intents,
+            id,
+            target_id,
+            state.entities.row(slot).attack_damage,
+            DamageKind::Melee,
+        );
+        attack.deadline = state.tick + 20;
+    } else {
+        match attack.stage {
+            0 => {
                 attack.stage = 1;
-                attack.deadline = state.tick + 15;
-                attack.target = Some(target_id);
-            } else if state.tick >= attack.deadline {
-                if attack.target != Some(target_id) {
-                    attack.stage = 0;
-                    attack.target = None;
-                    return;
-                }
-                let from = [
-                    pos[0],
-                    pos[1] + state.entities.body(slot).height * 0.5 + 0.3,
-                    pos[2],
-                ];
+                attack.deadline = state.tick + 60;
+                metadata(state, slot, 16, EntityDataValue::Byte(1));
+            }
+            1..=3 => {
+                let from = [pos[0], pos[1] + 1.4, pos[2]];
                 if shoot(
                     state,
                     id,
-                    ProjectileKind::BreezeWindCharge,
+                    ProjectileKind::SmallFireball,
                     from,
-                    [at[0], at[1] + 0.54, at[2]],
-                    0.7,
+                    [at[0], at[1] + 0.9, at[2]],
+                    0.1,
                     None,
                 )
                 .is_some()
                 {
-                    attack.stage = 2;
-                    attack.deadline = state.tick + 4;
+                    attack.stage += 1;
+                    attack.deadline = state.tick + 6;
                 }
             }
+            _ => {
+                attack.stage = 0;
+                attack.deadline = state.tick + 100;
+                metadata(state, slot, 16, EntityDataValue::Byte(0));
+            }
         }
-        GoalKind::Alchemist => {
-            if attack.target != Some(target_id) {
-                attack.target = Some(target_id);
-                attack.deadline = state.tick + 60;
-            }
-            if state.tick < attack.deadline {
-                return;
-            }
-            let target_slot = state.entities.slot_of(target_id).expect("live target");
-            let target_row = state.entities.row(target_slot);
-            let effects = state
-                .players
-                .get(&target_id)
-                .map_or(&target_row.active_effects, |player| &player.active_effects);
-            let health = state
-                .players
-                .get(&target_id)
-                .map_or(target_row.health, |player| player.vitals.health);
-            let horizontal = mth::length2(at[0] - pos[0], at[2] - pos[2]);
-            let potion = if horizontal >= 8.0 && !effects.has(EffectId::Slowness) {
-                Potion::Slowness
-            } else if health >= 8.0 && !effects.has(EffectId::Poison) {
-                Potion::Poison
-            } else if horizontal <= 3.0
-                && !effects.has(EffectId::Weakness)
-                && crate::natural_spawn::Rng(state.tick ^ id.0 as u64).below(4) == 0
-            {
-                Potion::Weakness
-            } else {
-                Potion::Harming
-            };
-            let from = [pos[0], pos[1] + 1.1, pos[2]];
-            let aim = [at[0], at[1] + 1.62 + horizontal * 0.2, at[2]];
+    }
+}
+
+fn siege_shot(
+    state: &mut TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    attack: &mut Attack,
+    at: [f64; 3],
+) {
+    let pos = state.entities.pos(slot);
+    attack.stage += 1;
+    metadata(state, slot, 16, EntityDataValue::Boolean(attack.stage > 10));
+    if attack.stage == 20 {
+        let horizontal = mth::length2(at[0] - pos[0], at[2] - pos[2]);
+        if horizontal > 1e-9 {
+            let from = [
+                pos[0] + (at[0] - pos[0]) / horizontal * 4.0,
+                pos[1] + 2.5,
+                pos[2] + (at[2] - pos[2]) / horizontal * 4.0,
+            ];
             if shoot(
                 state,
                 id,
-                ProjectileKind::Potion,
+                ProjectileKind::Fireball,
                 from,
-                aim,
-                if horizontal <= 2.0 { 0.45 } else { 0.75 },
-                Some(potion),
+                [at[0], at[1] + 0.9, at[2]],
+                0.1,
+                None,
             )
             .is_some()
             {
-                state
-                    .entities
-                    .row_mut(slot)
-                    .set_special_mob(Retained::Witch(potion));
-                attack.deadline = state.tick + 60;
+                attack.stage = -40;
+            } else {
+                attack.stage = 19;
             }
+        } else {
+            attack.stage = 19;
         }
-        GoalKind::HomingShot => {
-            if attack.deadline == 0 {
-                attack.deadline = state.tick + 20;
-            } else if state.tick >= attack.deadline {
-                let from = [pos[0], pos[1] + 0.5, pos[2]];
-                if let Some(bullet) = shoot(
-                    state,
-                    id,
-                    ProjectileKind::ShulkerBullet,
-                    from,
-                    [at[0], at[1] + 0.9, at[2]],
-                    0.15,
-                    None,
-                ) {
-                    let uuid = state
-                        .entities
-                        .row(state.entities.slot_of(target_id).expect("target"))
-                        .uuid;
-                    let bullet_slot = state.entities.slot_of(bullet).expect("bullet");
-                    state
-                        .entities
-                        .row_mut(bullet_slot)
-                        .projectile
-                        .as_mut()
-                        .expect("record")
-                        .data = ProjectileData::Homing { target: uuid };
-                    attack.deadline = state.tick
-                        + 20
-                        + ((id.0.unsigned_abs() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
-                            ^ state.tick.rotate_left(11))
-                            % 10
-                            * 10;
-                }
-            }
-        }
-        _ => {}
     }
 }
+
+fn wind_charge(
+    state: &mut TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    attack: &mut Attack,
+    at: [f64; 3],
+    target_id: EntityId,
+) {
+    if attack.stage == 0 {
+        attack.stage = 1;
+        attack.deadline = state.tick + 15;
+        attack.target = Some(target_id);
+    } else if state.tick >= attack.deadline {
+        if attack.target != Some(target_id) {
+            attack.stage = 0;
+            attack.target = None;
+            return;
+        }
+        let pos = state.entities.pos(slot);
+        let from = [
+            pos[0],
+            pos[1] + state.entities.body(slot).height * 0.5 + 0.3,
+            pos[2],
+        ];
+        if shoot(
+            state,
+            id,
+            ProjectileKind::BreezeWindCharge,
+            from,
+            [at[0], at[1] + 0.54, at[2]],
+            0.7,
+            None,
+        )
+        .is_some()
+        {
+            attack.stage = 2;
+            attack.deadline = state.tick + 4;
+        }
+    }
+}
+
+fn alchemist_shot(
+    state: &mut TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    attack: &mut Attack,
+    at: [f64; 3],
+    target_id: EntityId,
+) {
+    if attack.target != Some(target_id) {
+        attack.target = Some(target_id);
+        attack.deadline = state.tick + 60;
+    }
+    if state.tick < attack.deadline {
+        return;
+    }
+    let pos = state.entities.pos(slot);
+    let target_slot = state.entities.slot_of(target_id).expect("live target");
+    let target_row = state.entities.row(target_slot);
+    let effects = state
+        .players
+        .get(&target_id)
+        .map_or(&target_row.active_effects, |player| &player.active_effects);
+    let health = state
+        .players
+        .get(&target_id)
+        .map_or(target_row.health, |player| player.vitals.health);
+    let horizontal = mth::length2(at[0] - pos[0], at[2] - pos[2]);
+    let potion = if horizontal >= 8.0 && !effects.has(EffectId::Slowness) {
+        Potion::Slowness
+    } else if health >= 8.0 && !effects.has(EffectId::Poison) {
+        Potion::Poison
+    } else if horizontal <= 3.0
+        && !effects.has(EffectId::Weakness)
+        && crate::natural_spawn::Rng(state.tick ^ id.0 as u64).below(4) == 0
+    {
+        Potion::Weakness
+    } else {
+        Potion::Harming
+    };
+    let from = [pos[0], pos[1] + 1.1, pos[2]];
+    let aim = [at[0], at[1] + 1.62 + horizontal * 0.2, at[2]];
+    if shoot(
+        state,
+        id,
+        ProjectileKind::Potion,
+        from,
+        aim,
+        if horizontal <= 2.0 { 0.45 } else { 0.75 },
+        Some(potion),
+    )
+    .is_some()
+    {
+        state
+            .entities
+            .row_mut(slot)
+            .set_special_mob(Retained::Witch(potion));
+        attack.deadline = state.tick + 60;
+    }
+}
+
+fn homing_shot(
+    state: &mut TickState,
+    id: EntityId,
+    slot: EntitySlot,
+    attack: &mut Attack,
+    at: [f64; 3],
+    target_id: EntityId,
+) {
+    if attack.deadline == 0 {
+        attack.deadline = state.tick + 20;
+    } else if state.tick >= attack.deadline {
+        let pos = state.entities.pos(slot);
+        let from = [pos[0], pos[1] + 0.5, pos[2]];
+        if let Some(bullet) = shoot(
+            state,
+            id,
+            ProjectileKind::ShulkerBullet,
+            from,
+            [at[0], at[1] + 0.9, at[2]],
+            0.15,
+            None,
+        ) {
+            let uuid = state
+                .entities
+                .row(state.entities.slot_of(target_id).expect("target"))
+                .uuid;
+            let bullet_slot = state.entities.slot_of(bullet).expect("bullet");
+            state
+                .entities
+                .row_mut(bullet_slot)
+                .projectile
+                .as_mut()
+                .expect("record")
+                .data = ProjectileData::Homing { target: uuid };
+            attack.deadline = state.tick
+                + 20
+                + ((id.0.unsigned_abs() as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93)
+                    ^ state.tick.rotate_left(11))
+                    % 10
+                    * 10;
+        }
+    }
+}
+
 fn crossbow(state: &mut TickState, id: EntityId, slot: EntitySlot, at: [f64; 3]) {
     let current = match state.entities.row(slot).special_mob.as_deref() {
         Some(&Retained::Crossbow(value)) => value,

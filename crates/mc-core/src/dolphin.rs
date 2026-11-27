@@ -16,6 +16,22 @@ pub(crate) fn is_dolphin(type_id: u32) -> bool {
     mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
         .is_some_and(|c| c.name == "minecraft:dolphin")
 }
+
+/// Whether the chunk holding `pos` is loaded and active in this world.
+fn active(state: &TickState, pos: [f64; 3]) -> bool {
+    state.world.is_active(
+        floor_i32(pos[0]).div_euclid(16),
+        floor_i32(pos[2]).div_euclid(16),
+    )
+}
+
+/// Squared distance between two positions.
+fn distance(pos: [f64; 3], other: [f64; 3]) -> f64 {
+    pos.into_iter()
+        .zip(other)
+        .map(|(a, b)| (a - b).powi(2))
+        .sum()
+}
 pub(crate) fn initialize(state: &mut TickState, slot: EntitySlot, type_id: u32) {
     if is_dolphin(type_id) {
         let (body, row) = state.entities.parts_mut(slot);
@@ -119,10 +135,7 @@ pub(crate) fn run(state: &mut TickState) {
     for index in 0..state.entities.len() {
         let slot = EntitySlot(index as u32);
         let pos = state.entities.pos(slot);
-        if !state.world.is_active(
-            floor_i32(pos[0]).div_euclid(16),
-            floor_i32(pos[2]).div_euclid(16),
-        ) {
+        if !active(state, pos) {
             continue;
         }
         let body = state.entities.body(slot);
@@ -136,13 +149,7 @@ pub(crate) fn run(state: &mut TickState) {
             || player.vitals.is_dead()
             || !(player.sprinting || row.appearance.pose == 3)
             || !crate::conduit::water(state, pos)
-            || !dolphins.iter().any(|d| {
-                pos.into_iter()
-                    .zip(*d)
-                    .map(|(a, b)| (a - b).powi(2))
-                    .sum::<f64>()
-                    < 100.0
-            })
+            || !dolphins.iter().any(|d| distance(pos, *d) < 100.0)
         {
             continue;
         }
@@ -165,20 +172,10 @@ pub(crate) fn run(state: &mut TickState) {
                 continue;
             }
             let pos = state.entities.pos(slot);
-            if !state.world.is_active(
-                floor_i32(pos[0]).div_euclid(16),
-                floor_i32(pos[2]).div_euclid(16),
-            ) {
+            if !active(state, pos) {
                 continue;
             }
-            if crate::conduit::water(state, pos)
-                && dolphins.iter().any(|d| {
-                    pos.into_iter()
-                        .zip(*d)
-                        .map(|(a, b)| (a - b).powi(2))
-                        .sum::<f64>()
-                        < 4.0
-                })
+            if crate::conduit::water(state, pos) && dolphins.iter().any(|d| distance(pos, *d) < 4.0)
             {
                 let sampler = crate::tick::TickSampler {
                     world: &state.world,
@@ -250,11 +247,7 @@ pub(crate) fn treasure_search(state: &mut TickState) {
         });
         let admitted = slot.is_some_and(|slot| {
             let at = state.entities.pos(slot);
-            !state.entities.row(slot).controls.no_ai
-                && state.world.is_active(
-                    floor_i32(at[0]).div_euclid(16),
-                    floor_i32(at[2]).div_euclid(16),
-                )
+            !state.entities.row(slot).controls.no_ai && active(state, at)
         });
         if !valid || !admitted || dimension != state.dimension {
             clear_dolphin_treasure(state, dolphin);

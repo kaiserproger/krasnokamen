@@ -186,6 +186,29 @@ pub(super) fn replay_entity_chunk(pos: [f64; 3]) -> [i32; 2] {
     ]
 }
 
+/// Advance one replayed entity's state and villager clocks from its chunk's
+/// simulation clock up to `tick`, then refresh the fields derived from them.
+/// Returns the elapsed active ticks the caller still needs for the lifetime age.
+fn advance_entity_clocks(
+    record: &mut ReplayEntity,
+    clocks: &BTreeMap<[i32; 2], ReplayChunkClock>,
+    tick: u64,
+    game: &ReplayGameClock,
+) -> u64 {
+    let clock = clocks.get(&replay_entity_chunk(record.pos));
+    let elapsed = clock.map_or(0, |clock| clock.between(record.tick, tick, game));
+    record
+        .state
+        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+    if let Some(villager) = &mut record.villager
+        && let Some(clock) = clock
+    {
+        clock.advance_villager(villager, record.tick, tick, game);
+    }
+    record.breed_cooldown = record.state.breed_cooldown;
+    elapsed
+}
+
 /// One replayed entity record. Ordinary intra-chunk mob motion is checkpoint
 /// durable; crossing images advance the position for chunk clock attribution.
 /// Projectile images also advance motion with retained custody/payload,
@@ -634,21 +657,26 @@ pub fn replay_batches(replay: Replay, batches: &[(u64, u64, Vec<JournalEntry>)])
     replay
 }
 
+/// Root clock for folding a replay: the wrapper's own clock when a test path
+/// already carries one, else a new clock over the recorded tick and climate.
+#[cfg(test)]
+fn root_clock(replay: &mut Replay) -> Result<ReplayGameClock, CoreError> {
+    if let Some(clock) = replay.game_clock.take() {
+        return Ok(clock);
+    }
+    let mut clock =
+        ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
+    clock.observe_debt_stamp(replay.climate, replay.tick)?;
+    Ok(clock)
+}
+
 /// Fold absolute images without scanning unrelated retained entities per batch.
 #[cfg(test)]
 pub(crate) fn apply_batch_images(
     mut replay: Replay,
     batches: &[(u64, u64, Vec<JournalEntry>)],
 ) -> Replay {
-    let clock = replay.game_clock.take().map_or_else(
-        || {
-            let mut clock =
-                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
-            clock.observe_debt_stamp(replay.climate, replay.tick)?;
-            Ok::<_, CoreError>(clock)
-        },
-        Ok,
-    );
+    let clock = root_clock(&mut replay);
     let mut clock = match clock {
         Ok(clock) => clock,
         Err(error) => {
@@ -1109,22 +1137,8 @@ fn apply_batch_entries(
                         continue;
                     }
                     if *alive {
-                        let clock = replay
-                            .simulation_clocks
-                            .get(&replay_entity_chunk(record.pos));
                         let elapsed =
-                            clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
-                        record.state.advance_clocks(
-                            record.type_id,
-                            record.appearance.baby,
-                            elapsed,
-                        );
-                        if let Some(villager) = &mut record.villager
-                            && let Some(clock) = clock
-                        {
-                            clock.advance_villager(villager, record.tick, *tick, game);
-                        }
-                        record.breed_cooldown = record.state.breed_cooldown;
+                            advance_entity_clocks(record, &replay.simulation_clocks, *tick, game);
                         record.age =
                             crate::entities::advance_lifetime_age(record.age, elapsed as u32);
                         record.state.age = record.age;
@@ -1233,19 +1247,7 @@ fn apply_batch_entries(
                 // the lifetime age into the record; a delta carries the age
                 // and lands the same projection before the anchor moves.
                 // Apply first: the projection reads the record's `baby`.
-                let clock = replay
-                    .simulation_clocks
-                    .get(&replay_entity_chunk(record.pos));
-                let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
-                record
-                    .state
-                    .advance_clocks(record.type_id, record.appearance.baby, elapsed);
-                if let Some(villager) = &mut record.villager
-                    && let Some(clock) = clock
-                {
-                    clock.advance_villager(villager, record.tick, *tick, game);
-                }
-                record.breed_cooldown = record.state.breed_cooldown;
+                advance_entity_clocks(record, &replay.simulation_clocks, *tick, game);
                 record.age = *age;
                 record.state.age = *age;
                 record.tick = *tick;
@@ -1293,19 +1295,7 @@ fn apply_batch_entries(
                 record.yaw = *yaw;
                 record.pitch = *pitch;
                 // Same projection the image would bake in, after the delta.
-                let clock = replay
-                    .simulation_clocks
-                    .get(&replay_entity_chunk(record.pos));
-                let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
-                record
-                    .state
-                    .advance_clocks(record.type_id, record.appearance.baby, elapsed);
-                if let Some(villager) = &mut record.villager
-                    && let Some(clock) = clock
-                {
-                    clock.advance_villager(villager, record.tick, *tick, game);
-                }
-                record.breed_cooldown = record.state.breed_cooldown;
+                advance_entity_clocks(record, &replay.simulation_clocks, *tick, game);
                 record.age = *age;
                 record.state.age = *age;
                 let projectile = record.projectile.as_mut().expect("checked");
@@ -1376,15 +1366,7 @@ pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
 /// Project each retained anchor once after the complete streamed tail is folded.
 #[cfg(test)]
 pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
-    let clock = replay.game_clock.take().map_or_else(
-        || {
-            let mut clock =
-                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
-            clock.observe_debt_stamp(replay.climate, replay.tick)?;
-            Ok::<_, CoreError>(clock)
-        },
-        Ok,
-    );
+    let clock = root_clock(replay);
     match clock {
         Ok(clock) => {
             let held_ticks = replay.tick - clock.game_ticks(replay.tick);

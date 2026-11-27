@@ -344,6 +344,18 @@ fn item_component(stack: &ItemStack, name: &str) -> Result<Option<Tag>, CoreErro
     Ok(Some(tag))
 }
 
+/// Native block-entity image of this position as stored with its chunk.
+fn stored_image(state: &TickState, pos: BlockPos) -> Option<&Vec<u8>> {
+    state
+        .world
+        .chunk(crate::boundary::ChunkPos {
+            x: pos.x.div_euclid(16),
+            z: pos.z.div_euclid(16),
+        })?
+        .block_entities
+        .get(&pos)
+}
+
 /// Loot must use the owner image, not a chunk image whose occupation clock is older.
 pub(crate) fn loot_image(state: &TickState, pos: BlockPos) -> Option<Vec<u8>> {
     honey(state, pos)?;
@@ -351,17 +363,7 @@ pub(crate) fn loot_image(state: &TickState, pos: BlockPos) -> Option<Vec<u8>> {
         .hives
         .get(&key(pos))
         .map(|hive| hive.encode(pos))
-        .or_else(|| {
-            state
-                .world
-                .chunk(crate::boundary::ChunkPos {
-                    x: pos.x.div_euclid(16),
-                    z: pos.z.div_euclid(16),
-                })?
-                .block_entities
-                .get(&pos)
-                .cloned()
-        })
+        .or_else(|| stored_image(state, pos).cloned())
 }
 
 /// Read the same owner image that break custody consumes, before its removal.
@@ -372,13 +374,7 @@ pub(crate) fn inhabited_bees(state: &TickState, pos: BlockPos) -> Result<Option<
     if let Some(hive) = state.hives.get(&key(pos)) {
         return Ok(Some(hive.bees.len()));
     }
-    state
-        .world
-        .chunk(crate::boundary::ChunkPos {
-            x: pos.x.div_euclid(16),
-            z: pos.z.div_euclid(16),
-        })
-        .and_then(|chunk| chunk.block_entities.get(&pos))
+    stored_image(state, pos)
         .map(|bytes| Hive::decode(bytes).map(|hive| hive.bees.len()))
         .transpose()
         .map(|count| Some(count.unwrap_or(0)))
@@ -397,13 +393,7 @@ pub(crate) fn break_custody(
     let fallback = if state.hives.contains_key(&key(pos)) {
         None
     } else {
-        state
-            .world
-            .chunk(crate::boundary::ChunkPos {
-                x: pos.x.div_euclid(16),
-                z: pos.z.div_euclid(16),
-            })
-            .and_then(|chunk| chunk.block_entities.get(&pos))
+        stored_image(state, pos)
             .map(|bytes| Hive::decode(bytes))
             .transpose()?
     };
@@ -717,13 +707,7 @@ fn nearby(
 }
 /// Vanilla bee attraction: the 26.1.2 bee_attractive tag members, minus
 /// waterlogged flowers and minus tall-flower upper halves (attractsBees).
-fn flower_at(state: &TickState, cell: BlockPos) -> bool {
-    let Some(id) = state.world.block_at(cell.x, cell.y, cell.z) else {
-        return false;
-    };
-    let Some(b) = state.registry.blocks.by_id(mc_world::BlockStateId(id)) else {
-        return false;
-    };
+fn flower_state(b: &mc_world::BlockState) -> bool {
     // Waterlogged flowers do not attract bees.
     if b.properties
         .iter()
@@ -731,10 +715,9 @@ fn flower_at(state: &TickState, cell: BlockPos) -> bool {
     {
         return false;
     }
-    let path = b.block.id.path();
     // Tall flowers attract only at their lower half (upper half excluded).
     if matches!(
-        path,
+        b.block.id.path(),
         "sunflower" | "lilac" | "rose_bush" | "peony" | "pitcher_plant"
     ) && b
         .properties
@@ -746,32 +729,17 @@ fn flower_at(state: &TickState, cell: BlockPos) -> bool {
     flower(b)
 }
 
+/// Whether the block at `cell` attracts bees (see [`flower_state`]).
+fn flower_at(state: &TickState, cell: BlockPos) -> bool {
+    block(state, cell).is_some_and(flower_state)
+}
+
 fn nearby_flower(state: &TickState, p: [f64; 3]) -> Option<BlockPos> {
-    let origin = BlockPos {
-        x: p[0].floor() as i32,
-        y: p[1].floor() as i32,
-        z: p[2].floor() as i32,
-    };
-    let mut result = None;
-    let mut best = f64::INFINITY;
-    for x in origin.x - 8..=origin.x + 8 {
-        for y in origin.y - 4..=origin.y + 4 {
-            for z in origin.z - 8..=origin.z + 8 {
-                let cell = BlockPos { x, y, z };
-                let d = distance(p, centre(cell));
-                if d < best && flower_at(state, cell) {
-                    best = d;
-                    result = Some(cell);
-                }
-            }
-        }
-    }
-    result
+    nearby(state, p, flower_state)
 }
 
 /// Block-name leg of bee attraction (full 26.1.2 bee_attractive tag).
-/// flower_at applies the waterlogged/tall-half rules then delegates here;
-/// the search path uses nearby_flower.
+/// [`flower_state`] applies the waterlogged/tall-half rules then delegates here.
 fn flower(b: &mc_world::BlockState) -> bool {
     matches!(
         b.block.id.path(),

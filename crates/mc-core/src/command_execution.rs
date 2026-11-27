@@ -449,22 +449,9 @@ pub(crate) fn execute(
                 );
                 return Failed;
             }
-            let targets = match player_targets(state, executor, target) {
-                Ok(targets) => targets,
-                Err(message) => {
-                    error(state, connection, message);
-                    return Failed;
-                }
-            };
-            if targets.is_empty() {
-                feedback(
-                    state,
-                    connection,
-                    "argument.entity.notfound.player",
-                    Vec::new(),
-                );
+            let Some(targets) = player_targets_checked(state, connection, executor, target) else {
                 return Failed;
-            }
+            };
             let mut count = 0;
             for &entity in &targets {
                 count += if *grant {
@@ -1375,16 +1362,13 @@ pub(crate) fn execute(
             message,
             selectors,
         } => {
-            let targets: Vec<_> = match player_targets(state, executor, target) {
-                Ok(targets) => targets,
-                Err(message) => {
-                    error(state, connection, message);
-                    return Failed;
-                }
-            }
-            .into_iter()
-            .filter(|target| !state.entity_session_locked(*target))
-            .collect();
+            let Some(targets) = player_targets_checked(state, connection, executor, target) else {
+                return Failed;
+            };
+            let targets: Vec<_> = targets
+                .into_iter()
+                .filter(|target| !state.entity_session_locked(*target))
+                .collect();
             if targets.is_empty() {
                 feedback(
                     state,
@@ -1471,6 +1455,33 @@ fn actor_identity(state: &TickState, connection: ConnectionId) -> Option<String>
         .map(|uuid| uuid.to_string())
 }
 
+/// Player targets of a player-addressed command, or vanilla's
+/// `argument.entity.notfound.player` failure.
+pub(crate) fn player_targets_checked(
+    state: &mut TickState,
+    connection: ConnectionId,
+    executor: EntityId,
+    target: &Target,
+) -> Option<Vec<EntityId>> {
+    let targets = match player_targets(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error(state, connection, message);
+            return None;
+        }
+    };
+    if targets.is_empty() {
+        feedback(
+            state,
+            connection,
+            "argument.entity.notfound.player",
+            Vec::new(),
+        );
+        return None;
+    }
+    Some(targets)
+}
+
 /// Online players a player command addresses; reports "no player found"
 /// and yields `None` when there are none. A non-player selector shape is a
 /// parse-time admission error, reported before state changes and before the
@@ -1498,23 +1509,7 @@ fn command_players(
         );
         return None;
     }
-    let targets = match player_targets(state, executor, target) {
-        Ok(targets) => targets,
-        Err(message) => {
-            error(state, connection, message);
-            return None;
-        }
-    };
-    if targets.is_empty() {
-        feedback(
-            state,
-            connection,
-            "argument.entity.notfound.player",
-            Vec::new(),
-        );
-        return None;
-    }
-    Some(targets)
+    player_targets_checked(state, connection, executor, target)
 }
 
 /// Run a player command's state change on one target and sync its client.

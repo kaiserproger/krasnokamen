@@ -122,6 +122,42 @@ pub(crate) fn context_targets(
     targets(state, &request, target, context.position)
 }
 
+/// Swap `dimension` into the active slot of `state` under the shared authority.
+/// Returns the displaced source dimension, or `None` when the state does not
+/// hold that world. Pair every success with [`restore_world`].
+fn select_world(state: &mut TickState, dimension: Dimension) -> Option<Dimension> {
+    sync_wire_ids(state);
+    let source = state.dimension;
+    let mut destination = state.other_dimensions.remove(&dimension)?;
+    std::mem::swap(&mut state.command_context, &mut destination.command_context);
+    std::mem::swap(&mut state.datapacks, &mut destination.datapacks);
+    crate::command_debug::swap_runtime(state, &mut destination);
+    super::runtime::swap_globals(state, &mut destination);
+    std::mem::swap(
+        &mut state.other_dimensions,
+        &mut destination.other_dimensions,
+    );
+    std::mem::swap(state, &mut destination);
+    state.other_dimensions.insert(source, destination);
+    Some(source)
+}
+
+/// Reverse [`select_world`]: make `source` active again and park the temporary
+/// world back under `dimension`.
+fn restore_world(state: &mut TickState, source: Dimension, dimension: Dimension) {
+    let mut original = state
+        .other_dimensions
+        .remove(&source)
+        .expect("source retained by execution authority");
+    std::mem::swap(state, &mut original);
+    std::mem::swap(&mut state.other_dimensions, &mut original.other_dimensions);
+    std::mem::swap(&mut state.command_context, &mut original.command_context);
+    std::mem::swap(&mut state.datapacks, &mut original.datapacks);
+    crate::command_debug::swap_runtime(state, &mut original);
+    super::runtime::swap_globals(state, &mut original);
+    state.other_dimensions.insert(dimension, original);
+}
+
 /// Temporarily select another native world under the shared authority. No entity
 /// custody moves occur: /execute in changes a source, unlike /teleport.
 pub(crate) fn execute_context(
@@ -133,22 +169,9 @@ pub(crate) fn execute_context(
     if !state.command_context.shared {
         return Err("Cross-world execution requires the shared tick boundary".into());
     }
-    sync_wire_ids(state);
-    let source = state.dimension;
-    let mut destination = state
-        .other_dimensions
-        .remove(&context.dimension)
-        .ok_or("Execute dimension unavailable")?;
-    std::mem::swap(&mut state.command_context, &mut destination.command_context);
-    std::mem::swap(&mut state.datapacks, &mut destination.datapacks);
-    crate::command_debug::swap_runtime(state, &mut destination);
-    super::runtime::swap_globals(state, &mut destination);
-    std::mem::swap(
-        &mut state.other_dimensions,
-        &mut destination.other_dimensions,
-    );
-    std::mem::swap(state, &mut destination);
-    state.other_dimensions.insert(source, destination);
+    let Some(source) = select_world(state, context.dimension) else {
+        return Err("Execute dimension unavailable".into());
+    };
     let mut changes = state
         .command_context
         .changes
@@ -164,17 +187,7 @@ pub(crate) fn execute_context(
             .or_default(),
         changes,
     );
-    let mut original = state
-        .other_dimensions
-        .remove(&source)
-        .expect("source retained by execution authority");
-    std::mem::swap(state, &mut original);
-    std::mem::swap(&mut state.other_dimensions, &mut original.other_dimensions);
-    std::mem::swap(&mut state.command_context, &mut original.command_context);
-    std::mem::swap(&mut state.datapacks, &mut original.datapacks);
-    crate::command_debug::swap_runtime(state, &mut original);
-    super::runtime::swap_globals(state, &mut original);
-    state.other_dimensions.insert(context.dimension, original);
+    restore_world(state, source, context.dimension);
     result
 }
 pub(crate) fn execute_block_chain(
@@ -187,21 +200,9 @@ pub(crate) fn execute_block_chain(
         crate::command_blocks::invoke(state, changes, invocation);
         return;
     }
-    sync_wire_ids(state);
-    let source = state.dimension;
-    let Some(mut destination) = state.other_dimensions.remove(&dimension) else {
+    let Some(source) = select_world(state, dimension) else {
         return;
     };
-    std::mem::swap(&mut state.command_context, &mut destination.command_context);
-    std::mem::swap(&mut state.datapacks, &mut destination.datapacks);
-    crate::command_debug::swap_runtime(state, &mut destination);
-    super::runtime::swap_globals(state, &mut destination);
-    std::mem::swap(
-        &mut state.other_dimensions,
-        &mut destination.other_dimensions,
-    );
-    std::mem::swap(state, &mut destination);
-    state.other_dimensions.insert(source, destination);
     let mut local = state
         .command_context
         .changes
@@ -213,17 +214,7 @@ pub(crate) fn execute_block_chain(
         state.command_context.changes.entry(dimension).or_default(),
         local,
     );
-    let mut original = state
-        .other_dimensions
-        .remove(&source)
-        .expect("source retained by execution authority");
-    std::mem::swap(state, &mut original);
-    std::mem::swap(&mut state.other_dimensions, &mut original.other_dimensions);
-    std::mem::swap(&mut state.command_context, &mut original.command_context);
-    std::mem::swap(&mut state.datapacks, &mut original.datapacks);
-    crate::command_debug::swap_runtime(state, &mut original);
-    super::runtime::swap_globals(state, &mut original);
-    state.other_dimensions.insert(dimension, original);
+    restore_world(state, source, dimension);
 }
 
 fn append_changes(target: &mut ChangeSet, mut source: ChangeSet) {

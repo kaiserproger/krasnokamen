@@ -344,6 +344,30 @@ pub(crate) fn use_intent(
     Some(intent)
 }
 
+/// Deterministic per-use roll seed: actor, target cell and planning tick.
+fn use_hash(planning_tick: u64, entity: EntityId, pos: BlockPos) -> u64 {
+    hash(&[
+        planning_tick,
+        entity.0 as u64,
+        pos.x as u64,
+        pos.y as u64,
+        pos.z as u64,
+    ])
+}
+
+/// Inventory claim for one hoe or bone-meal use of the held item.
+fn use_claim(entity: EntityId, slot: usize, held: &ItemStack, take: i32) -> InvClaim {
+    InvClaim {
+        owner: entity,
+        slot: u16::try_from(slot).unwrap_or(u16::MAX),
+        expect_item: held.item_id,
+        expect_count: held.count,
+        take,
+        put_item: None,
+        put_count: 0,
+    }
+}
+
 /// A hoe or bone meal use on `clicked`: the intent that tills the soil or
 /// grows the crop, `None` when the held item does nothing there.
 pub(crate) fn plan_use_intent(
@@ -375,30 +399,13 @@ pub(crate) fn plan_use_intent_at(
     let current = state.world.block_at(clicked.x, clicked.y, clicked.z)?;
     let kind = farming.kind(current);
     if item == "bone_meal" && kind != Kind::Crop {
-        let plan = crate::plants::bonemeal(
-            state,
-            clicked,
-            hash(&[
-                planning_tick,
-                entity.0 as u64,
-                clicked.x as u64,
-                clicked.y as u64,
-                clicked.z as u64,
-            ]),
-        )?;
+        let plan =
+            crate::plants::bonemeal(state, clicked, use_hash(planning_tick, entity, clicked))?;
         let slot = crate::tick::held_slot_index(player, hand);
         let footprint = Footprint {
             block_expect: plan.expects,
             block_write: plan.writes,
-            inv: vec![InvClaim {
-                owner: entity,
-                slot: u16::try_from(slot).unwrap_or(u16::MAX),
-                expect_item: held.item_id,
-                expect_count: held.count,
-                take: i32::from(!player.creative()),
-                put_item: None,
-                put_count: 0,
-            }],
+            inv: vec![use_claim(entity, slot, held, i32::from(!player.creative()))],
             ..Default::default()
         };
         return Some(Intent {
@@ -430,17 +437,7 @@ pub(crate) fn plan_use_intent_at(
             0,
         )
     } else if item == "bone_meal" && kind == Kind::Crop {
-        let grown = bone_meal_state(
-            state,
-            clicked,
-            hash(&[
-                planning_tick,
-                entity.0 as u64,
-                clicked.x as u64,
-                clicked.y as u64,
-                clicked.z as u64,
-            ]),
-        )?;
+        let grown = bone_meal_state(state, clicked, use_hash(planning_tick, entity, clicked))?;
         (grown, None, 0, i32::from(!player.creative()))
     } else {
         return None;
@@ -451,15 +448,7 @@ pub(crate) fn plan_use_intent_at(
     let footprint = Footprint {
         block_expect,
         block_write: vec![(clicked, write)],
-        inv: vec![InvClaim {
-            owner: entity,
-            slot: u16::try_from(slot).unwrap_or(u16::MAX),
-            expect_item: held.item_id,
-            expect_count: held.count,
-            take,
-            put_item: None,
-            put_count: 0,
-        }],
+        inv: vec![use_claim(entity, slot, held, take)],
         ..Default::default()
     };
     Some(Intent {

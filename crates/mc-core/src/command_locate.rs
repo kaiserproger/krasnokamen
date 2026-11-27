@@ -1399,14 +1399,12 @@ fn submit(
         LocateOwner::Entity(_) => 1,
     };
     if state.locate.busy(owner) >= limit {
-        if !quiet && let LocateOwner::Connection(connection) = owner {
-            state.push_player(
-                connection,
-                PlayerChange::Chat {
-                    message: "A locate search is already running; try again in a moment".into(),
-                },
-            );
-        }
+        report(
+            state,
+            owner,
+            quiet,
+            "A locate search is already running; try again in a moment",
+        );
         return None;
     }
     // One worker per lane: an interactive open never queues behind a `/locate` search or a
@@ -1414,14 +1412,12 @@ fn submit(
     let lane = completion.lane();
     let capacity = MAX_QUEUED_JOBS * 2 - BACKGROUND_QUEUE_RESERVE;
     if state.locate.queued >= capacity {
-        if !quiet && let LocateOwner::Connection(connection) = owner {
-            state.push_player(
-                connection,
-                PlayerChange::Chat {
-                    message: "Too many locate searches are running; try again in a moment".into(),
-                },
-            );
-        }
+        report(
+            state,
+            owner,
+            quiet,
+            "Too many locate searches are running; try again in a moment",
+        );
         return None;
     }
     // Readiness before the expensive resident-chunk metadata snapshot.
@@ -1457,14 +1453,7 @@ fn submit(
         Err(error) => {
             // A thread that cannot start is a command failure, not a tick panic.
             tracing::error!(%error, "locate worker thread could not start");
-            if !quiet && let LocateOwner::Connection(connection) = owner {
-                state.push_player(
-                    connection,
-                    PlayerChange::Chat {
-                        message: "Locate is unavailable right now".into(),
-                    },
-                );
-            }
+            report(state, owner, quiet, "Locate is unavailable right now");
             return None;
         }
     };
@@ -1485,26 +1474,16 @@ fn submit(
             Some(id)
         }
         Err(TrySendError::Full(_)) => {
-            if !quiet && let LocateOwner::Connection(connection) = owner {
-                state.push_player(
-                    connection,
-                    PlayerChange::Chat {
-                        message: "Too many locate searches are running; try again in a moment"
-                            .into(),
-                    },
-                );
-            }
+            report(
+                state,
+                owner,
+                quiet,
+                "Too many locate searches are running; try again in a moment",
+            );
             None
         }
         Err(TrySendError::Disconnected(_)) => {
-            if !quiet && let LocateOwner::Connection(connection) = owner {
-                state.push_player(
-                    connection,
-                    PlayerChange::Chat {
-                        message: "Locate is unavailable right now".into(),
-                    },
-                );
-            }
+            report(state, owner, quiet, "Locate is unavailable right now");
             None
         }
     }
@@ -2007,6 +1986,23 @@ fn found_distance(origin: (i32, i32, i32), found: (i32, i32, i32), include_y: bo
     } else {
         (dx * dx + dz * dz).sqrt().floor() as i32
     }
+}
+
+/// Tell an interactive locate owner why their search was not started; quiet
+/// owners (dolphin goals, background leads) get no chat.
+fn report(state: &mut TickState, owner: LocateOwner, quiet: bool, message: &str) {
+    if quiet {
+        return;
+    }
+    let LocateOwner::Connection(connection) = owner else {
+        return;
+    };
+    state.push_player(
+        connection,
+        PlayerChange::Chat {
+            message: message.into(),
+        },
+    );
 }
 
 /// Vanilla `sendFailure`: red translatable component.

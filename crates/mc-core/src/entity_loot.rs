@@ -317,6 +317,16 @@ fn equipment(row: &ColdRow) -> [Option<&ItemStack>; 8] {
     ]
 }
 
+/// Whether an item's attribute modifiers count for this damage pass: physical
+/// damage ignores modifiers carried by armour.
+fn counts_for(facts: &mc_data::item_components::ItemFacts, physical: bool) -> bool {
+    !physical
+        || facts
+            .physical_profile
+            .as_ref()
+            .is_none_or(|profile| profile.armor.is_none())
+}
+
 /// Death-only equipment reward; picked-up equipment has drop chance above one.
 pub(crate) fn death_experience(name: &str, row: &ColdRow, seed: u64) -> i32 {
     let mut xp = row.loot.slime_size.map_or_else(
@@ -394,13 +404,7 @@ fn effective_attribute_impl(
         let Some(facts) = stack
             .filter(|stack| !stack.is_empty())
             .and_then(|stack| rules.facts.facts_for_stack(stack, rules.items))
-            .filter(|facts| {
-                !physical
-                    || facts
-                        .physical_profile
-                        .as_ref()
-                        .is_none_or(|profile| profile.armor.is_none())
-            })
+            .filter(|facts| counts_for(facts, physical))
         else {
             continue;
         };
@@ -421,13 +425,7 @@ fn effective_attribute_impl(
                             .as_ref()
                             .filter(|stack| !stack.is_empty())
                             .and_then(|stack| rules.facts.facts_for_stack(stack, rules.items))
-                            .filter(|facts| {
-                                !physical
-                                    || facts
-                                        .physical_profile
-                                        .as_ref()
-                                        .is_none_or(|profile| profile.armor.is_none())
-                            })
+                            .filter(|facts| counts_for(facts, physical))
                             .is_some_and(|facts| {
                                 facts.attribute_modifiers.iter().any(|next| {
                                     next.id == modifier.id
@@ -1225,13 +1223,7 @@ fn wear_equipment_impl(
         let Some(maximum) = rules
             .facts
             .facts_for_stack(item, rules.items)
-            .filter(|facts| {
-                !physical
-                    || facts
-                        .physical_profile
-                        .as_ref()
-                        .is_none_or(|profile| profile.armor.is_none())
-            })
+            .filter(|facts| counts_for(facts, physical))
             .filter(|facts| facts.armor.as_ref().is_some_and(|armor| armor.slot == slot))
             .and_then(|facts| facts.max_damage)
         else {
