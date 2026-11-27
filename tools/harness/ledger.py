@@ -14,6 +14,7 @@ import argparse
 from collections import defaultdict
 import contextlib
 import datetime
+import errno
 import fcntl
 import hashlib
 import json
@@ -24,10 +25,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import tomllib
 
 from . import regressions
+from .quirk_parity import guard as oracle_guard
 from .runtime import REPO_ROOT, main_checkout, sibling_root
 
 GREEN, RED, UNRUNNABLE, NEEDS_CLIENT = 'green', 'red', 'unrunnable', 'needs-real-client'
@@ -1542,32 +1545,156 @@ def _worktree_parent(root):
     return root.parent if root.parent.name == 'wt' else None
 
 
+# A promotion owns one control set for its whole run: a lock plus fixed per-set control worktree
+# paths (so cargo reuses each set's build artifacts instead of growing the target dir by a new path
+# per run). The old single `wt/ledger-control.lock` is gone: it serialized every promote on the host
+# and rows across the lanes could not close (owner D124/D127, 2026-11-27).
+CONTROL_POOL = 3
+
+
+def _control_tree(parent, index, slot):
+    """Fixed path of control worktree `slot` in pool set `index`. The `p<index>` name keeps a set's
+    trees, and their cargo slots, to itself; it also never matches the pre-pool `ledger-control-<slot>`
+    paths, so a lane still running the old ledger.py cannot delete a new-version control tree."""
+    return parent / f'ledger-control-p{index}-{slot}'
+
+
+def _open_set_lock(parent, index):
+    return os.open(str(parent / f'ledger-control-pool-{index}.lock'), os.O_CREAT | os.O_RDWR, 0o644)
+
+
+def _free_set(parent, hold):
+    """Take the first set whose lock is free right now, appending `(index, fd)` to `hold` and
+    returning True, or returning False when every set is busy or unopenable. Non-blocking, in index
+    order: a lone promote always lands on set 1 and keeps its fixed paths, so its cargo slot stays
+    warm across runs. The fd goes into `hold` before the flock, so an interruption anywhere in here
+    leaves the caller's `finally` able to release it."""
+    for index in range(1, CONTROL_POOL + 1):
+        try:
+            fd = _open_set_lock(parent, index)
+        except OSError:  # an unusable lock file is an unavailable set; _waiting_set reports it
+            continue
+        hold.append((index, fd))
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            hold.pop()
+            os.close(fd)
+            if error.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+                raise
+            continue
+        return True
+    return False
+
+
+def _waiting_set(parent, hold):
+    """Block until any set frees, then append its `(index, fd)` to `hold`.
+
+    A waiter must take whichever set frees first, and the only primitive that wakes exactly when a
+    given lock is released is a blocking `flock` on that lock. One blocking call cannot watch three
+    files, and a queue lock around the choice would leave a set idle while the waiter sleeps behind
+    the one set it queued on. So the waiter starts one helper thread per set, each blocking in its own
+    `flock(LOCK_EX)`; the first to acquire appends the set to `hold` and signals an `Event`, and the
+    others stay blocked until their set frees, find a set already taken (or the wait abandoned),
+    release at once and exit. No polling and no sleep; at most `CONTROL_POOL - 1` idle daemon threads
+    per waiting promote. Each thread's `flock` sits on its own open file description, so the holds
+    really exclude each other inside one process as well (the tests rely on that).
+
+    Ownership of the winning fd is always the caller's `hold`, so the caller's `finally` releases it
+    even when the wait is interrupted or abandoned: this function sets `abandoned` (which stops any
+    helper from becoming a second owner) and re-raises. A helper that fails to open or lock its set
+    closes its fd and is recorded; an error aborts the wait only when all `CONTROL_POOL` helpers
+    failed, because one broken set must not cost the waiter the other two."""
+    failures = []
+    ready = threading.Event()
+    guard = threading.Lock()
+    state = {'abandoned': False}
+
+    def failed(index, error):
+        with guard:
+            failures.append((index, error))
+            all_failed = len(failures) == CONTROL_POOL
+        if all_failed:
+            ready.set()
+
+    def take(index):
+        try:
+            fd = _open_set_lock(parent, index)
+        except OSError as error:
+            failed(index, error)
+            return
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except OSError as error:
+            os.close(fd)
+            failed(index, error)
+            return
+        with guard:
+            first = not hold and not state['abandoned']
+            if first:
+                hold.append((index, fd))
+        if first:
+            ready.set()
+            return
+        fcntl.flock(fd, fcntl.LOCK_UN)  # a later set: hand it straight to the next waiter
+        os.close(fd)
+
+    for index in range(1, CONTROL_POOL + 1):
+        threading.Thread(target=take, args=(index,), daemon=True,
+                         name=f'ledger-control-pool-{index}').start()
+    try:
+        ready.wait()
+        if not hold:
+            index, error = failures[0]
+            raise Refused(f'cannot reserve a control set in {parent}: '
+                          f'ledger-control-pool-{index}.lock: {error}')
+    except BaseException:
+        with guard:
+            state['abandoned'] = True
+        raise
+
+
 @contextlib.contextmanager
 def _control_lock(root):
-    """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
-    artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
-    The promote runs under mem-run (the owner host's memory cap and the boss's one-scope policy);
-    mem-run exports KRASNOKAMEN_HARNESS_CPU_SCOPE=1 for every command, and each build stage's own
-    mem-run reuses that scope. Build tokens were removed by owner D127 (2026-11-27), so this lock
-    no longer orders behind a token; it still serializes promotions whose control trees are shared."""
+    """Yield the index of one of `CONTROL_POOL` independent promotion sets; that set's lock is held
+    until the context exits and `_worktree` builds its paths under it.
+
+    Three, not one: the fixed control paths mean each set's cargo builds have their own target slot
+    and its own copy of `data/vanilla` (461 MB) plus the older caches, so a set costs disk and target
+    space but no new path per run; three keeps three promotes running at once (~1 h each under host
+    load) while the queue over the 15 lanes drains, and sizing it further would multiply those copies
+    for no queue gain. The promote still runs under mem-run (the owner host's memory cap and the
+    boss's one-scope policy); mem-run exports KRASNOKAMEN_HARNESS_CPU_SCOPE=1 for every command, and
+    each build stage's own mem-run reuses that scope. Build tokens were removed by owner D127
+    (2026-11-27), so no token orders this lock; the sets only keep promotions off each other's trees.
+    The winning fd lives in `hold` from the moment it is taken, so this function's `finally` releases
+    it even when the wait for a set is interrupted."""
     parent = _worktree_parent(root)
     if parent is None:
-        yield
+        yield 1
         return
     if not os.environ.get('KRASNOKAMEN_HARNESS_CPU_SCOPE'):
         raise Refused('ledger promote must run under mem-run (KRASNOKAMEN_HARNESS_CPU_SCOPE is not set): '
-                      'it takes wt/ledger-control.lock and its build stages reuse that scope; '
-                      'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
-    with (parent / 'ledger-control.lock').open('w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        yield
+                      'it takes one of wt/ledger-control-pool-<k>.lock and its build stages reuse that '
+                      'scope; run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness '
+                      'ledger promote ...')
+    hold = []
+    try:
+        if not _free_set(parent, hold):
+            _waiting_set(parent, hold)
+        yield hold[0][0]
+    finally:
+        for _, fd in hold:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 
 
 @contextlib.contextmanager
-def _worktree(root, commit, slot):
+def _worktree(root, commit, slot, control):
+    """A disposable detached worktree of `commit` at fixed path `slot` of promotion set `control`."""
     wt = _worktree_parent(root)
     parent = wt if wt else Path(tempfile.mkdtemp(prefix='ledger-control-'))
-    tree = parent / f'ledger-control-{slot}' if wt else parent / 'tree'
+    tree = _control_tree(parent, control, slot) if wt else parent / 'tree'
     if tree.exists():  # left by an interrupted run (the lock is held)
         _git(root, 'worktree', 'remove', '--force', str(tree), check=False)
         shutil.rmtree(tree, ignore_errors=True)
@@ -2151,11 +2278,13 @@ _LOADER_COPY_IGNORE = shutil.ignore_patterns('.git', 'build', 'node_modules', '*
                                              'logs', '.idea', '.kotlin')
 
 
-def _client_control_copy(repo, root, slot='ledger-client-control', ignore=None):
+def _client_control_copy(repo, root, slot, ignore=None):
     """A disposable copy of a sibling checkout the fix's production hunks are reversed in.
 
     The checkout itself is never edited: a promotion reverses the real pre-image in a copy that
-    carries the same source (every file except build output, `.git` and logs)."""
+    carries the same source (every file except build output, `.git` and logs). `slot` is required and
+    carries the promotion set (`...-p<k>`): two concurrent promotes sharing a copy path would delete
+    each other's tree."""
     ignore = ignore or _CLIENT_COPY_IGNORE
     parent = _worktree_parent(root) or Path(tempfile.mkdtemp(prefix='ledger-client-control-'))
     tree = parent / slot
@@ -2236,8 +2365,8 @@ def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, c
              'client revision that carries its pre-image (a hand-ported re-break is not a control)'
     control = restored = None
     with contextlib.ExitStack() as stack:
-        stack.enter_context(_control_lock(root))
-        tree = _client_control_copy(repo, root)
+        index = stack.enter_context(_control_lock(root))
+        tree = _client_control_copy(repo, root, f'ledger-client-control-p{index}')
         stack.callback(shutil.rmtree, tree, True)
         check = _git(tree, 'apply', '-R', '--check', '--whitespace=nowarn', '-',
                      stdin=patch.encode(errors='surrogateescape'), check=False)
@@ -2619,8 +2748,8 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
     _, _, kept_tests = non_test_patch(repo, fix_full)
     control = restored = None
     with contextlib.ExitStack() as stack:
-        stack.enter_context(_control_lock(root))
-        tree = _client_control_copy(repo, root, 'ledger-loader-control', _LOADER_COPY_IGNORE)
+        index = stack.enter_context(_control_lock(root))
+        tree = _client_control_copy(repo, root, f'ledger-loader-control-p{index}', _LOADER_COPY_IGNORE)
         stack.callback(shutil.rmtree, tree, True)
         if _git(tree, 'apply', '-R', '--check', '--whitespace=nowarn', '-',
                 stdin=patch.encode(errors='surrogateescape'), check=False)[0]:
@@ -2777,6 +2906,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         fix_patch_text = Path(fix_patch).read_text(errors='surrogateescape')
     elif fix_patch:
         raise Refused(f'{ident}: --fix-patch is only for a fix_commit of the form patch:<sha256>')
+    try:  # D128: a fix may not pass by deleting or ignoring tests, or by editing the recorded corpus
+        test_guard = oracle_guard.promotion_guard(root, full, fix_patch_text)
+    except oracle_guard.GuardRefused as error:
+        raise Refused(f'{ident}: {error}')
     if not patch_mode:
         if test_only:
             _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
@@ -2816,10 +2949,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             raise Refused(f'{ident}: the worktree copy of {defect_rel} differs from HEAD; commit it first '
                           '(the applied bytes are the committed ones)')
     with contextlib.ExitStack() as stack:
-        stack.enter_context(_control_lock(root))
+        control_set = stack.enter_context(_control_lock(root))
         # Restore always runs on the exact tree being promoted: its HEAD plus any uncommitted diff and
         # untracked files (verified against the fingerprint), never on fix_commit.
-        candidate = stack.enter_context(_worktree(root, head, 'candidate'))
+        candidate = stack.enter_context(_worktree(root, head, 'candidate', control_set))
         _materialize(root, candidate, tree_now)
         if test_only:
             missing = _uncovered_test_files(candidate, reversed_files, refs)
@@ -2850,7 +2983,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             raise Refused(f"{ident}: the fix's test hunks do not reverse onto the tree being promoted, so "
                           'control A cannot run against current code (control_tree must be head)')
         else:
-            control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix'))
+            control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix', control_set))
         # Stage the candidate content first: a dirty tree's unstaged diff would otherwise mix with
         # the reversal, and control B's changed-line ranges are read from that diff (review N-b).
         _git(control_dir, 'add', '-A')
@@ -2961,7 +3094,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         'fix_patch_sha256': fix[len('patch:'):] if patch_mode else None,
         'reversed_files': reversed_files, 'kept_test_files': test_files,
         'negative_control': control, 'restored': restored, 'client_receipt': receipt_info,
-        'artifact_dir': str(ctx.artifact_dir),
+        'test_guard': test_guard, 'artifact_dir': str(ctx.artifact_dir),
     }
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if dry_run:
@@ -3012,8 +3145,8 @@ def _cited_by_other_rows(root, ref, ident):
 def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None, dry_run=False, ctx, runner=run_refs):
     """Record the graphical negative control of an already promoted row (backfill).
 
-    Promotion of a client-visible row records its graphical control `unrunnable` when no build token
-    allowed a reverted-pin run (`docs/bugs/README.md`). This re-runs only those graphical refs against
+    Promotion of a client-visible row records its graphical control `unrunnable` when no reverted-pin
+    run was available at promotion time (`docs/bugs/README.md`). This re-runs only those graphical refs against
     the reversed tree, or validates a receipt of such a run, and writes the red into the row's
     promotion receipt. It never changes a row's status and never accepts a green or a non-assertion."""
     row = next((bug for bug in load_rows(root) if bug['id'] == ident), None)

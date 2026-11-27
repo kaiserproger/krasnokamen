@@ -1,7 +1,7 @@
 //! # mc-data
 //!
 //! Read-only indexes into the vanilla data sidecar described in
-//! [`docs/decisions/0001-vanilla-data-as-runtime-input.md`]. Registry
+//! decision C1 of `DECISIONS.md`. Registry
 //! entries are discovered from `<data_dir>/data/<namespace>/<registry>/**/*.json`;
 //! selected reports, tags, recipes, item facts, block facts, and worldgen
 //! facts are parsed by focused loaders.
@@ -58,6 +58,7 @@ pub mod data_component_types_26_1_2;
 pub mod enchanting_26_1_2;
 pub mod entity_attachments_26_3;
 mod entity_contract_26_1_2;
+pub mod entity_data_value;
 pub mod entity_nbt;
 pub mod entity_types;
 pub mod fire_flammability;

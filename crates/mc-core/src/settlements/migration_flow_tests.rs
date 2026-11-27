@@ -509,6 +509,53 @@ fn outside_arrivals_are_singleton_free_and_rate_is_capped_by_physical_beds() {
     assert_eq!(v.household.as_deref(), Some(family.id.as_str()));
 }
 
+/// Owner rule: the outside world scores `OUTSIDE_ATTRACTIVENESS` and migration
+/// needs a `MIGRATION_THRESHOLD` advantage, so outside arrivals admit only
+/// settlements strictly above that production floor.
+#[test]
+fn outside_arrival_flips_at_the_production_attractiveness_floor() {
+    let mut state = fixture();
+    let destination = town(&mut state, "destination", 8, 32);
+    house(&mut state, destination, 8);
+    // members 10, beds 15 (housing 0.5), no jobs, no deaths (safety 1): food
+    // moves the score either side of the floor without naming 35.0.
+    let facts = |food_points| Facts {
+        members: 10,
+        beds: 15,
+        free_beds: 5,
+        inbound: 0,
+        food_points,
+        open_jobs: 0,
+        recent_deaths: 0,
+        completed_buildings: 0,
+    };
+    let floor = OUTSIDE_ATTRACTIVENESS + MIGRATION_THRESHOLD;
+    assert!(Attractiveness::from_facts(&facts(58)).total() <= floor);
+    assert!(Attractiveness::from_facts(&facts(62)).total() > floor);
+    state.test_acceleration.migration_rate = 3.0;
+    state.tick_budget.reset(state.tick);
+    let mut changes = ChangeSet::default();
+    state
+        .settlements
+        .migration
+        .observe(destination, state.tick, facts(58));
+    outside_arrivals(&mut state, &mut changes, destination, &mut Rng(123));
+    assert!(
+        changes.entities_spawned.is_empty(),
+        "no advantage at the outside floor: {:?}",
+        changes.entities_spawned
+    );
+    state
+        .settlements
+        .migration
+        .observe(destination, state.tick, facts(62));
+    outside_arrivals(&mut state, &mut changes, destination, &mut Rng(123));
+    assert!(
+        !changes.entities_spawned.is_empty(),
+        "above the floor the outside world supplies arrivals"
+    );
+}
+
 #[test]
 fn manual_bind_still_refuses_outside_presence_but_route_proven_arrival_admits() {
     let mut state = fixture();

@@ -1,12 +1,13 @@
 # Krasnokamen product contract
 
 This document states what Krasnokamen must deliver, not what the current tree has
-already proved. `.analysis/MEMORY.md` owns the live agent checkpoint cursor;
-[ARCHITECTURE.md](ARCHITECTURE.md) and ADR 0013/0014 own the sole native runtime.
+already proved. [ARCHITECTURE.md](ARCHITECTURE.md) and
+[ADR 0013](decisions/0013-core-model-v2.md) own the native runtime; current
+evidence is in [STATUS.md](STATUS.md).
 
 ## Product
 
-Krasnokamen is an authoritative Minecraft Java 26.1.2-compatible Rust server with a
+Krasnokamen is an authoritative Rust server for Minecraft Java 26.1.2 through 26.3 with a
 sandboxed addon platform and a shared client Loader. Ordinary server-only play
 works with the vanilla client. Negotiated Loader capabilities provide custom
 content, input and presentation; unsupported client features are explicit, not
@@ -14,7 +15,9 @@ silently replaced by fake implementations.
 
 The purpose is efficient common gameplay and multiplayer plus a broad, uniform
 server/client API. Content such as colonies, economies, machines, recruits and
-bosses belongs in addons rather than dedicated Rust gameplay entry points.
+bosses belongs in addons rather than dedicated Rust gameplay entry points;
+settlements and battles are native today and move to packages under
+[decision X2](../DECISIONS.md#plugins-and-the-engine).
 The owner-requested core rewrite minimizes mechanisms, duplicated authority and
 unnecessary code while preserving useful domain implementations and behavior.
 
@@ -32,8 +35,9 @@ Priority order:
 - Preserve authoritative movement, item conservation, lifecycle ordering,
   permission checks and validated commits. Rejection mutates nothing; accepted
   mutations and committed effects must not disappear under overload.
-- Preserve vanilla world-format compatibility and documented persistence/
-  recovery guarantees. No stronger durability claim follows from a unit test.
+- Preserve vanilla world-format interchange (Anvil import/export) and the
+  documented persistence/recovery guarantees. No stronger durability claim
+  follows from a unit test.
 - Vanilla behavior is the reference within declared capacity. Deliberate bug
   fixes and other divergences require explicit scope and evidence; neither
   bit-identical terrain/RNG nor global parity is implied by a playable demo.
@@ -97,8 +101,8 @@ there is no second dependency or thread-pool specification in this document.
 No Bedrock support, binary execution of Forge/Fabric/NeoForge server mods, or
 custom launcher requirement. Players use a legitimate Minecraft installation
 and the documented launcher/Loader setup. Mojang inputs stay local; licensing
-and data provenance are governed by [ADR 0001](decisions/0001-vanilla-data-as-runtime-input.md)
-and protocol evidence by [ADR 0002](decisions/0002-vanilla-protocol-metadata-as-reference.md).
+and data provenance are governed by decision [C1](../DECISIONS.md#content-and-protocol)
+and protocol evidence by [C2](../DECISIONS.md#content-and-protocol).
 
 ## Acceptance evidence
 

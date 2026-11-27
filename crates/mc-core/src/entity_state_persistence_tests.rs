@@ -440,11 +440,10 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
         .entities
         .row(restored.entities.slot_of(id).unwrap());
     assert!(row.controls.no_gravity && row.controls.invulnerable);
-    assert!(
-        row.appearance
-            .extra
-            .contains(&(5, crate::boundary::EntityDataValue::Boolean(true)))
-    );
+    assert!(row.appearance.extra.contains(&(
+        5,
+        mc_data::entity_data_value::EntityDataValue::Boolean(true)
+    )));
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -544,11 +543,10 @@ fn native_no_gravity_restore_rehydrates_wire_metadata_and_motion() {
             .unwrap()
             .contains(&EntityId(42))
     );
-    assert!(
-        row.appearance
-            .extra
-            .contains(&(5, crate::boundary::EntityDataValue::Boolean(true)))
-    );
+    assert!(row.appearance.extra.contains(&(
+        5,
+        mc_data::entity_data_value::EntityDataValue::Boolean(true)
+    )));
     for _ in 0..5 {
         crate::tick::run_tick(&mut state, &[]);
     }

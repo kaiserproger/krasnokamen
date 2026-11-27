@@ -293,6 +293,32 @@ fn tail_after(
     Ok(rest.to_owned())
 }
 
+/// Player targets of a command, or vanilla's `argument.entity.notfound.player`.
+fn target_players(
+    state: &mut TickState,
+    connection: crate::boundary::ConnectionId,
+    executor: EntityId,
+    target: &crate::commands::Target,
+) -> Option<Vec<EntityId>> {
+    let targets = match crate::command_execution::player_targets(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error_text(state, connection, message);
+            return None;
+        }
+    };
+    if targets.is_empty() {
+        crate::command_execution::feedback(
+            state,
+            connection,
+            "argument.entity.notfound.player",
+            Vec::new(),
+        );
+        return None;
+    }
+    Some(targets)
+}
+
 /// `/tellraw`: resolve the component once per target player (entity override =
 /// that player, mirroring vanilla's per-player `getResolvedComponent`) and
 /// deliver it as system chat. Vanilla sends no feedback to the sender.
@@ -303,22 +329,9 @@ pub(crate) fn execute_tellraw(
     target: &crate::commands::Target,
     message: &mc_nbt::Tag,
 ) -> crate::command_execution::CommandResult {
-    let targets = match crate::command_execution::player_targets(state, executor, target) {
-        Ok(targets) => targets,
-        Err(message) => {
-            error_text(state, connection, message);
-            return crate::command_execution::CommandResult::Failed;
-        }
-    };
-    if targets.is_empty() {
-        crate::command_execution::feedback(
-            state,
-            connection,
-            "argument.entity.notfound.player",
-            Vec::new(),
-        );
+    let Some(targets) = target_players(state, connection, executor, target) else {
         return crate::command_execution::CommandResult::Failed;
-    }
+    };
     let count = targets.len() as i32;
     for target in targets {
         let resolved = match resolve_component(state, target, message) {
@@ -349,22 +362,9 @@ pub(crate) fn execute_title(
     target: &crate::commands::Target,
     action: &TitleAction,
 ) -> crate::command_execution::CommandResult {
-    let targets = match crate::command_execution::player_targets(state, executor, target) {
-        Ok(targets) => targets,
-        Err(message) => {
-            error_text(state, connection, message);
-            return crate::command_execution::CommandResult::Failed;
-        }
-    };
-    if targets.is_empty() {
-        crate::command_execution::feedback(
-            state,
-            connection,
-            "argument.entity.notfound.player",
-            Vec::new(),
-        );
+    let Some(targets) = target_players(state, connection, executor, target) else {
         return crate::command_execution::CommandResult::Failed;
-    }
+    };
     match action {
         TitleAction::Clear { reset_times } => {
             for target in &targets {

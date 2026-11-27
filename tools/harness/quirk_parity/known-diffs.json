@@ -1,0 +1,3 @@
+{
+ "_doc": "Known differences from recorded vanilla, per case: the exact mismatch ids (docs/QUIRK_PARITY.md) and why. Listed mismatches report as known-divergence; any other mismatch fails, and so does a listed one that stopped occurring. Fix the implementation, never the recording or a tolerance."
+}

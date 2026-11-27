@@ -700,7 +700,8 @@ fn copper_build_pattern_replaces_body_with_matching_chest_exactly_once() {
 
 #[test]
 fn breaking_other_chest_half_finishes_native_golem_interaction_in_commit() {
-    use crate::boundary::{DigAction, EntityDataValue, PlayerChange};
+    use crate::boundary::{DigAction, PlayerChange};
+    use mc_data::entity_data_value::EntityDataValue;
 
     let mut state = fixture(None);
     let player = join(&mut state);

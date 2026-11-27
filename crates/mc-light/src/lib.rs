@@ -15,7 +15,7 @@ use mc_world::light::{
 use mc_world::{BlockStateId, Chunk, ChunkPos};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-pub(crate) struct LightEngine {
+pub struct LightEngine {
     table: Arc<BlockLightTable>,
     cache: LightCache,
     workspace: LightWorkspace,
@@ -27,12 +27,12 @@ pub(crate) struct LightEngine {
     admission_seed_cells: usize,
     #[cfg(test)]
     admission_seed_face_checks: usize,
-    #[cfg(test)]
-    pub(crate) full_recomputes: usize,
+    #[cfg(any(test, feature = "light-counters"))]
+    pub full_recomputes: usize,
 }
 
 impl LightEngine {
-    pub(crate) fn new(table: Arc<BlockLightTable>) -> Self {
+    pub fn new(table: Arc<BlockLightTable>) -> Self {
         Self {
             table,
             cache: LightCache::new(),
@@ -45,18 +45,18 @@ impl LightEngine {
             admission_seed_cells: 0,
             #[cfg(test)]
             admission_seed_face_checks: 0,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "light-counters"))]
             full_recomputes: 0,
         }
     }
     /// Registry-owned oracle handle behind this engine.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "light-counters"))]
     #[must_use]
-    pub(crate) fn table(&self) -> &Arc<BlockLightTable> {
+    pub fn table(&self) -> &Arc<BlockLightTable> {
         &self.table
     }
 
-    pub(crate) fn remove(&mut self, pos: ChunkPos) {
+    pub fn remove(&mut self, pos: ChunkPos) {
         self.cache.remove(pos);
         self.dirty_seams.remove(&pos);
         // Eviction leaves adjacent baked/cache interiors valid, but their
@@ -78,7 +78,7 @@ impl LightEngine {
     }
 
     /// Reconcile each affected resident chunk once, regardless of batch order.
-    pub(crate) fn admit(
+    pub fn admit(
         &mut self,
         chunks: &FxHashMap<ChunkPos, Arc<Chunk>>,
         loaded: &[ChunkPos],
@@ -145,7 +145,7 @@ impl LightEngine {
                 } else {
                     // Raw test/checkpoint insertions may bypass workers.
                     // Never rebake a complete prepared chunk on the tick.
-                    #[cfg(test)]
+                    #[cfg(any(test, feature = "light-counters"))]
                     {
                         self.full_recomputes += 1;
                     }
@@ -354,7 +354,7 @@ impl LightEngine {
     }
 
     /// Solve a joined startup batch directly; never called by tick admission.
-    pub(crate) fn admit_blocking(
+    pub fn admit_blocking(
         &mut self,
         chunks: &FxHashMap<ChunkPos, Arc<Chunk>>,
         loaded: &[ChunkPos],
@@ -367,7 +367,7 @@ impl LightEngine {
         for pos in targets {
             let light =
                 compute_chunk_light_in(&mut self.workspace, neighbours(chunks, pos), &self.table);
-            #[cfg(test)]
+            #[cfg(any(test, feature = "light-counters"))]
             {
                 self.full_recomputes += 1;
             }
@@ -378,7 +378,7 @@ impl LightEngine {
         updates
     }
 
-    pub(crate) fn edit(
+    pub fn edit(
         &mut self,
         chunks: &FxHashMap<ChunkPos, Arc<Chunk>>,
         pos: (i32, i32, i32),
@@ -750,7 +750,7 @@ fn has_complete_light(chunk: &Chunk) -> bool {
 /// Prepare omitted light off tick; complete arrays belong to the producer's
 /// final block image and need no rebake (including prelit template/native loads).
 /// Scratch is retained per producer thread, never allocated per chunk request.
-pub(crate) fn bake_missing(chunk: &mut Chunk, table: &BlockLightTable) {
+pub fn bake_missing(chunk: &mut Chunk, table: &BlockLightTable) {
     if has_complete_light(chunk) {
         return;
     }
@@ -775,7 +775,7 @@ pub(crate) fn bake_missing(chunk: &mut Chunk, table: &BlockLightTable) {
 /// Time/weather darkening affects gameplay, never the stored sky-light channel.
 /// The 26.1.2 day timeline is the old periodic-spawn oracle's piecewise curve,
 /// not the legacy celestial-angle cosine. Midnight sky brightness is four.
-pub(crate) fn sky_darken(day_time: i64, rain_level: f32, thunder_level: f32) -> u8 {
+pub fn sky_darken(day_time: i64, rain_level: f32, thunder_level: f32) -> u8 {
     let tick = day_time.rem_euclid(24_000) as f32;
     let factor = if (133.0..=11_867.0).contains(&tick) {
         1.0
@@ -794,34 +794,6 @@ pub(crate) fn sky_darken(day_time: i64, rain_level: f32, thunder_level: f32) -> 
 
 fn daylight_lerp(tick: f32, start: f32, end: f32, from: f32, to: f32) -> f32 {
     from + (to - from) * ((tick - start) / (end - start))
-}
-
-impl crate::tick::TickState {
-    /// Real local brightness for crop growth and spawning, after sky darkening.
-    #[must_use]
-    pub(crate) fn brightness(&self, x: i32, y: i32, z: i32) -> u8 {
-        self.world.light_at(x, y, z).map_or(0, |(sky, block)| {
-            if !self.dimension.has_weather() {
-                return block;
-            }
-            block.max(sky.saturating_sub(sky_darken(
-                self.day_time,
-                self.rain_level,
-                self.thunder_level,
-            )))
-        })
-    }
-
-    /// Vanilla `getRawBrightness(pos, 0)`: sky and block light with no
-    /// day/weather sky darkening. Crops, stems and bamboo saplings gate on
-    /// this, so open-sky farms grow at night; spawning and saplings
-    /// (`getMaxLocalRawBrightness`) use the darkened [`Self::brightness`].
-    #[must_use]
-    pub(crate) fn raw_brightness(&self, x: i32, y: i32, z: i32) -> u8 {
-        self.world
-            .light_at(x, y, z)
-            .map_or(0, |(sky, block)| sky.max(block))
-    }
 }
 
 #[cfg(test)]

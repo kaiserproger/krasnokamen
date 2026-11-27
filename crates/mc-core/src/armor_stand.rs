@@ -558,9 +558,10 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
         | (u8::from(opts.arms) << 2)
         | (u8::from(no_base) << 3)
         | (u8::from(opts.marker) << 4);
-    appearance
-        .extra
-        .push((15, crate::boundary::EntityDataValue::Byte(flags as i8)));
+    appearance.extra.push((
+        15,
+        mc_data::entity_data_value::EntityDataValue::Byte(flags as i8),
+    ));
     if fields
         .iter()
         .any(|(key, value)| key == "Invisible" && matches!(value, Tag::Byte(1)))
@@ -574,7 +575,7 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
             {
                 appearance.extra.push((
                     16 + index as u8,
-                    crate::boundary::EntityDataValue::Rotations([*x, *y, *z]),
+                    mc_data::entity_data_value::EntityDataValue::Rotations([*x, *y, *z]),
                 ));
             }
         }

@@ -420,7 +420,7 @@ impl TerrainSource {
                             // invalidates even if the resident edit was evicted.
                             native_key(&chunk)
                         };
-                        crate::light::bake_missing(&mut chunk, &source.light);
+                        mc_light::bake_missing(&mut chunk, &source.light);
                         (key, Arc::new(chunk))
                     }
                 },
@@ -473,7 +473,7 @@ impl TerrainSource {
                         mc_world::BlockStateId(state),
                     );
                 }
-                crate::light::bake_missing(chunk, &source.light);
+                mc_light::bake_missing(chunk, &source.light);
                 revision = fold_revision(&[revision, fold_pending(&applied)]);
             }
             if chunk.pos != *pos || chunk.geometry() != source.geometry {

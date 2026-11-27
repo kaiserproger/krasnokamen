@@ -127,7 +127,7 @@ pub(crate) fn run(state: &mut TickState) {
 const TONGUE_INDEX: u8 = 19;
 
 fn hunt(state: &mut TickState, frog: crate::entities::EntitySlot) {
-    use crate::boundary::EntityDataValue;
+    use mc_data::entity_data_value::EntityDataValue;
     let pos = state.entities.pos(frog);
     let id = state.entities.body(frog).id;
     let previous = state.entities.row(frog).frog_prey.map(|(id, _)| id);

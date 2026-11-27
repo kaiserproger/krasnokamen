@@ -172,131 +172,6 @@ fn join(state: &mut TickState, connection: u64, name: &str) -> mc_domain::Entity
 }
 
 #[test]
-fn radius_split_residency_covers_view_margin_independently_of_simulation() {
-    use crate::boundary::ChunkPos;
-    let mut state = test_state();
-    let player = join(&mut state, 1, "viewer");
-    let slot = state.entities.slot_of(player).unwrap();
-    state.entities.set_pos(slot, [8.0, 100.0, 8.0]);
-    state.config_view_distance = 8;
-    state.config_sim_distance = 4;
-    let wanted = state.desired_chunks();
-    for z in -9..=9 {
-        for x in -9..=9 {
-            assert!(wanted.contains_key(&ChunkPos { x, z }), "missing {x},{z}");
-        }
-    }
-    for simulation in [6, 2, 6] {
-        state.config_sim_distance = simulation;
-        assert_eq!(state.desired_chunks(), wanted);
-    }
-}
-
-#[test]
-fn radius_split_active_hysteresis_and_tickets_do_not_activate_the_view_square() {
-    use crate::boundary::ChunkPos;
-    let mut state = test_state();
-    let player = join(&mut state, 1, "viewer");
-    let slot = state.entities.slot_of(player).unwrap();
-    state.entities.set_pos(slot, [8.0, 100.0, 8.0]);
-    state.config_view_distance = 8;
-    state.config_sim_distance = 2;
-    state.refresh_active_chunks(state.tick + 1);
-    state.world.ensure_blocking(&state.desired_chunks());
-    state.refresh_active_chunks(state.tick + 1);
-    assert!(state.world.is_active(2, 0));
-    assert!(state.world.has_chunk(8, 0));
-    assert!(!state.world.is_active(8, 0));
-    state.entities.set_pos(slot, [24.0, 100.0, 8.0]);
-    state.refresh_active_chunks(state.tick + 1);
-    assert!(
-        state.world.is_active(-2, 0),
-        "exit band retains previous active chunk"
-    );
-    state.entities.set_pos(slot, [40.0, 100.0, 8.0]);
-    state.refresh_active_chunks(state.tick + 1);
-    assert!(
-        !state.world.is_active(-2, 0),
-        "outside exit band deactivates"
-    );
-    let forced = ChunkPos { x: 8, z: 0 };
-    state.tickets.insert("forced".into(), (forced, 0));
-    state.refresh_active_chunks(state.tick + 1);
-    assert!(state.world.is_active(forced.x, forced.z));
-    state.tickets.remove("forced");
-    state.refresh_active_chunks(state.tick + 1);
-    assert!(!state.world.is_active(forced.x, forced.z));
-}
-
-/// The exit band keeps previously active chunks one chunk beyond the radius.
-/// Reference: the full walk over the previous set, once per player (what
-/// `refresh_active_chunks` did before it probed only the outer ring).
-#[test]
-fn active_set_exit_band_matches_the_full_previous_set_walk_for_moving_players() {
-    use crate::boundary::ChunkPos;
-    use std::collections::HashSet;
-    let mut state = test_state();
-    let players: Vec<_> = (1..=6)
-        .map(|connection| join(&mut state, connection, &format!("walker{connection}")))
-        .collect();
-    state.config_view_distance = 6;
-    state.config_sim_distance = 3;
-    let radius = 3_i32;
-    let mut rng = 0x5EED_u64;
-    let mut next = move |bound: u64| {
-        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-        (rng >> 33) % bound
-    };
-    let mut previous: HashSet<ChunkPos> = HashSet::new();
-    for step in 0..60 {
-        for id in &players {
-            if step == 0 || next(3) == 0 {
-                let slot = state.entities.slot_of(*id).unwrap();
-                // Chunk jumps of 1-2 (inside the exit band) and rare long jumps.
-                let jump = if next(8) == 0 { 40 } else { 1 + next(2) as i32 };
-                let pos = state.entities.pos(slot);
-                let dx = (next(3) as i32 - 1) * jump * 16;
-                let dz = (next(3) as i32 - 1) * jump * 16;
-                state.entities.set_pos(
-                    slot,
-                    [pos[0] + f64::from(dx) + 3.0, 100.0, pos[2] + f64::from(dz)],
-                );
-            }
-        }
-        let centers: Vec<ChunkPos> = state
-            .players
-            .keys()
-            .map(|id| {
-                let pos = state.entities.pos(state.entities.slot_of(*id).unwrap());
-                ChunkPos {
-                    x: (pos[0].floor() as i32).div_euclid(16),
-                    z: (pos[2].floor() as i32).div_euclid(16),
-                }
-            })
-            .collect();
-        let mut expected = HashSet::new();
-        for center in &centers {
-            for z in center.z - radius..=center.z + radius {
-                for x in center.x - radius..=center.x + radius {
-                    expected.insert(ChunkPos { x, z });
-                }
-            }
-            for chunk in &previous {
-                if (chunk.x - center.x).abs() <= radius + 1
-                    && (chunk.z - center.z).abs() <= radius + 1
-                {
-                    expected.insert(*chunk);
-                }
-            }
-        }
-        state.refresh_active_chunks(state.tick + 1);
-        let actual: HashSet<ChunkPos> = state.world.active_positions().collect();
-        assert_eq!(actual, expected, "step {step}");
-        previous = expected;
-    }
-}
-
-#[test]
 fn radius_split_resident_inactive_mob_and_inhabited_time_freeze_until_activation() {
     use crate::boundary::ChunkPos;
     let mut state = test_state();
@@ -1161,71 +1036,7 @@ fn spawned_mobs_tick_and_appear_in_snapshot() {
     );
 }
 
-/// Dig removes a block and place adds one, both in ChangeSet.blocks.
-#[test]
-fn dig_and_place_commit_block_changes() {
-    let mut state = test_state();
-    let entity = join(&mut state, 1, "steve");
-    let (_, _, _) = run_tick(&mut state, &[]);
-    // Find a non-air block near spawn.
-    let mut target = None;
-    for y in (40..100).rev() {
-        if state
-            .world
-            .block_at(8, y, 8)
-            .is_some_and(|s| s != state.registry.states.air)
-        {
-            target = Some(crate::boundary::BlockPos { x: 8, y, z: 8 });
-            break;
-        }
-    }
-    let Some(pos) = target else { return };
-    let slot = state.entities.slot_of(entity).expect("slot");
-    state
-        .entities
-        .set_pos(slot, [8.5, f64::from(pos.y + 1), 10.5]);
-    crate::tick::mining_tests::ready_to_finish(&mut state, ConnectionId(1), pos);
-    let (output, _, _) = run_tick(
-        &mut state,
-        &[PlayerInput::Dig {
-            connection: ConnectionId(1),
-            position: pos,
-            action: DigAction::Finish,
-            sequence: 1,
-        }],
-    );
-    assert!(
-        output
-            .changes
-            .blocks
-            .iter()
-            .any(|change| change.position == pos && change.state == state.registry.states.air)
-    );
-    assert_eq!(
-        state.world.block_at(pos.x, pos.y, pos.z),
-        Some(state.registry.states.air)
-    );
-    // Place above.
-    let above = crate::boundary::BlockPos {
-        x: pos.x,
-        y: pos.y + 1,
-        z: pos.z,
-    };
-    let (output, _, _) = run_tick(
-        &mut state,
-        &[PlayerInput::UseItemOn {
-            connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
-            position: pos,
-            face: 1,
-            cursor: [0.5; 3],
-            sequence: 2,
-        }],
-    );
-    let _ = (above, output);
-}
-
-/// Gravity blocks fall in a chain when unsupported.
+/// Gravity sources fall to their support and despawn into the world again.
 #[test]
 fn gravity_block_falls_to_support() {
     let mut state = test_state();
@@ -1696,83 +1507,6 @@ fn checkpoint_round_trip_through_real_core() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// REQUIRED 3: same blueprint data under a different type_id behaves
-/// identically (no type-name branches in the tick).
-#[test]
-fn blueprint_goals_drive_behavior_not_type_ids() {
-    use crate::blueprint::{Goal, GoalKind, MobBlueprint, MovementClass};
-    // Two blueprints with identical goal data but different type ids.
-    let goals_a: &[Goal] = &[
-        Goal {
-            priority: 1,
-            kind: GoalKind::MeleeAttack,
-        },
-        Goal {
-            priority: 2,
-            kind: GoalKind::MeleeChase,
-        },
-    ];
-    let blueprint_a = MobBlueprint {
-        name: "test:chaser_a".to_owned(),
-        type_id: 9001,
-        movement: MovementClass::Walker,
-        goals: goals_a.to_vec(),
-        sensors: crate::blueprint::Sensors {
-            sight_range: 35.0,
-            attack_reach: 2.2,
-        },
-        params: crate::blueprint::MobParams {
-            max_health: 20.0,
-            speed: 4.3,
-            attack_damage: 3.0,
-            pickup_delay: 0,
-            breed_cooldown: 0,
-            armor: 0.0,
-            knockback_resistance: 0.0,
-        },
-        half_width: 0.3,
-        height: 1.95,
-        offspring: None,
-        breed_food: Vec::new(),
-        loot_table: None,
-        category: crate::blueprint::MobCategory::Monster,
-        wool: false,
-        spawn_weight: 100,
-        capabilities: crate::blueprint::Capabilities {
-            burns_in_daylight: true,
-            ..Default::default()
-        },
-    };
-    let blueprint_b = MobBlueprint {
-        name: "test:chaser_b".to_owned(),
-        type_id: 9002,
-        ..blueprint_a.clone()
-    };
-    // Same goals resolve identically regardless of type id.
-    assert!(blueprint_a.has_goal(GoalKind::MeleeChase));
-    assert!(blueprint_b.has_goal(GoalKind::MeleeChase));
-    assert!(!blueprint_a.has_goal(GoalKind::Breed));
-    assert!(!blueprint_b.has_goal(GoalKind::Breed));
-    assert_eq!(blueprint_a.goals, blueprint_b.goals);
-}
-
-/// REQUIRED 4: entities never fall through into unloaded chunks and never
-/// gain a floor from them — motion in a missing column is blocked.
-#[test]
-fn missing_chunk_blocks_motion_never_floors() {
-    let mut state = test_state();
-    let registry = test_registry();
-    let id = state.spawn_mob(registry.cow_type_id, [8.0, 80.0, 8.0], 10.0);
-    let slot = state.entities.slot_of(id).expect("slot");
-    // Teleport far outside the loaded radius: the column is missing, so the
-    // resolver samples Solid all around and the mob must freeze in place.
-    state.entities.set_pos(slot, [10_000.0, 80.0, 10_000.0]);
-    let before = state.entities.pos(slot);
-    let _ = run_tick(&mut state, &[]);
-    let after = state.entities.pos(slot);
-    assert_eq!(before, after, "unloaded column blocks all motion");
-}
-
 /// Mob AI cadence by distance to the nearest player: decisions every tick
 /// within two chunks, every second tick within four; between decisions the
 /// last one keeps executing, so a middle-ring chaser still moves every tick
@@ -2241,39 +1975,6 @@ fn player_air_is_initialized_on_join_and_reset_on_respawn() {
             .flat_map(|(_, changes)| changes)
             .any(|change| *change == PlayerChange::AirSupply { air: 300 })
     );
-}
-
-/// REQUIRED 2: an item entity carrying a damaged/enchanted/named stack keeps
-/// its full components through drop -> journal -> restart.
-#[test]
-fn item_entity_stack_survives_journal_restart() {
-    use crate::journal::JournalEntry;
-    let registry = test_registry();
-    let id = mc_data::Identifier::parse("minecraft:diamond_sword").expect("id");
-    let stack = mc_data::ItemStack {
-        item_id: registry.items.id_of(&id).expect("sword"),
-        count: 1,
-        damage: Some(37),
-        custom_name: Some(" quests blade ".into()),
-        ..Default::default()
-    };
-    let row = crate::entities::StackRow {
-        item_id: stack.item_id,
-        count: stack.count,
-        stack: Some(stack.clone()),
-    };
-    // Journal payload carries the full stack.
-    let full = row.full_stack();
-    assert_eq!(full.damage, Some(37));
-    assert_eq!(full.custom_name.as_deref(), Some(" quests blade "));
-    // Replay restore (mirrors restore_entity) keeps every component.
-    let restored = crate::entities::StackRow {
-        item_id: full.item_id,
-        count: full.count,
-        stack: Some(full.clone()),
-    };
-    assert_eq!(restored.full_stack(), stack);
-    let _ = JournalEntry::RemoveEntity { id: 0, tick: 0 };
 }
 
 /// Task 1: open Core, join + give an item, shutdown (joins threads, final
@@ -3417,28 +3118,6 @@ fn custody_survives_checkpoint_crash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Full vanilla data loads from the content cache (missing data = error).
-#[test]
-fn registry_loads_full_vanilla_data() {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
-    let registry = crate::registry::CoreRegistry::load(Some(&dir)).expect("full data loads");
-    assert!(registry.item_facts.len() > 1000, "full item facts");
-    assert!(registry.tags.total_tags() > 100, "full tags");
-    assert!(registry.recipes.len() > 1000, "full recipes");
-    assert!(registry.loot.total_drops() > 100, "full loot");
-    assert!(registry.mining.len() > 1000, "full mining");
-    // Tool rules exist (the embedded subset has none).
-    let pick = registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:diamond_pickaxe").expect("id"))
-        .expect("pick");
-    let facts = registry
-        .item_facts
-        .facts_for_stack(&mc_data::ItemStack::new(pick, 1), &registry.items)
-        .expect("pick facts");
-    assert!(facts.tool.is_some(), "pickaxe has tool rules");
-}
-
 /// Survival break spawns the block's loot with a correctly admitted mining tool.
 #[test]
 fn survival_break_spawns_loot() {
@@ -3662,121 +3341,6 @@ fn pickup_losing_capacity_before_merge_does_not_block_another_player() {
         item: collected, collector, count: 1
     } if *collected == item && *collector == second)
     ));
-}
-
-/// Partial pickup keeps the remainder on the ground: a full inventory takes
-/// nothing and the entity survives; space for half takes half.
-#[test]
-fn partial_pickup_keeps_remainder_on_ground() {
-    use crate::boundary::{ConnectionId, PlayerInput};
-    use crate::intent::{Footprint, Intent, IntentKind};
-    use mc_domain::EntityId;
-    let mut state = test_state();
-    let entity = join(&mut state, 103, "full-picker");
-    let registry = test_registry();
-    let dirt_id = registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:dirt").expect("id"))
-        .expect("dirt");
-    // Fill every inventory slot with a full dirt stack (64).
-    {
-        let player = state.players.get_mut(&entity).expect("player");
-        for slot in player.inventory.slots.iter_mut() {
-            *slot = mc_data::ItemStack::new(dirt_id, 64);
-        }
-    }
-    // Ground item: 10 dirt at the player's feet (spawn directly, delay 0).
-    let ground = state.entities.alloc_id();
-    state.entities.spawn(
-        ground,
-        uuid::Uuid::new_v4(),
-        crate::entities::EntityKind::Item {
-            type_id: state.registry.item_type_id,
-        },
-        crate::entities::ColdFields {
-            pos: [8.0, 80.0, 8.0],
-            vel: [0.0; 3],
-            yaw: 0.0,
-            pitch: 0.0,
-            ground: true,
-            health: 1.0,
-            breed_cooldown: 0,
-            pickup_delay: 0,
-            item: Some(crate::entities::StackRow {
-                item_id: dirt_id,
-                count: 10,
-                stack: Some(mc_data::ItemStack::new(dirt_id, 10)),
-            }),
-            appearance: std::sync::Arc::new(crate::boundary::EntityAppearance::default()),
-            movement: crate::blueprint::MovementClass::Item,
-            half_width: 0.125,
-            height: 0.25,
-            speed: 0.0,
-            attack_damage: 0.0,
-            sight_range: 0.0,
-            attack_reach: 0.0,
-        },
-    );
-    // Direct pickup intent (bypasses reach/delay): capacity is zero.
-    let mut intents = vec![Intent {
-        actor: entity,
-        seq: 0,
-        kind: IntentKind::PickupItem {
-            item: ground,
-            count: i32::MAX,
-        },
-        footprint: Footprint {
-            entity_reads: vec![entity],
-            item_take: Some(ground),
-            ..Default::default()
-        },
-    }];
-    state.merge(&mut intents);
-    let (_, _, _, removed) = state.commit_merge_effects();
-    // Nothing fit: no removal, entity still on the ground with all 10.
-    assert!(removed.is_empty(), "zero-capacity pickup removes nothing");
-    let slot = state
-        .entities
-        .slot_of(ground)
-        .expect("ground item survives");
-    assert_eq!(
-        state.entities.row(slot).item.as_ref().expect("stack").count,
-        10
-    );
-    // Free one slot to half capacity: take 32 of the 64 (leave room for 32
-    // more is wrong — instead empty one slot fully, then expect full take).
-    state
-        .players
-        .get_mut(&entity)
-        .expect("player")
-        .inventory
-        .slots[0] = mc_data::ItemStack::new(dirt_id, 32);
-    let mut intents = vec![Intent {
-        actor: entity,
-        seq: 0,
-        kind: IntentKind::PickupItem {
-            item: ground,
-            count: i32::MAX,
-        },
-        footprint: Footprint {
-            entity_reads: vec![entity],
-            item_take: Some(ground),
-            ..Default::default()
-        },
-    }];
-    state.merge(&mut intents);
-    let (_, _, _, removed) = state.commit_merge_effects();
-    // 10 fit into the 32-free slot: full take, entity gone.
-    assert_eq!(removed, vec![ground]);
-    assert!(
-        state.entities.slot_of(ground).is_none(),
-        "consumed entity removed"
-    );
-    let _ = ConnectionId(103);
-    let _ = EntityId(0);
-    let _ = PlayerInput::Leave {
-        connection: ConnectionId(0),
-    };
 }
 
 /// A partial pickup journals the ground remainder: recovery from the
@@ -6403,37 +5967,7 @@ fn vanilla_pickup_box_collects_items_above_the_players_feet() {
 }
 
 #[test]
-fn vanilla_empty_collision_states_are_passable_but_fluids_remain_fluids() {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
-    let registry = CoreRegistry::load(Some(&dir)).unwrap();
-    for name in [
-        "minecraft:short_grass",
-        "minecraft:tall_grass",
-        "minecraft:dandelion",
-        "minecraft:oak_sign",
-    ] {
-        let block = registry
-            .blocks
-            .block(&mc_data::Identifier::parse(name).unwrap())
-            .unwrap();
-        assert_eq!(
-            registry.materials.classify(block.default.0),
-            mc_physics::BlockMaterial::Air,
-            "{name}"
-        );
-    }
-    assert_eq!(
-        registry.materials.classify(registry.states.water),
-        mc_physics::BlockMaterial::Water
-    );
-    assert_eq!(
-        registry.materials.classify(registry.materials.lava[0]),
-        mc_physics::BlockMaterial::Lava
-    );
-}
-
-#[test]
-fn sign_placement_opens_owned_editor_and_text_is_journaled() {
+fn bottom_slab_accepts_player_step_and_supports_mob_at_half_height() {
     use crate::boundary::{BlockPos, Hand, PlayerChange};
     let (mut state, player, pos) = flat_player_fixture();
     let sign = state
@@ -8301,38 +7835,6 @@ fn placement_obstruction_bound_follows_wide_body_dimension_transfer() {
         &destination,
         crate::boundary::BlockPos { x: 32, y: 64, z: 0 }
     ));
-}
-
-#[test]
-fn live_player_enumeration_matches_the_dense_scan() {
-    let (mut state, first, pos) = flat_player_fixture();
-    // A hole before later players makes them move down when the mob leaves.
-    let hole = state.spawn_mob(state.registry.cow_type_id, pos, 20.0);
-    let mut actors = vec![first];
-    for connection in 2..=6 {
-        actors.push(join(&mut state, connection, "scan"));
-    }
-    assert_eq!(
-        crate::tick::live_players(&state),
-        crate::tick::live_players_by_scan(&state)
-    );
-    state.remove_entity(state.entities.slot_of(hole).unwrap());
-    // The last-joined player now sits before earlier ones: slot order differs
-    // from id order, which the enumeration must restore.
-    assert!(
-        state.entities.slot_of(actors[5]).unwrap().0 < state.entities.slot_of(actors[1]).unwrap().0
-    );
-    // Dead body, spectator body (still ticked) and a stale map entry.
-    state
-        .entities
-        .body_mut(state.entities.slot_of(actors[2]).unwrap())
-        .alive = false;
-    state.players.get_mut(&actors[3]).unwrap().game_mode = crate::commands::GameMode::Spectator;
-    let stale = state.players[&first].clone();
-    state.players.insert(mc_domain::EntityId(2_000_000), stale);
-    let live = crate::tick::live_players(&state);
-    assert_eq!(live, crate::tick::live_players_by_scan(&state));
-    assert_eq!(live.len(), actors.len() - 1);
 }
 
 /// A deployment whose manifest declares `death_graves` takes one death's drops

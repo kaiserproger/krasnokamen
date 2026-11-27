@@ -130,7 +130,7 @@ fn wire_profession(state: &TickState, slot: crate::entities::EntitySlot) -> Opti
         .extra
         .iter()
         .find_map(|(index, value)| match (index, value) {
-            (19, crate::boundary::EntityDataValue::VillagerData { profession, .. }) => {
+            (19, mc_data::entity_data_value::EntityDataValue::VillagerData { profession, .. }) => {
                 Some(*profession)
             }
             _ => None,

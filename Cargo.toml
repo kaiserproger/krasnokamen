@@ -81,6 +81,10 @@ opt-level = 3
 [profile.dev.package.mc-worldgen]
 opt-level = 3
 
-# Lighting/admission runs on the tick thread during join.
+# Lighting/admission runs on the tick thread during join. The admission solver
+# moved to mc-light (D128 cut 3); mc-world keeps the oracle bake it calls.
 [profile.dev.package.mc-world]
+opt-level = 3
+
+[profile.dev.package.mc-light]
 opt-level = 3

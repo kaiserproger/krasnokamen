@@ -7,7 +7,7 @@ Settlements are native to the core (`mc-core`), not a plugin, and tick with the 
 ## Quick start
 
 1. Join. The server announces `/settlement guide`, an in-game tutorial; `/help settlement` lists the subcommands.
-2. Generated vanilla villages become ownerless settlements when their meeting bell loads. Stand inside the village and run `/settlement claim`, or press **Claim settlement** in `/settlement`. The first claim saves your UUID as owner; nobody else can claim it afterwards. Until claimed, an autonomous settlement refuses all management, even from operators. See [villages and jobs](settlements/jobs.md#autonomous-villages).
+2. Generated vanilla villages become ownerless settlements when their meeting bell loads. Stand inside the village and run `/settlement claim`, or press **Claim charter** («Принять грамоту») in `/settlement` and confirm on the review page. The first claim saves your UUID as owner; nobody else can claim it afterwards. Until claimed, an autonomous settlement refuses all management, even from operators. See [villages and jobs](settlements/jobs.md#autonomous-villages).
 3. To found your own, run `/settlement create <name> [radius]` (radius 1 to 256, default 48).
 4. **First, storage:** a newly founded town can receive its own free empty chest if there is a safe spot beside the centre and your lifetime chest-grant count is below the number of towns you currently own, including this one. A second concurrent town can therefore receive a chest; removing and refounding a town does not renew grants. Founding without a safe spot spends no grant. Stock the chest, or place and certify your own storage. Console-owned settlements receive none. Generated villages also have a saved bootstrap container. In **Storage**, Shift-click your own stacks to deposit materials. See [construction](settlements/construction.md#planning-and-streets).
 5. To certify your own building, stand inside a room, open **Buildings → Certify**, choose its type and press **Check here** («Проверить здесь»). The server finds the floor, walls and roof; every requirement shows ✔/✘, a found/required count and a short repair instruction for each ✘. Fix the crosses, check again, then **Certify**. There are no corner marks, coordinate fields or height slider. Alternatively, order blueprint buildings with `/settlement build <blueprint>` or **Construction**. See [construction](settlements/construction.md#blueprint-files).
@@ -72,7 +72,7 @@ Cards are snapshots: refresh or reopen to observe later work. Construction confi
 | [Dialogs and commands](settlements/menus.md) | Every screen, permissions, the chat command table. |
 | [Construction and buildings](settlements/construction.md) | Blueprint files, planner and streets, Builders, owner orders, certification, natural zones, radius growth. |
 | [Villages and jobs](settlements/jobs.md) | Village adoption and claiming, job allocation, rest and routes, miners, lumberjacks. |
-| [Production and economy](settlements/production.md) | Production orders, autocraft, delivery, economy commands, recipes, the upgrade warning for existing worlds. |
+| [Production and economy](settlements/production.md) | Production orders, autocraft, delivery, economy commands, recipes. |
 | [Breeding and food](settlements/breeding.md) | Villager breeding, farmers, wool. |
 | [Army](settlements/army.md) | Recruitment, equipment, orders. |
 | [Acceptance gates](settlements/acceptance-gates.md) | What the real-client settlement profiles prove. |

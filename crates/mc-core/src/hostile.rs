@@ -10,13 +10,14 @@ use std::sync::Arc;
 use mc_physics::BlockMaterial;
 
 use crate::blueprint::{GoalKind, MobBlueprint};
-use crate::boundary::{EntityDataValue, ExplosionEvent};
+use crate::boundary::ExplosionEvent;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::natural_spawn::Rng;
 use crate::survival::Difficulty;
 use crate::target_grid::TargetGrid;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
 
 /// A skeleton backs off from a target closer than this (vanilla
@@ -110,7 +111,7 @@ pub(crate) fn retains_target(blueprint: &MobBlueprint) -> bool {
 /// leave creative, disconnected or dimension-transferred players attackable.
 pub(crate) fn refresh_targets(state: &mut TickState) {
     let sky_darken = if state.dimension.has_weather() {
-        crate::light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
+        mc_light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
     } else {
         15
     };

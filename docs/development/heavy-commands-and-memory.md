@@ -12,14 +12,14 @@ this page owns runner behavior and diagnosis. Harness-only cgroups:
 
 Derive CPU topology, RAM and effective parent/slice limits from the running
 host, not old laptop recipes. Agent hosts/language servers can live outside the
-heavy slice; include them in accounting. The 2026-10-02 laptop OOM killed the
-15 GiB agent process and all children, not their worktrees.
+heavy slice; include them in accounting
+([pitfall](../PITFALLS.md#the-owner-host)).
 
 ## How `tools/dev/mem-run.sh` works (current, since 2026-10-28)
 
 Wrap heavy Cargo, harness and Gradle commands in Main's absolute
 `<work>/solaris/tools/dev/mem-run.sh`, never a worktree's or sibling repo's copy.
-Use one heavy command per agent and one source tree per invocation:
+Use one source tree per invocation; there is no per-agent cap on concurrent commands:
 `mem-run.sh [-x] [-p] [-m SIZE] COMMAND ...` (that flag order).
 There is no admission queue and no build token (owner D127, 2026-11-27): every
 command starts at once, CPU is shared by the jobserver and memory is bounded per
@@ -42,7 +42,7 @@ in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
 **Locks and lanes**
 
 - Take scene slot **before** exclusive lock: `scene-slot.sh mem-run.sh -x COMMAND`.
-  The reverse order deadlocked the host for ~50 minutes (2026-11-14).
+  The reverse order deadlocks the host ([pitfall](../PITFALLS.md#the-owner-host)).
   In `KRASNOKAMEN_EXCLUSIVE_WINDOW`, `scene-slot.sh` reuses an ancestor's
   `KRASNOKAMEN_SCENE_SLOT_PID` or refuses exit 75; never acquire scene lock names
   directly through `slot-lock.py`.
@@ -91,7 +91,8 @@ in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
   touches tracked files to defeat Cargo mtime/relative-dep-info false freshness.
   Never `cd` to a second worktree inside the command: it can run the first
   tree's newer binary. Use separate runner invocations or distinct targets.
-  One heavy command per agent also prevents multiplying 15–40 GB slots.
+  A command whose tree's own target-dir slot is busy takes another free or new
+  15–40 GB target-dir slot, so concurrent commands of one tree multiply them.
 - Retain the `mem-run: scope` line (properties, lane, target, peak, signature).
 
 **Watchdog**

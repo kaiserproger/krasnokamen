@@ -1,0 +1,81 @@
+{
+ "id": "entity-basic",
+ "family": "entities",
+ "description": "Basic entity physics and state: an AI-less pig and cow summoned ten blocks up (vanilla 26.3 does not move a NoAI mob: both keep their height and full health), dropped items fall, land and merge, a primed TNT counts its fuse down, and a minecart rolls along powered rails. Positions within 0.05 blocks, health and fuse within 0.01.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  76,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "fill 1 63 12 13 63 12 minecraft:redstone_block",
+  "fill 1 64 12 13 64 12 minecraft:powered_rail[powered=true,shape=east_west,waterlogged=false]"
+ ],
+ "settle_ticks": 2,
+ "phases": [
+  {
+   "name": "spawned",
+   "commands": [
+    "summon minecraft:pig 2.5 74.0 2.5 {NoAI:1b,PersistenceRequired:1b}",
+    "summon minecraft:cow 4.5 70.0 2.5 {NoAI:1b,PersistenceRequired:1b}",
+    "summon minecraft:item 6.5 66.0 6.5 {Item:{id:\"minecraft:stone\",count:3},Motion:[0.0,0.0,0.0],PickupDelay:10s}",
+    "summon minecraft:item 6.8 66.0 6.5 {Item:{id:\"minecraft:stone\",count:5},Motion:[0.0,0.0,0.0],PickupDelay:10s}",
+    "summon minecraft:item 9.5 68.0 6.5 {Item:{id:\"minecraft:apple\",count:1},Motion:[0.0,0.0,0.0],PickupDelay:10s}",
+    "summon minecraft:tnt 12.5 64.0 6.5 {fuse:100s}",
+    "summon minecraft:minecart 1.5 64.0625 12.5 {Motion:[0.1,0.0,0.0]}"
+   ],
+   "ticks": 10
+  },
+  {
+   "name": "settled",
+   "commands": [],
+   "ticks": 30
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact",
+  "entity_positions": {
+   "types": [
+    "minecraft:pig",
+    "minecraft:cow",
+    "minecraft:item",
+    "minecraft:minecart"
+   ],
+   "epsilon": 0.05
+  },
+  "entity_fields": {
+   "types": [
+    "minecraft:pig",
+    "minecraft:cow",
+    "minecraft:tnt"
+   ],
+   "fields": [
+    "health",
+    "fuse"
+   ],
+   "epsilon": 0.01
+  }
+ },
+ "vanilla_expect": [
+  {
+   "phase": "settled",
+   "check": "count",
+   "key": "minecraft:pig",
+   "min": 1,
+   "max": 1
+  },
+  {
+   "phase": "settled",
+   "check": "count",
+   "key": "minecraft:tnt",
+   "min": 1,
+   "max": 1
+  }
+ ]
+}

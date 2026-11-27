@@ -1,7 +1,7 @@
-//! Server-driven dialogs (26.1.2). Layouts from the local decompiled client
+//! Server-driven dialogs (26.3, protocol 777). Layouts from the vanilla client
 //! `net.minecraft.network.protocol.common.{ClientboundShowDialogPacket,
-//! ClientboundClearDialogPacket,ServerboundCustomClickActionPacket}`; IDs from
-//! `data/vanilla/reports/packets.json` (play: clear_dialog 139, show_dialog 140,
+//! ClientboundClearDialogPacket,ServerboundCustomClickActionPacket}`; IDs from the
+//! content cache's `reports/packets.json` (play: clear_dialog 142, show_dialog 143,
 //! serverbound custom_click_action 68).
 //!
 //! `show_dialog` is `ByteBufCodecs.holder(Registries.DIALOG, fromCodecWithRegistriesTrusted(..))`:

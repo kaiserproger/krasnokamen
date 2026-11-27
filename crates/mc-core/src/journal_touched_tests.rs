@@ -293,7 +293,7 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let aggressive = |state: &TickState| {
         let slot = state.entities.slot_of(zombie).unwrap();
         state.entities.row(slot).appearance.extra.iter().any(|(index, value)| {
-            *index == 15 && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)
+            *index == 15 && matches!(value, mc_data::entity_data_value::EntityDataValue::Byte(flags) if flags & 4 != 0)
         })
     };
     assert!(
@@ -1524,7 +1524,7 @@ fn idle_creeper_metadata_reads_do_not_mark_unchanged_rows() {
     extra.retain(|(index, _)| *index != crate::hostile::CREEPER_SWELL_DIR_INDEX);
     extra.push((
         crate::hostile::CREEPER_SWELL_DIR_INDEX,
-        crate::boundary::EntityDataValue::VarInt(1),
+        mc_data::entity_data_value::EntityDataValue::VarInt(1),
     ));
     state.entities.take_touched();
     crate::hostile::run(&mut state, &mut Vec::new(), &specials);
@@ -1535,7 +1535,7 @@ fn idle_creeper_metadata_reads_do_not_mark_unchanged_rows() {
     );
     assert!(state.entities.row(slot).appearance.extra.contains(&(
         crate::hostile::CREEPER_SWELL_DIR_INDEX,
-        crate::boundary::EntityDataValue::VarInt(-1)
+        mc_data::entity_data_value::EntityDataValue::VarInt(-1)
     ),));
 }
 

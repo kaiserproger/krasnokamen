@@ -1,10 +1,13 @@
 import json
 import hashlib
+import errno
+import fcntl
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import tomllib
 import unittest
 from pathlib import Path
@@ -1565,6 +1568,21 @@ class LedgerToolTests(unittest.TestCase):
     def promote(self, root, runner, **kwargs):
         return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts), runner=runner, **kwargs)
 
+    def hold_sets(self, root, *indexes):
+        """Hold the given promotion sets from this process (a separate open file description, so the
+        flock really excludes the pool's own fds) and release them at test end."""
+        held = {}
+        for index in indexes:
+            fd = ledger._open_set_lock(root.parent, index)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            held[index] = fd
+        def release():
+            for fd in held.values():
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+        self.addCleanup(release)
+        return held
+
     def test_missing_fix_commit_is_refused(self):
         root = self.scratch(with_fix_commit=False)
         runner = self.runner()
@@ -2309,10 +2327,199 @@ class LedgerToolTests(unittest.TestCase):
             with self.assertRaisesRegex(ledger.Refused, 'must run under mem-run'):
                 with ledger._control_lock(root):
                     pass
-        self.assertFalse((root.parent / 'ledger-control.lock').exists())
+        self.assertEqual(list(root.parent.glob('ledger-control-pool-*.lock')), [])
         with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):
-            with ledger._control_lock(root):
-                self.assertTrue((root.parent / 'ledger-control.lock').exists())
+            with ledger._control_lock(root) as index:
+                self.assertTrue((root.parent / f'ledger-control-pool-{index}.lock').exists())
+
+    def test_a_promote_set_never_uses_the_old_host_wide_lock_or_paths(self):
+        # Lanes still running the old ledger.py hold `ledger-control.lock` and build in
+        # `ledger-control-<slot>`; a new-version promote must touch neither, or it would serialize
+        # behind them again and then delete their control tree.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        old = root.parent / 'ledger-control.lock'
+        old.write_text('old')  # what an old-version promote holds and builds behind
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):
+            with ledger._control_lock(root) as index:
+                self.assertIn(index, range(1, ledger.CONTROL_POOL + 1))
+                for slot in ('candidate', 'fix'):
+                    tree = ledger._control_tree(root.parent, index, slot)
+                    self.assertEqual(tree.name, f'ledger-control-p{index}-{slot}')
+                    self.assertNotEqual(tree.name, f'ledger-control-{slot}')
+                probe = os.open(str(old), os.O_RDWR)
+                try:
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)  # the promote never took it
+                finally:
+                    os.close(probe)
+        self.assertEqual(old.read_text(), 'old')
+
+    def test_two_promotes_hold_distinct_sets_at_the_same_time(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        both = threading.Barrier(2, timeout=30)  # inside both contexts at once: neither waited
+        trees, errors = [], []
+
+        def promote():
+            try:
+                with ledger._control_lock(root) as index:
+                    trees.append(ledger._control_tree(root.parent, index, 'candidate'))
+                    both.wait()
+            except BaseException as error:  # a serialized pool shows up as a broken barrier
+                errors.append(error)
+
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):
+            threads = [threading.Thread(target=promote, daemon=True) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(30)
+        self.assertEqual(errors, [])
+        self.assertEqual(sorted(tree.name for tree in trees),
+                         ['ledger-control-p1-candidate', 'ledger-control-p2-candidate'])
+
+    def test_a_waiting_promote_takes_the_set_that_frees_first(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        held = self.hold_sets(root, *range(1, ledger.CONTROL_POOL + 1))
+        blocked = threading.Event()  # the promote is in the blocking set wait, not in _free_set
+        real_waiting = ledger._waiting_set
+        def entering_wait(parent, hold):
+            blocked.set()
+            return real_waiting(parent, hold)
+        entered, taken = threading.Event(), []
+        def waiter():
+            with ledger._control_lock(root) as index:
+                taken.append(index)
+                entered.set()
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}), \
+                patch.object(ledger, '_waiting_set', entering_wait):
+            thread = threading.Thread(target=waiter, daemon=True)
+            thread.start()
+            self.assertTrue(blocked.wait(30), 'the promote never reached the blocking set wait')
+            fcntl.flock(held[2], fcntl.LOCK_UN)  # set 2 frees while 1 and 3 stay held
+            self.assertTrue(entered.wait(30), 'the waiter did not take the set that freed')
+        self.assertEqual(taken, [2])
+        thread.join(30)
+
+    def test_a_helper_that_loses_hands_its_set_to_the_next_waiter(self):
+        # A helper thread that acquires its set after another set already won must hand it straight
+        # back: without that LOCK_UN the abandoned set stays held by a thread nobody will join.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        held = self.hold_sets(root, *range(1, ledger.CONTROL_POOL + 1))
+        real_waiting, real_open, real_flock = ledger._waiting_set, ledger._open_set_lock, fcntl.flock
+        blocked, queued = threading.Event(), []
+        all_queued, handed_back = threading.Event(), threading.Event()
+        def entering_wait(parent, hold):
+            blocked.set()
+            return real_waiting(parent, hold)
+        class Flock:
+            """Watches the helper threads' calls: which of them reached a blocking attempt, and the
+            losing helper of set 1 returning the set it took."""
+            def __getattr__(self, name):
+                return getattr(fcntl, name)
+            def flock(self, fd, operation):
+                thread = threading.current_thread().name
+                if operation == fcntl.LOCK_EX and blocked.is_set():
+                    queued.append(thread)
+                    if len(queued) == ledger.CONTROL_POOL:
+                        all_queued.set()
+                if operation == fcntl.LOCK_UN and thread == 'ledger-control-pool-1':
+                    handed_back.set()
+                return real_flock(fd, operation)
+        entered, taken, hold_set_two = threading.Event(), [], threading.Event()
+        def waiter():
+            with ledger._control_lock(root) as index:
+                taken.append(index)
+                entered.set()
+                hold_set_two.wait(30)  # keep set 2 while the probe waits on set 1
+        handed = []
+        def probe():
+            fd = real_open(root.parent, 1)
+            try:
+                # Queued behind the losing helper on set 1: it returns only once that helper has
+                # acquired the set and handed it back.
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                handed.append(True)
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}), \
+                patch.object(ledger, '_waiting_set', entering_wait), \
+                patch.object(ledger, 'fcntl', Flock()):
+            thread = threading.Thread(target=waiter, daemon=True)
+            thread.start()
+            self.assertTrue(all_queued.wait(30), 'the helper threads did not all reach a blocking flock')
+            probing = threading.Thread(target=probe, daemon=True)
+            probing.start()  # queues on set 1 after the losing helper
+            fcntl.flock(held[2], fcntl.LOCK_UN)  # set 2 wins the wait; 1 and 3 stay held
+            self.assertTrue(entered.wait(30), 'the waiter did not take set 2')
+            self.assertEqual(taken, [2])
+            fcntl.flock(held[1], fcntl.LOCK_UN)  # the losing helper gets set 1, then must hand it over
+            self.assertTrue(handed_back.wait(30), 'a losing helper kept the set it acquired after the winner')
+            probing.join(30)
+            self.assertEqual(handed, [True], 'the handed-back set was not acquirable by the next waiter')
+            hold_set_two.set()
+        thread.join(30)
+
+    def test_one_failed_helper_neither_aborts_the_wait_nor_keeps_a_set(self):
+        # A broken lock file on one set (or an flock failure there) must not abort a wait the other
+        # sets can still satisfy, and it must not leave a set held with no owner.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        held = self.hold_sets(root, 1, 2)  # set 3 exists only for the helper that fails to open it
+        blocked, failed_open = threading.Event(), threading.Event()
+        real_waiting, real_open = ledger._waiting_set, ledger._open_set_lock
+        def entering_wait(parent, hold):
+            blocked.set()
+            return real_waiting(parent, hold)
+        def failing_open(parent, index):
+            if index == 3:
+                if threading.current_thread().name == 'ledger-control-pool-3':
+                    failed_open.set()  # the helper recorded the broken set before any set could free
+                raise OSError(errno.ENOSPC, 'simulated: no space for a lock file')
+            return real_open(parent, index)
+        got, errors = [], []
+        def waiter():
+            try:
+                with ledger._control_lock(root) as index:
+                    got.append(index)
+            except BaseException as error:  # surfaced from the main thread below
+                errors.append(error)
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}), \
+                patch.object(ledger, '_waiting_set', entering_wait), \
+                patch.object(ledger, '_open_set_lock', failing_open):
+            thread = threading.Thread(target=waiter, daemon=True)
+            thread.start()
+            self.assertTrue(blocked.wait(30), 'the promote never reached the blocking set wait')
+            self.assertTrue(failed_open.wait(30), 'the broken set was never attempted')
+            fcntl.flock(held[1], fcntl.LOCK_UN)  # only set 1 can satisfy the wait
+            thread.join(30)
+        self.assertEqual(errors, [])
+        self.assertEqual(got, [1])
+        fcntl.flock(held[2], fcntl.LOCK_UN)
+        def free(index):
+            fd = real_open(root.parent, index)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except OSError:
+                return False
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+        self.assertEqual([free(index) for index in range(1, ledger.CONTROL_POOL + 1)], [True] * ledger.CONTROL_POOL)
 
     def test_client_refs_are_classified_from_their_receipts(self):
         directory = tempfile.TemporaryDirectory()
@@ -2537,9 +2744,11 @@ class LedgerToolTests(unittest.TestCase):
         with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):  # under wt/ a promote needs the mem-run scope
             self.promote(root, runner, dry_run=True)
             self.promote(root, runner, dry_run=True)
-        # Same path every run: cargo reuses the build artifacts instead of growing the target dir.
+        # Same path every run: a lone promote takes set 1 and cargo reuses the build artifacts
+        # instead of growing the target dir.
         self.assertEqual(len(set(trees)), 1)
-        self.assertEqual(trees[0], root.parent / 'ledger-control-candidate')
+        self.assertEqual(trees[0], root.parent / 'ledger-control-p1-candidate')
+        self.assertFalse((root.parent / 'ledger-control-candidate').exists())
         self.assertFalse(trees[0].exists())
         self.assertEqual(self.git(root, 'worktree', 'list').count('\n'), 0)
 

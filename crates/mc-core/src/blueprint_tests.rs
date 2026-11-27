@@ -4,11 +4,11 @@
 use std::sync::Arc;
 
 use crate::blueprint::{CUSTOM_TYPE_FLAG, MobBlueprintDef, MovementClass, wire_type_id};
-use crate::boundary::EntityDataValue;
 use crate::hostile::CREEPER_SWELL_DIR_INDEX;
 use crate::hostile_tests::setup;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
+use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
 
 #[test]

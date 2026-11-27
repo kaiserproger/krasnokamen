@@ -8,7 +8,8 @@ source. Vanilla clients can use server-only plugins.
 Before you start: the plugin API is pre-1.0. A change to its WIT can require
 rebuilding every plugin, so build against the checkout matching your server.
 Each plugin runs in its own sandbox with only the capabilities its manifest
-declares, and its callbacks run one at a time ([slow callbacks](#slow-callbacks)).
+declares, and its callbacks run one at a time
+([callback limits and backlog](plugins/OPERATIONS.md#callback-limits-and-backlog)).
 Callbacks run outside the world tick; native owners validate requested changes
 against current state when applied, so a request can become stale or be refused.
 
@@ -28,20 +29,3 @@ against current state when applied, so a request can become stale or be refused.
 - Real packages: [krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins).
 - [Experimental offline Bukkit/Forge converter](plugins/CONVERTER.md): a small,
   explicitly bounded subset, not general compatibility.
-
-## Slow callbacks
-
-One host thread delivers every durable event to every plugin, one callback at a
-time, and a callback may run up to its fuel or wall-clock limit. Until the host
-takes them, durable events (player commands, operation results, menu clicks,
-graves) wait in the core, bounded at 1024 entries (events, player changes and
-execution traces). While a quarter of that bound (256 entries) is waiting, the
-core refuses new plugin commands: the player is told the plugin is backed up and
-the command is not queued. A menu click in that state is dropped the same way
-(the menu is redrawn, the plugin never sees the click). A refused command or
-click is never delivered; the player retries. Both are accepted again once the
-host catches up. Observations (joins, chat, block and kill events) are shed per
-plugin and never count toward this bound. If the bound itself is passed by
-events that cannot be refused (graves, guest command results), the core halts
-the world fail closed and logs the backlog by event kind under the
-`plugin.backlog` target.

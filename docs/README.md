@@ -22,7 +22,7 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
 - [Architecture overview](ARCHITECTURE.md), [runtime map](architecture/runtime.md),
   [state ownership](architecture/state-ownership.md), [mutation paths](architecture/mutations.md),
   [persistence](architecture/persistence.md), [residency](architecture/residency.md),
-  [settlements](architecture/settlements.md).
+  [settlements](architecture/settlements.md), [battles](architecture/battles.md).
 - [Decisions](../DECISIONS.md): one row per choice with its reason; long records in [decisions/](decisions/README.md).
 - Source-derived navigation: [crate graph](generated/crate-graph.md),
   [contract index](generated/contract-index.md), [scenario index](generated/scenario-index.md).
@@ -48,9 +48,6 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
   [real-client regression manifests](real-client-regression/README.md),
   [worldgen evidence](evidence/worldgen-diff/README.md).
 
-Retained because a tool still reads them, not as current acceptance:
-[validation ledger](VALIDATION_LEDGER.md) (frozen v1 input to `coverage-audit`)
-and the [core audit runbook](agents/PRO_CORE_AUDIT_RUNBOOK.md)
-(`tools/prepare-pro-core-audit.sh`). Superseded designs are summarized in the
+Superseded designs are summarized in the
 [archive](archive/ARCHIVE.md); their full text and all older documentation
 remain in Git history. Local agent state lives in ignored `.analysis/`.

@@ -165,8 +165,6 @@ python3 tools/bukkit/convert.py \
   --component-encoder target/debug/examples/plugin_component --output /tmp/converted-plugin
 ```
 
-On shared agent machines, run Cargo through the repository's memory slot runner
-and point `--adapter`/`--component-encoder` at that runner's target directory.
 The converter strips debug sections from the adapter before linking; otherwise
 a debug-built adapter can exceed the normal host component-size limit.
 The converted manifest declares join subscriptions, command roots and the
