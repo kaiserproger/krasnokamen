@@ -725,7 +725,11 @@ fn a_paused_world_halts_when_the_pump_stops_consuming() {
                 &core,
                 &mut output,
                 std::time::Duration::from_secs(60),
-                |tick, _| tick.snapshot.entities.iter().any(|entity| entity.uuid == joined)
+                |tick, _| tick
+                    .snapshot
+                    .entities
+                    .iter()
+                    .any(|entity| entity.uuid == joined)
             )
             .expect("the join tick publishes"),
             Stopped::AfterTicks(_)
