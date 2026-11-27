@@ -583,6 +583,66 @@ fn unknown(state: &mut TickState, connection: ConnectionId, id: &str) {
         vec![text(id)],
     );
 }
+/// Parse and resolve a component argument, reporting the failure itself.
+fn resolved_name(
+    state: &mut TickState,
+    connection: ConnectionId,
+    executor: EntityId,
+    source: &str,
+) -> Option<mc_nbt::Tag> {
+    let parsed = match crate::command_text::parse_component(source) {
+        Ok(tag) => tag,
+        Err(error) => {
+            error_text(state, connection, error.message());
+            return None;
+        }
+    };
+    match crate::command_text::resolve_component(state, executor, &parsed) {
+        Ok(tag) => Some(tag),
+        Err(message) => {
+            error_text(state, connection, message);
+            None
+        }
+    }
+}
+
+/// Members, client id and display name of a bar whose existence was checked.
+fn summary(state: &TickState, id: &str) -> (BTreeSet<Uuid>, Uuid, mc_nbt::Tag) {
+    let bar = state.bossbars.bars.get(id).expect("checked bar");
+    (bar.players.clone(), bar.uuid(), bar.name.clone())
+}
+
+/// Fan one change out to a single member.
+fn send_to_member(state: &mut TickState, uuid: Uuid, bar_id: Uuid, change: &BossBarChange) {
+    let mut members = BTreeSet::new();
+    members.insert(uuid);
+    send_to_members(state, &members, bar_id, change);
+}
+
+fn publish_style(state: &mut TickState, connection: ConnectionId, id: &str, key: &str) {
+    let (players, bar_id, display) = summary(state, id);
+    let bar = &state.bossbars.bars[id];
+    let change = BossBarChange::Style {
+        color: bar.color as i32,
+        overlay: bar.overlay as i32,
+    };
+    send_to_members(state, &players, bar_id, &change);
+    feedback(state, connection, key, vec![display]);
+}
+
+fn publish_progress(
+    state: &mut TickState,
+    connection: ConnectionId,
+    id: &str,
+    value: i32,
+    key: &str,
+) {
+    let (players, bar_id, display) = summary(state, id);
+    let progress = state.bossbars.bars[id].progress();
+    send_to_members(state, &players, bar_id, &BossBarChange::Progress(progress));
+    feedback(state, connection, key, vec![display, text(value)]);
+}
+
 pub(crate) fn execute(
     state: &mut TickState,
     connection: ConnectionId,
@@ -601,19 +661,8 @@ pub(crate) fn execute(
                 );
                 return;
             }
-            let parsed = match crate::command_text::parse_component(name) {
-                Ok(tag) => tag,
-                Err(error) => {
-                    error_text(state, connection, error.message());
-                    return;
-                }
-            };
-            let resolved = match crate::command_text::resolve_component(state, executor, &parsed) {
-                Ok(tag) => tag,
-                Err(message) => {
-                    error_text(state, connection, message);
-                    return;
-                }
+            let Some(resolved) = resolved_name(state, connection, executor, name) else {
+                return;
             };
             state.bossbars.bars.insert(
                 id.clone(),
@@ -676,19 +725,8 @@ pub(crate) fn execute(
             }
         }
         Cmd::SetName { id, name } => {
-            let parsed = match crate::command_text::parse_component(name) {
-                Ok(tag) => tag,
-                Err(error) => {
-                    error_text(state, connection, error.message());
-                    return;
-                }
-            };
-            let resolved = match crate::command_text::resolve_component(state, executor, &parsed) {
-                Ok(tag) => tag,
-                Err(message) => {
-                    error_text(state, connection, message);
-                    return;
-                }
+            let Some(resolved) = resolved_name(state, connection, executor, name) else {
+                return;
             };
             let unchanged = state
                 .bossbars
@@ -703,13 +741,9 @@ pub(crate) fn execute(
                 failure(state, connection, "commands.bossbar.set.name.unchanged");
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.name = resolved;
-            }
+            state.bossbars.bars.get_mut(id).expect("checked bar").name = resolved;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display) = (bar.players.clone(), bar.uuid(), bar.name.clone());
+            let (players, bar_id, display) = summary(state, id);
             let change = BossBarChange::Name(display.clone());
             send_to_members(state, &players, bar_id, &change);
             feedback(
@@ -728,29 +762,9 @@ pub(crate) fn execute(
                 failure(state, connection, "commands.bossbar.set.color.unchanged");
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.color = *color;
-            }
+            state.bossbars.bars.get_mut(id).expect("checked bar").color = *color;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, style) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                (bar.color as i32, bar.overlay as i32),
-            );
-            let change = BossBarChange::Style {
-                color: style.0,
-                overlay: style.1,
-            };
-            send_to_members(state, &players, bar_id, &change);
-            feedback(
-                state,
-                connection,
-                "commands.bossbar.set.color.success",
-                vec![display],
-            );
+            publish_style(state, connection, id, "commands.bossbar.set.color.success");
         }
         Cmd::SetStyle { id, overlay } => {
             let Some(current) = state.bossbars.bars.get(id) else {
@@ -761,29 +775,14 @@ pub(crate) fn execute(
                 failure(state, connection, "commands.bossbar.set.style.unchanged");
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.overlay = *overlay;
-            }
+            state
+                .bossbars
+                .bars
+                .get_mut(id)
+                .expect("checked bar")
+                .overlay = *overlay;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, style) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                (bar.color as i32, bar.overlay as i32),
-            );
-            let change = BossBarChange::Style {
-                color: style.0,
-                overlay: style.1,
-            };
-            send_to_members(state, &players, bar_id, &change);
-            feedback(
-                state,
-                connection,
-                "commands.bossbar.set.style.success",
-                vec![display],
-            );
+            publish_style(state, connection, id, "commands.bossbar.set.style.success");
         }
         Cmd::SetValue { id, value } => {
             let Some(current) = state.bossbars.bars.get(id) else {
@@ -794,25 +793,14 @@ pub(crate) fn execute(
                 failure(state, connection, "commands.bossbar.set.value.unchanged");
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.value = *value;
-            }
+            state.bossbars.bars.get_mut(id).expect("checked bar").value = *value;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, progress) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                bar.progress(),
-            );
-            let change = BossBarChange::Progress(progress);
-            send_to_members(state, &players, bar_id, &change);
-            feedback(
+            publish_progress(
                 state,
                 connection,
+                id,
+                *value,
                 "commands.bossbar.set.value.success",
-                vec![display, text(*value)],
             );
         }
         Cmd::SetMax { id, max } => {
@@ -824,25 +812,14 @@ pub(crate) fn execute(
                 failure(state, connection, "commands.bossbar.set.max.unchanged");
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.max = *max;
-            }
+            state.bossbars.bars.get_mut(id).expect("checked bar").max = *max;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, progress) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                bar.progress(),
-            );
-            let change = BossBarChange::Progress(progress);
-            send_to_members(state, &players, bar_id, &change);
-            feedback(
+            publish_progress(
                 state,
                 connection,
+                id,
+                *max,
                 "commands.bossbar.set.max.success",
-                vec![display, text(*max)],
             );
         }
         Cmd::SetVisible { id, visible } => {
@@ -862,26 +839,16 @@ pub(crate) fn execute(
                 );
                 return;
             }
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.visible = *visible;
-            }
+            state
+                .bossbars
+                .bars
+                .get_mut(id)
+                .expect("checked bar")
+                .visible = *visible;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, snapshot) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                (bar.progress(), bar.color as i32, bar.overlay as i32),
-            );
+            let (players, bar_id, display) = summary(state, id);
+            let add = add_packet(&state.bossbars.bars[id]);
             if *visible {
-                let add = BossBarChange::Add {
-                    name: display.clone(),
-                    progress: snapshot.0,
-                    color: snapshot.1,
-                    overlay: snapshot.2,
-                    flags: 0,
-                };
                 send_to_members(state, &players, bar_id, &add);
                 feedback(
                     state,
@@ -927,44 +894,24 @@ pub(crate) fn execute(
             }
             let removed: Vec<Uuid> = current.difference(&wanted).copied().collect();
             let added: Vec<Uuid> = wanted.difference(&current).copied().collect();
-            {
-                let bar = state.bossbars.bars.get_mut(id).expect("checked bar");
-                bar.players = wanted;
-            }
+            state
+                .bossbars
+                .bars
+                .get_mut(id)
+                .expect("checked bar")
+                .players = wanted;
             state.bossbars_dirty = true;
-            let bar = state.bossbars.bars.get(id).expect("checked bar");
-            let (players, bar_id, display, visible, snapshot) = (
-                bar.players.clone(),
-                bar.uuid(),
-                bar.name.clone(),
-                bar.visible,
-                (bar.progress(), bar.color as i32, bar.overlay as i32),
-            );
-            let progress = snapshot.0;
-            let color = snapshot.1;
-            let overlay = snapshot.2;
+            let (players, bar_id, display) = summary(state, id);
+            let visible = state.bossbars.bars[id].visible;
+            let add = add_packet(&state.bossbars.bars[id]);
+            // Hidden bars hold no client-side state; removed members are still
+            // told to drop the bar they may have seen before it was hidden.
+            for uuid in removed {
+                send_to_member(state, uuid, bar_id, &BossBarChange::Remove);
+            }
             if visible {
-                for uuid in removed {
-                    let single: BTreeSet<Uuid> = [uuid].into_iter().collect();
-                    send_to_members(state, &single, bar_id, &BossBarChange::Remove);
-                }
-                let add = BossBarChange::Add {
-                    name: display.clone(),
-                    progress,
-                    color,
-                    overlay,
-                    flags: 0,
-                };
                 for uuid in added {
-                    let single: BTreeSet<Uuid> = [uuid].into_iter().collect();
-                    send_to_members(state, &single, bar_id, &add);
-                }
-            } else {
-                // Hidden bars hold no client-side state; still drop removed
-                // members that were visible before hiding.
-                for uuid in removed {
-                    let single: BTreeSet<Uuid> = [uuid].into_iter().collect();
-                    send_to_members(state, &single, bar_id, &BossBarChange::Remove);
+                    send_to_member(state, uuid, bar_id, &add);
                 }
             }
             if players.is_empty() {
