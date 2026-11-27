@@ -124,8 +124,11 @@ impl OracleWorld {
             .regions
             .store()
             .ok_or_else(|| storage("checkpoint has no native store"))?;
-        let identity =
-            crate::journal::WalIdentity::of_world(&world_dir, store.store_uuid(), &self.registry.blocks)?;
+        let identity = crate::journal::WalIdentity::of_world(
+            &world_dir,
+            store.store_uuid(),
+            &self.registry.blocks,
+        )?;
         let mut writer = if first {
             JournalWriter::open(&world_dir, 1, identity)?
         } else {
@@ -140,7 +143,13 @@ impl OracleWorld {
         if state.tick > self.started_tick && !first {
             writer.append(self.started_tick + 1, state.tick, &[])?;
         }
-        write_checkpoint(&world_dir, &job, &state.plugins, &mut writer, &mut self.manifest)?;
+        write_checkpoint(
+            &world_dir,
+            &job,
+            &state.plugins,
+            &mut writer,
+            &mut self.manifest,
+        )?;
         Ok(())
     }
 }

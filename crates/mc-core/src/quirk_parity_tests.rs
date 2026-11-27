@@ -338,7 +338,9 @@ fn run_scenario(scenario: &Value, worlds: &std::path::Path, fault: Option<&str>)
     for phase in scenario_phases {
         let restart = phase["restart"].as_bool() == Some(true);
         if restart {
-            let world = native.as_mut().expect("restart scenarios run on a native world");
+            let world = native
+                .as_mut()
+                .expect("restart scenarios run on a native world");
             match world.restart(state, |dir| apply_fault(fault, dir)) {
                 Ok(recovered) => state = recovered,
                 Err(error) => {

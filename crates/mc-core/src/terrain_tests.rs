@@ -24,8 +24,8 @@ use mc_world::{BlockStateId, ChunkPos};
 use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
 use crate::dimensions::Dimension;
 use crate::terrain::{
-    DirtySupplement, TERRAIN_CHUNKS, TERRAIN_LEAF, TERRAIN_WIDTH, TerrainSource,
-    fold_revision, leaf_base, section_positions,
+    DirtySupplement, TERRAIN_CHUNKS, TERRAIN_LEAF, TERRAIN_WIDTH, TerrainSource, fold_revision,
+    leaf_base, section_positions,
 };
 
 #[test]
