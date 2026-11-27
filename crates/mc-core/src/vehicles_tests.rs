@@ -1,9 +1,10 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::journal::{EntityStateImage, ReplayEntity};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 use mc_inventory::ClickMode;
 use std::sync::Arc;
 

@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
+use mc_domain::{Hand, ConnectionId, EntityId};
 use crate::commands::{GameMode, Weather};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_domain::EntityId;
 
 /// Platform height: far above the generated terrain.
 const Y: i32 = 200;
@@ -1352,7 +1352,7 @@ fn a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored() {
             PlayerInput::Dig {
                 connection: ConnectionId(1),
                 position: head,
-                action: crate::boundary::DigAction::Finish,
+                action: mc_domain::DigAction::Finish,
                 sequence: 1,
             },
             PlayerInput::UseItemOn {
@@ -1408,7 +1408,7 @@ fn a_bed_broken_when_the_property_clears_is_not_restored() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: head,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 1,
         }],
     );

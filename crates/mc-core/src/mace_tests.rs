@@ -1,10 +1,10 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::combat::{mace_attack, smash_damage};
 use crate::effects::EffectId;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn held(state: &TickState, enchants: &[(&str, i32)]) -> ItemStack {
     let mut held = ItemStack::new(

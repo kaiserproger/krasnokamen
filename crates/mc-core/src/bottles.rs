@@ -1,9 +1,9 @@
 //! Server-owned bottle filling and water-bottle cauldron exchanges.
-use crate::boundary::{BlockPos, ChangeSet, EntityEvent, Hand};
+use crate::boundary::{BlockPos, ChangeSet, EntityEvent};
 use crate::fluids::Fluid;
 use crate::tick::{TickState, held_slot_index};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 fn product(state: &TickState, water: bool) -> ItemStack {
     let name = if water {

@@ -130,8 +130,9 @@ fn rename(state: &mut TickState, id: EntityId, uuid: uuid::Uuid) {
 
 #[test]
 fn capture_custody_ticks_remove_picked_up_merged_and_retracted_rows() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
     use mc_data::ItemStack;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     // A live simulation window keeps the lot's chunk active across ticks, so its
     // chest block entity and the plan's writes persist like a played area.
@@ -2929,7 +2930,9 @@ fn container_transfer_fixture(
     case: ContainerCase,
     dimension: Dimension,
 ) -> (World, ContainerCustody) {
-    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     let mut world = World::new(directory);
     world.run(&[PlayerInput::Join {
@@ -3148,7 +3151,9 @@ fn hydrate_container_chunk(world: &mut World, dimension: Dimension) {
 
 #[test]
 fn chiseled_bookshelf_old_save_interaction_preserves_all_books() {
-    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
 
     let directory = tempfile::tempdir().unwrap();
     let mut world = World::new(directory.path());
@@ -3551,7 +3556,9 @@ fn assert_container_wal_pruned(world: &World) {
 
 #[test]
 fn container_stale_ack_and_real_eviction_keep_full_custody_in_every_dimension() {
-    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
 
     for dimension in Dimension::ALL {
@@ -3995,7 +4002,9 @@ fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
 /// there again.
 #[test]
 fn checkpoint_mid_sleep_leaves_no_stale_occupied_bed_after_reopen() {
-    use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     const CONNECTION: ConnectionId = ConnectionId(88);
     let directory = tempfile::tempdir().unwrap();
     let mut world = World::new(directory.path());

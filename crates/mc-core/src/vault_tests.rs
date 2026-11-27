@@ -1,9 +1,10 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
 use mc_data::Identifier;
+use mc_domain::ConnectionId;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 fn state(dir: Option<std::path::PathBuf>) -> TickState {

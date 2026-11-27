@@ -500,7 +500,7 @@ fn execute_identity(
             }
             let actor_id = state
                 .connections
-                .entity_of(crate::boundary::ConnectionId(*actor_id))
+                .entity_of(mc_domain::ConnectionId(*actor_id))
                 .ok_or(ScriptOperationFailure::Forbidden)?;
             let actor = state
                 .entities

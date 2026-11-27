@@ -380,7 +380,7 @@ fn use_bell(state: &mut TickState, at: [i32; 3]) -> Vec<PlayerChange> {
         state,
         &[PlayerInput::UseItemOn {
             connection: CONN,
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: crate::boundary::BlockPos {
                 x: at[0],
                 y: at[1],

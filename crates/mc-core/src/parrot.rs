@@ -1,8 +1,6 @@
 //! Parrot.imitateNearbyMobs; dancing is client-local from jukebox level events.
-use crate::{
-    boundary::{ConnectionId, PlayerChange},
-    tick::TickState,
-};
+use crate::{boundary::PlayerChange, tick::TickState};
+use mc_domain::ConnectionId;
 
 pub(crate) fn run(state: &mut TickState) {
     let Some(kind) = crate::piglin::type_id_of("minecraft:parrot") else {

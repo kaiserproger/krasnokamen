@@ -48,14 +48,14 @@ pub struct ClientPrefs {
     /// `ClientInformation.language`, e.g. `en_us` or `ru_ru`; empty until sent.
     pub language: String,
     /// `ClientInformation.chat_visibility`.
-    pub chat_visibility: mc_core::boundary::ChatVisibility,
+    pub chat_visibility: mc_domain::ChatVisibility,
 }
 
 /// The core's name for the wire chat setting.
 pub(crate) fn chat_visibility(
     wire: mc_protocol::packets::ChatVisibility,
-) -> mc_core::boundary::ChatVisibility {
-    use mc_core::boundary::ChatVisibility;
+) -> mc_domain::ChatVisibility {
+    use mc_domain::ChatVisibility;
     match wire {
         mc_protocol::packets::ChatVisibility::Full => ChatVisibility::Full,
         mc_protocol::packets::ChatVisibility::System => ChatVisibility::System,
@@ -68,7 +68,7 @@ impl Default for ClientPrefs {
         Self {
             view_distance: 8,
             language: String::new(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         }
     }
 }
@@ -82,7 +82,7 @@ pub struct ConfigOutcome {
     pub client_language: String,
     /// The client's chat setting, admitted to the core before Join so the
     /// first chat or system message already follows it.
-    pub client_chat_visibility: mc_core::boundary::ChatVisibility,
+    pub client_chat_visibility: mc_domain::ChatVisibility,
     /// Bound only after the client accepted exact verified package identities.
     pub loader_session: Option<mc_loader::LoaderSession>,
 }

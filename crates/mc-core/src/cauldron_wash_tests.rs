@@ -1,11 +1,11 @@
 //! Water-cauldron washing: dye, banner layers and shulker color.
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_world::BlockStateId;
 
 const POS: BlockPos = BlockPos { x: 1, y: 200, z: 0 };

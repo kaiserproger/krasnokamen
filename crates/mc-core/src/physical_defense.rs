@@ -9,9 +9,9 @@ use mc_data::item_profiles::{
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::Hand;
 use crate::entities::EntitySlot;
 use crate::tick::{DamagePiece, TickState};
+use mc_domain::Hand;
 
 const OWNER: &str = "__native_physical";
 

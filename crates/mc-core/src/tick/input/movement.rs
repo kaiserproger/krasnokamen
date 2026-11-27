@@ -1,7 +1,8 @@
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::effects::EffectId;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{SNEAKING_FLAG, TickSampler, TickState, update_player_crouching};
+use mc_domain::ConnectionId;
 use mc_physics::mth;
 
 const FLY_KICK_REASON: &str = "Flying is not enabled on this server";

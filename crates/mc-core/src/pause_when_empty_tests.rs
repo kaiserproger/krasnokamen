@@ -4,9 +4,10 @@
 
 use std::time::Duration;
 
-use crate::boundary::{ConnectionId, PlayerInput, TickOutput};
+use crate::boundary::{PlayerInput, TickOutput};
 use crate::config::CoreConfig;
 use crate::core::Core;
+use mc_domain::ConnectionId;
 
 pub(crate) fn config(name: &str, pause_seconds: u32) -> (CoreConfig, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("mc-core-pause-{name}-{}", std::process::id()));

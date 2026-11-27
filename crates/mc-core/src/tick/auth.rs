@@ -1,6 +1,7 @@
 //! The native session fence runs before gameplay, menus and plugin observation.
 use super::{TickState, apply_player_effects};
-use crate::boundary::{ChangeSet, ConnectionId, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerInput};
+use mc_domain::ConnectionId;
 
 pub(super) fn refuse_input(state: &mut TickState, input: &PlayerInput) -> bool {
     let connection = input.connection();

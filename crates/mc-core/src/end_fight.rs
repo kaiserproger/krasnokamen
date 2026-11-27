@@ -983,7 +983,7 @@ pub(crate) fn use_crystal(
     state: &mut TickState,
     entity: EntityId,
     pos: crate::boundary::BlockPos,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     changes: &mut ChangeSet,
 ) -> bool {
     let Some(player) = state.players.get(&entity) else {

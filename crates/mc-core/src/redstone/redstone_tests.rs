@@ -783,7 +783,7 @@ fn spectator_body_never_triggers_a_pressure_plate() {
         .unwrap();
     let id = s.spawn_mob(type_id, [5.5, 200.0, 5.5], 20.0);
     let slot = s.entities.slot_of(id).unwrap();
-    let connection = crate::boundary::ConnectionId(9);
+    let connection = mc_domain::ConnectionId(9);
     s.entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });
     s.players.insert(
@@ -810,7 +810,7 @@ fn locked_player_body_never_triggers_pressure_plates() {
         .unwrap();
     let id = s.spawn_mob(type_id, [5.5, 200.0, 5.5], 20.0);
     let slot = s.entities.slot_of(id).unwrap();
-    let connection = crate::boundary::ConnectionId(9);
+    let connection = mc_domain::ConnectionId(9);
     s.entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });
     s.players.insert(
@@ -919,7 +919,7 @@ fn note_block_rising_edge_sends_native_event_with_instrument_and_note_state() {
         .unwrap();
     let id = s.spawn_mob(type_id, [6.0, 200.0, 8.0], 20.0);
     let slot = s.entities.slot_of(id).unwrap();
-    let connection = crate::boundary::ConnectionId(9);
+    let connection = mc_domain::ConnectionId(9);
     s.entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });
     s.players.insert(

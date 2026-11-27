@@ -2,12 +2,12 @@
 //! inputs and entity collision immediately; the canonical block commit path
 //! still owns their journal and container transactions.
 
-use crate::boundary::{BlockPos, ChangeSet, ConnectionId, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, PlayerChange};
 use crate::command_args::{CommandError, Coord, coord};
 use crate::commands::{Target, coords, target_of};
 use crate::tick::TickState;
 use mc_data::Identifier;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_world::{BlockRegistry, BlockStateId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1285,7 +1285,7 @@ mod tests {
         state.entities.set_pos(slot, [1.83, 200.0, -1.5]);
         let use_slot = |cursor, sequence| PlayerInput::UseItemOn {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: pos,
             face: 2,
             cursor,

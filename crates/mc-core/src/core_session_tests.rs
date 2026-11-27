@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ChatVisibility, ClientSettings};
+use crate::boundary::ClientSettings;
+use mc_domain::ChatVisibility;
 
 #[test]
 fn session_cleanup_has_reserved_capacity_and_preserves_fifo() {

@@ -1,6 +1,7 @@
 //! Permission enforcement through real player/shared-tick admission.
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::{TickState, run_tick};
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn fixture() -> TickState {

@@ -368,7 +368,7 @@ fn fixture() -> (TickState, mc_domain::EntityId, mc_domain::EntityId) {
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::new_v4(),
             name: "Defender".into(),
             permission_level: 0,
@@ -376,7 +376,7 @@ fn fixture() -> (TickState, mc_domain::EntityId, mc_domain::EntityId) {
     );
     let player = state
         .connections
-        .entity_of(crate::boundary::ConnectionId(1))
+        .entity_of(mc_domain::ConnectionId(1))
         .unwrap();
     let npc = state.spawn_mob(state.registry.zombie_type_id, [0.0, 80.0, 0.0], 20.0);
     let actor = state.entities.slot_of(player).unwrap();

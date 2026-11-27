@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::dimensions::Dimension;
 use crate::journal::{JournalWriter, Replay, replay_batches};
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn state() -> TickState {

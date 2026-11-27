@@ -18,7 +18,7 @@ fn names_are_uuid_stable_and_use_all_uuid_bytes() {
 
 #[test]
 fn authenticated_owner_name_is_cached_round_trips_and_does_not_dirty_idle_ticks() {
-    use crate::boundary::ConnectionId;
+    use mc_domain::ConnectionId;
     use mc_domain::EntityId;
     let mut state = test_state();
     let owner = uuid::Uuid::from_u128(42);

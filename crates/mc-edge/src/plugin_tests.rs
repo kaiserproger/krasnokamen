@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use mc_core::boundary::{ConnectionId, PlayerChange, PlayerInput, TickOutput};
+use mc_core::boundary::{PlayerChange, PlayerInput, TickOutput};
 use mc_core::{Core, CoreConfig, CoreError};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 use mc_inventory::ClickMode;
 use tokio::sync::broadcast;
 

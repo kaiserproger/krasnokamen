@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 
 fn stack(state: &TickState, name: &str) -> ItemStack {
     ItemStack::new(

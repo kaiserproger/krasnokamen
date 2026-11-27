@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 
 fn fixture() -> (TickState, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();

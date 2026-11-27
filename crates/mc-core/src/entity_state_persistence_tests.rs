@@ -1292,7 +1292,7 @@ fn age_clock_keeps_players_global_and_inactive_mobs_frozen() {
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::new_v4(),
             name: "clock-player".into(),
             permission_level: 0,
@@ -1300,7 +1300,7 @@ fn age_clock_keeps_players_global_and_inactive_mobs_frozen() {
     );
     let player = state
         .connections
-        .entity_of(crate::boundary::ConnectionId(1))
+        .entity_of(mc_domain::ConnectionId(1))
         .unwrap();
     let player = state.entities.slot_of(player).unwrap();
     let cow = state

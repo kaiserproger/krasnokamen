@@ -2,9 +2,9 @@
 //! The authority validates both physical sources before applying any result.
 
 use super::{ItemUse, PlayerEffects, PlayerState, contents_change};
-use crate::boundary::Hand;
 use crate::survival::Experience;
 use mc_data::ItemStack;
+use mc_domain::Hand;
 use mc_inventory::{ItemRules, Menu, OFF_HAND, PlayerInventory};
 
 /// One execution of the canonical menu engine, not a prediction to re-execute.

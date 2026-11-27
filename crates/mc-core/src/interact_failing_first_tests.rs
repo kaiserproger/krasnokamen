@@ -1,10 +1,11 @@
 //! Failing-first for fix-interact rows: existing-path interaction intents
 //! assert the player-visible outcome. On bare 4575d3f8 these FAIL
 //! (verified 5/5); with the fix they PASS.
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::run_tick;
 use mc_data::Identifier;
+use mc_domain::{ConnectionId, Hand};
 
 const POS: BlockPos = BlockPos {
     x: 1,

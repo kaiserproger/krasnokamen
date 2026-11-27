@@ -1,10 +1,10 @@
 //! Connection-bound operator terminal; see ADR 0018. Never runs on the tick.
 use std::{net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration};
 
-use mc_core::boundary::{ConnectionId, TickOutput};
+use mc_core::boundary::TickOutput;
 use mc_core::dimensions::Dimension;
 use mc_data::Identifier;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::packets::{CustomPayload, Packet, play::ServerboundCustomPayload};
 use serde::Deserialize;
 use tokio::{

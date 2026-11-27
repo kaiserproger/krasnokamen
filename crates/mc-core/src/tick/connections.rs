@@ -27,7 +27,7 @@ pub struct Connections {
     /// [`PlayerInput::SetChatVisibility`](crate::boundary::PlayerInput::SetChatVisibility)
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted; absent means `Full`.
-    chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
+    chat_visibilities: HashMap<ConnectionId, mc_domain::ChatVisibility>,
     /// Advances on every join, leave and dimension move. The tick's
     /// edge-visible session mirror is re-projected only when this or
     /// [`SessionLocks::generation`] moved (see `core::session_mirror`).
@@ -94,7 +94,7 @@ impl Connections {
 
     /// The connection's chat setting; `Full` until the edge admits one.
     #[must_use]
-    pub fn chat_visibility_of(&self, connection: ConnectionId) -> crate::boundary::ChatVisibility {
+    pub fn chat_visibility_of(&self, connection: ConnectionId) -> mc_domain::ChatVisibility {
         self.chat_visibilities
             .get(&connection)
             .copied()
@@ -104,7 +104,7 @@ impl Connections {
     pub(crate) fn set_chat_visibility(
         &mut self,
         connection: ConnectionId,
-        visibility: crate::boundary::ChatVisibility,
+        visibility: mc_domain::ChatVisibility,
     ) {
         self.chat_visibilities.insert(connection, visibility);
     }

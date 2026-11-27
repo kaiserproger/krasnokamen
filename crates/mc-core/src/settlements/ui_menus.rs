@@ -31,7 +31,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use super::Ctx;
-use crate::boundary::{BlockPos, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::dialog::ClickPayload;
 use crate::settlements::SettlementId;
 use crate::settlements::allocator::{Poi, PoiKind};
@@ -40,7 +40,7 @@ use crate::settlements::inventory;
 use crate::settlements::ui_text::{self, Key, Lang};
 use crate::tick::TickState;
 use crate::villager::VillagerProfession as Profession;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_inventory::ClickMode;
 use mc_inventory::MenuKind;
 

@@ -1,9 +1,9 @@
-use crate::boundary::{BlockPos, ChangeSet, ConnectionId};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::tick::{
     TickState, apply_player_effects, container_cells, container_slots,
     inventory_transition_refused, merchant, stations, store_container_slots,
 };
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::Arc;
 
 pub(in crate::tick) fn select_slot(

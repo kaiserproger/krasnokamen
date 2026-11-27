@@ -1,7 +1,8 @@
 //! A single owner advances all worlds and publishes one immutable tick image.
 use super::Dimension;
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput, TickOutput, TickTimes};
+use crate::boundary::{PlayerChange, PlayerInput, TickOutput, TickTimes};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn input_dimension(state: &TickState, input: &PlayerInput) -> Dimension {

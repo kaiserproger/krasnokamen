@@ -1438,7 +1438,7 @@ fn raider_names_resolve_by_protocol_id_lookup() {
         assert!(!raiders::owns(crate::entities::EntityKind::Mob { type_id }));
     }
     assert!(!raiders::owns(crate::entities::EntityKind::Player {
-        connection: crate::boundary::ConnectionId(1),
+        connection: mc_domain::ConnectionId(1),
     }));
     for type_id in [mc_data::entity_types::ENTITY_TYPE_COUNT as u32, u32::MAX] {
         assert!(!raiders::owns(crate::entities::EntityKind::Mob { type_id }));

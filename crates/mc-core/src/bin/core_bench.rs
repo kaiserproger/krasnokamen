@@ -30,8 +30,9 @@
 
 use std::time::Instant;
 
-use mc_core::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use mc_core::boundary::{PlayerChange, PlayerInput};
 use mc_core::{Core, CoreConfig};
+use mc_domain::ConnectionId;
 
 #[cfg(test)]
 #[path = "../core_bench_tests.rs"]

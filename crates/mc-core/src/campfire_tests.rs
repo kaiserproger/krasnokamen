@@ -1,10 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 
 const POS: BlockPos = BlockPos { x: 0, y: 201, z: 0 };
 

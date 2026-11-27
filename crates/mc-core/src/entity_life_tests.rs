@@ -1,10 +1,10 @@
 //! Native lifecycle behavior, transaction footprints and durable recovery.
-use crate::boundary::{ConnectionId, Hand, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::entities::EntityKind;
 use crate::entity_life::{self, CHILD_TICKS, EntityLifeState};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use std::sync::Arc;
 
 fn fixture() -> (TickState, EntityId, [f64; 3]) {

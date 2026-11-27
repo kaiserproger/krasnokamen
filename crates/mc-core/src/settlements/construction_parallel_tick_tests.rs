@@ -953,12 +953,9 @@ fn a_full_queue_retry_refusal_reaches_the_owner_repeatedly() {
     open_plan(&mut state);
     state.settlements.get_mut(id).expect("settlement").owner = Some(OWNER.to_string());
     let entity = state.entities.body(builder).id;
-    state.connections.insert(
-        crate::boundary::ConnectionId(1),
-        entity,
-        OWNER,
-        "owner".into(),
-    );
+    state
+        .connections
+        .insert(mc_domain::ConnectionId(1), entity, OWNER, "owner".into());
     // One funded order starts; the rest of the queue fills behind it.
     stock(&mut state, "house", 1, 1);
     request_started(&mut state, id, "house");
@@ -987,7 +984,7 @@ fn a_full_queue_retry_refusal_reaches_the_owner_repeatedly() {
         super::tick(&mut state);
         let said: Vec<String> = state
             .outbox
-            .get(&crate::boundary::ConnectionId(1))
+            .get(&mc_domain::ConnectionId(1))
             .into_iter()
             .flatten()
             .filter_map(|change| match change {

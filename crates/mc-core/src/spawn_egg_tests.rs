@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::journal::EntityStateImage;
+use mc_domain::ConnectionId;
 
 #[test]
 fn spawn_egg_villager_and_single_debit_survive_wal_replay_and_native_restart() {

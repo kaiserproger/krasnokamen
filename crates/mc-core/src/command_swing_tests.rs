@@ -1,7 +1,7 @@
 use super::*;
-use crate::boundary::ConnectionId;
 use crate::commands::Command;
 use mc_data::Identifier;
+use mc_domain::ConnectionId;
 
 fn run(
     state: &mut TickState,

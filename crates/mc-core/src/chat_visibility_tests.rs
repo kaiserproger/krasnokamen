@@ -1,8 +1,9 @@
 //! The client's chat setting: `Full` gets everything, `System` ("commands
 //! only") gets system text but no player chat, `Hidden` gets neither and
 //! cannot send chat.
-use crate::boundary::{ChatVisibility, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::{TickState, run_tick};
+use mc_domain::{ChatVisibility, ConnectionId};
 
 const FULL: ConnectionId = ConnectionId(1);
 const OTHER_FULL: ConnectionId = ConnectionId(2);

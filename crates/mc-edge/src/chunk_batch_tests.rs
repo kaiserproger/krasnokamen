@@ -1,8 +1,8 @@
 use crate::fanout::{Priority, publish};
 use crate::plan::ViewerState;
 use crate::server::world_queue;
-use mc_core::boundary::{ChangeSet, ConnectionId, SnapshotChunk, TickOutput, WorldSnapshot};
-use mc_domain::EntityId;
+use mc_core::boundary::{ChangeSet, SnapshotChunk, TickOutput, WorldSnapshot};
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::{
     Packet,

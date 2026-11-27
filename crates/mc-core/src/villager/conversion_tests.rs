@@ -1,11 +1,12 @@
 use super::conversion;
 use crate::{
-    boundary::{ConnectionId, Hand, PlayerInput},
+    boundary::PlayerInput,
     effects::{ActiveEffect, EffectId},
     registry::CoreRegistry,
     tick::{TickState, run_tick},
     world::ChunkWorld,
 };
+use mc_domain::{ConnectionId, Hand};
 use std::sync::Arc;
 pub(super) fn state() -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());

@@ -45,7 +45,8 @@ fn fixture() -> TickState {
 
 #[test]
 fn locked_session_stages_no_blast_damage_or_knockback() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = fixture();
     let (output, _, _) = run_tick(
         &mut state,

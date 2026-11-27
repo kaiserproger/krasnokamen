@@ -3,7 +3,7 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use mc_core::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

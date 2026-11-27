@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use mc_core::boundary::{ChangeSet, ConnectionId, TickOutput, TickTimes, WorldSnapshot};
-use mc_domain::EntityId;
+use mc_core::boundary::{ChangeSet, TickOutput, TickTimes, WorldSnapshot};
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::{CustomPayload, Packet, play::ClientboundCustomPayload};
 

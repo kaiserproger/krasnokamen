@@ -1277,7 +1277,7 @@ fn merchant_menu_stops_navigation_and_work_until_live_menu_closes() {
     v.data.profession = Profession::Farmer;
     v.job_site = Some(job);
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(42),
+        mc_domain::ConnectionId(42),
         crate::commands::GameMode::Survival,
     );
     let mut menu = mc_inventory::Menu::new(1, mc_inventory::MenuKind::Merchant);
@@ -2278,7 +2278,8 @@ fn full_brain_rotation_is_id_fair_with_bounded_near_and_far_waits() {
 
 #[test]
 fn full_brain_visible_waits_at_mix_density_and_interactions_preempt_regular_admission() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
 
     let registry = Arc::new(crate::tick_tests::full_registry());
     for population in [10_000usize, 50_000] {
@@ -2534,7 +2535,7 @@ fn trade_combat_panic_pursuit_and_committed_paths_never_downgrade() {
     }
     let merchant = state.entities.body(slots[0]).id;
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(42),
+        mc_domain::ConnectionId(42),
         crate::commands::GameMode::Survival,
     );
     let mut menu = mc_inventory::Menu::new(1, mc_inventory::MenuKind::Merchant);
@@ -3990,7 +3991,8 @@ fn threat_sensor_tracks_in_place_zombie_villager_infection_and_cure() {
 
 #[test]
 fn player_chunk_crossing_only_reclassifies_changed_distance_classes() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     state.gamerules.insert("spawn_mobs".into(), "false".into());
     crate::tick::run_tick(

@@ -424,7 +424,7 @@ pub(crate) fn intent(state: &mut TickState, intent: &crate::intent::Intent) {
 
 pub(crate) fn menu(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     change: &crate::boundary::PlayerChange,
 ) {
     let event = match change {

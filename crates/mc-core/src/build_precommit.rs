@@ -14,9 +14,10 @@ use mc_script::precommit::{
 };
 use tokio::sync::oneshot;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::intent::Intent;
 use crate::tick::TickState;
+use mc_domain::{ConnectionId, DigAction, Hand};
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 enum CorrectionTarget {

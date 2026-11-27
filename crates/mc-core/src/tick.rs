@@ -18,8 +18,8 @@ use mc_data::statistics::StatType;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::boundary::{
-    BlockPos, ChangeSet, ChunkPos, ConnectionId, DigAction, EntityAppearance, EntityEvent, Hand,
-    PlayerChange, PlayerInput, TickOutput, TickTimes, WorldSnapshot,
+    BlockPos, ChangeSet, ChunkPos, EntityAppearance, EntityEvent, PlayerChange, PlayerInput,
+    TickOutput, TickTimes, WorldSnapshot,
 };
 use crate::entities::{
     Body, ColdFields, EntityKind, EntitySlot, EntityStore, MOTION_ALIVE, MOTION_EFFECTS,
@@ -29,7 +29,7 @@ use crate::entities::{
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim, sort_intents};
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, DigAction, EntityId, Hand};
 
 mod auth;
 pub(crate) use auth::unlock_session;
@@ -946,9 +946,8 @@ pub(crate) fn secondary_use(state: &TickState, entity: EntityId) -> bool {
         .slot_of(entity)
         .is_some_and(|slot| state.entities.row(slot).appearance.shared_flags & SNEAKING_FLAG != 0)
         && state.players.get(&entity).is_some_and(|player| {
-            !player.inventory.slots[held_slot_index(player, crate::boundary::Hand::Main)].is_empty()
-                || !player.inventory.slots[held_slot_index(player, crate::boundary::Hand::Off)]
-                    .is_empty()
+            !player.inventory.slots[held_slot_index(player, mc_domain::Hand::Main)].is_empty()
+                || !player.inventory.slots[held_slot_index(player, mc_domain::Hand::Off)].is_empty()
         })
 }
 
@@ -1035,10 +1034,11 @@ mod cold_menu_residency_tests {
     //! `damage_anvil` must ask residency before it reads or writes that cell.
 
     use super::stations::damage_anvil;
-    use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, PlayerInput};
+    use crate::boundary::{BlockPos, ChangeSet, ChunkPos, PlayerInput};
     use crate::tick::{TickState, run_tick};
     use crate::world::ChunkWorld;
     use mc_data::Identifier;
+    use mc_domain::ConnectionId;
     use std::sync::Arc;
 
     struct Empty(u32);

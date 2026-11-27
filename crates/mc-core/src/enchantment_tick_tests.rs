@@ -1,11 +1,11 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::enchantments;
 use crate::intent::DamageSource;
 use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn stack(state: &TickState, item: &str, enchants: &[(&str, i32)]) -> ItemStack {
     let mut stack = ItemStack::new(

@@ -725,7 +725,7 @@ fn is_living(kind: crate::entities::EntityKind) -> bool {
 
 pub(crate) fn execute_command(
     state: &mut crate::tick::TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: mc_domain::EntityId,
     command: &crate::commands::Command,
 ) -> crate::command_execution::CommandResult {

@@ -1,10 +1,10 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::journal::{EntityStateImage, JournalWriter, Replay, replay_batches};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::{Arc, LazyLock};
 
 /// Pattern origin: the head lands at `HEAD`, the body hangs below it.
@@ -135,7 +135,7 @@ fn player_places_final_skull_and_summons_wither() {
         &mut state,
         &[PlayerInput::UseItemOn {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: cell(0, -1, 0),
             face: 1,
             cursor: [0.5, 1.0, 0.5],
@@ -347,7 +347,7 @@ fn player_created_iron_golem_spares_the_player_who_hit_it() {
 
 #[test]
 fn iron_ingot_repairs_golem_from_either_hand_without_overhealing() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     for (hand, creative) in [(Hand::Main, false), (Hand::Off, false), (Hand::Main, true)] {
         let mut state = fixture();
         run_tick(

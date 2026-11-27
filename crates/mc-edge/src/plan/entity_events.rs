@@ -127,13 +127,13 @@ pub(super) fn push_entity_event(
                     entity_id: entity.0,
                     off_hand: matches!(hand, Hand::Off),
                     animation: match animation {
-                        mc_core::boundary::SwingKind::None => {
+                        mc_domain::SwingKind::None => {
                             mc_protocol::packets::play::SwingAnimationType::None
                         }
-                        mc_core::boundary::SwingKind::Whack => {
+                        mc_domain::SwingKind::Whack => {
                             mc_protocol::packets::play::SwingAnimationType::Whack
                         }
-                        mc_core::boundary::SwingKind::Stab => {
+                        mc_domain::SwingKind::Stab => {
                             mc_protocol::packets::play::SwingAnimationType::Stab
                         }
                     },

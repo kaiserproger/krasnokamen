@@ -1041,7 +1041,7 @@ fn commands_require_operator_and_enforce_count_bounds() {
     assert_eq!(
         crate::command_execution::execute(
             &mut state,
-            crate::boundary::ConnectionId(1),
+            mc_domain::ConnectionId(1),
             EntityId(1),
             &roster,
             &mut changes

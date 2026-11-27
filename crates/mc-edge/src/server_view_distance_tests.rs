@@ -103,7 +103,7 @@ async fn client_view_distance_join_grow_and_shrink() {
         false,
         4,
         "en_us",
-        mc_core::boundary::ChatVisibility::Full,
+        mc_domain::ChatVisibility::Full,
     )
     .await
     .unwrap();
@@ -292,7 +292,7 @@ async fn play_client_information_admits_the_client_locale() {
         false,
         4,
         "en_us",
-        mc_core::boundary::ChatVisibility::Full,
+        mc_domain::ChatVisibility::Full,
     )
     .await
     .unwrap();
@@ -354,7 +354,7 @@ async fn recorder_takes_the_server_radius_and_players_keep_their_own() {
             is_recorder,
             4,
             "en_us",
-            mc_core::boundary::ChatVisibility::Full,
+            mc_domain::ChatVisibility::Full,
         )
         .await
         .unwrap();
@@ -405,10 +405,7 @@ fn locale(server: &EdgeServer, id: ConnectionId) -> Option<String> {
     server.connections.inner.lock().locales.get(&id).cloned()
 }
 
-fn chat_setting(
-    server: &EdgeServer,
-    id: ConnectionId,
-) -> Option<mc_core::boundary::ChatVisibility> {
+fn chat_setting(server: &EdgeServer, id: ConnectionId) -> Option<mc_domain::ChatVisibility> {
     server
         .connections
         .inner
@@ -422,7 +419,7 @@ fn chat_setting(
 /// value before Join, then follows every Play `Client Information` change.
 #[tokio::test]
 async fn client_chat_setting_is_admitted_at_join_and_on_play_changes() {
-    use mc_core::boundary::ChatVisibility as Setting;
+    use mc_domain::ChatVisibility as Setting;
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
@@ -468,7 +465,7 @@ async fn client_chat_setting_is_admitted_at_join_and_on_play_changes() {
 /// client's chat setting like the core's: Hidden gets no text line at all.
 #[tokio::test]
 async fn edge_sent_feedback_follows_the_clients_chat_setting() {
-    use mc_core::boundary::ChatVisibility as Setting;
+    use mc_domain::ChatVisibility as Setting;
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
@@ -530,7 +527,7 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
 /// `send_command_feedback` like every other command's (vanilla `sendSuccess`).
 #[tokio::test]
 async fn list_obeys_the_send_command_feedback_rule() {
-    use mc_core::boundary::ChatVisibility as Setting;
+    use mc_domain::ChatVisibility as Setting;
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
@@ -597,7 +594,7 @@ async fn list_obeys_the_send_command_feedback_rule() {
 
 #[test]
 fn the_wire_chat_setting_maps_to_the_core_setting() {
-    use mc_core::boundary::ChatVisibility as Setting;
+    use mc_domain::ChatVisibility as Setting;
     for (wire, expected) in [
         (ChatVisibility::Full, Setting::Full),
         (ChatVisibility::System, Setting::System),

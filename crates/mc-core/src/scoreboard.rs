@@ -1,10 +1,10 @@
 //! Vanilla scoreboard and teams, owned by the v2 tick thread.
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::command_args::CommandError;
 use crate::command_execution::CommandResult;
 use crate::commands::Target;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -391,12 +391,8 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             conn,
             &mc_protocol::packets::play::ClientboundOpenBook {
                 hand: match hand {
-                    mc_core::boundary::Hand::Main => {
-                        mc_protocol::packets::play::InteractionHand::MainHand
-                    }
-                    mc_core::boundary::Hand::Off => {
-                        mc_protocol::packets::play::InteractionHand::OffHand
-                    }
+                    mc_domain::Hand::Main => mc_protocol::packets::play::InteractionHand::MainHand,
+                    mc_domain::Hand::Off => mc_protocol::packets::play::InteractionHand::OffHand,
                 },
             },
         ),
@@ -1215,11 +1211,7 @@ fn text_component_nbt(text: &str) -> Result<Vec<u8>, mc_nbt::NbtError> {
     Ok(out)
 }
 
-fn push_chat(
-    out: &mut Vec<PlannedPacket>,
-    connection: mc_core::boundary::ConnectionId,
-    message: &str,
-) {
+fn push_chat(out: &mut Vec<PlannedPacket>, connection: mc_domain::ConnectionId, message: &str) {
     let content_nbt =
         text_component_nbt(message).unwrap_or_else(|_| text_component_nbt("").unwrap_or_default());
     push_reliable(
@@ -1235,7 +1227,7 @@ fn push_chat(
 /// Translate a tick-owned scoreboard event for its addressed viewer.
 fn push_scoreboard_event(
     out: &mut Vec<PlannedPacket>,
-    connection: mc_core::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     event: mc_core::scoreboard::ScoreboardEvent,
 ) {
     use mc_core::scoreboard::{ScoreboardEvent, component};

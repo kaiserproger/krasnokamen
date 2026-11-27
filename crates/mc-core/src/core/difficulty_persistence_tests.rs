@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::native_checkpoint::tests::read_manifest;
 use crate::survival::Difficulty;
+use mc_domain::ConnectionId;
 
 #[test]
 fn difficulty_checkpoint_is_frozen_and_wal_restart_preserves_join_and_query() {

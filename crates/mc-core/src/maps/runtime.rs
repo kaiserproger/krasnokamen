@@ -1,5 +1,6 @@
 use super::{SavedMap, decoration_id};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
+use mc_domain::ConnectionId;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_inventory::cartography::map_id;

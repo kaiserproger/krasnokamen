@@ -1,6 +1,7 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::MenuKind;
 

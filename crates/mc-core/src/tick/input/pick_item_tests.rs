@@ -1,8 +1,8 @@
-use crate::boundary::{BlockPos, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::commands::GameMode;
 use crate::tick::{TickState, run_tick};
 use mc_data::ItemStack;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn item(state: &TickState, name: &str) -> u32 {
     state

@@ -91,10 +91,9 @@ use std::sync::Arc;
 
 use bytes::BytesMut;
 use mc_core::boundary::{
-    ConnectionId, EntityAppearance, EntityEvent, EntityView, Hand, SnapshotChunk, TickOutput,
-    WorldSnapshot,
+    EntityAppearance, EntityEvent, EntityView, SnapshotChunk, TickOutput, WorldSnapshot,
 };
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_protocol::frame::{Compression, append_frame};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{

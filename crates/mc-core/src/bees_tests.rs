@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 use std::sync::{Arc, LazyLock};
 
 pub(crate) const POS: BlockPos = BlockPos { x: 4, y: 201, z: 4 };
@@ -596,7 +597,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: POS,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 2,
         }],
     );
@@ -757,7 +758,7 @@ fn non_silk_break_releases_nectar_bee_once_even_when_hive_is_replaced() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: POS,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 2,
         }],
     );

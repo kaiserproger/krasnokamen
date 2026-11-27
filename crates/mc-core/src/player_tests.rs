@@ -5,8 +5,9 @@ use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemStack};
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{ConnectionId, Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::commands::GameMode;
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{ItemRules, MenuKind, OFF_HAND};
 

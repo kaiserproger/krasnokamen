@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::ConnectionId;
 use crate::tick::run_tick;
 use mc_data::entity_data_value::EntityDataValue;
 

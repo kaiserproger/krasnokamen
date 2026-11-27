@@ -244,7 +244,7 @@ fn hostile_attempts_visit_each_shared_chunk_once_in_the_old_order() {
             let _ = crate::tick::run_tick(
                 &mut state,
                 &[crate::boundary::PlayerInput::Join {
-                    connection: crate::boundary::ConnectionId(connection),
+                    connection: mc_domain::ConnectionId(connection),
                     uuid: uuid::Uuid::from_u128(u128::from(connection)),
                     name: format!("observer{connection}"),
                     permission_level: 0,
@@ -333,7 +333,7 @@ fn distant_hostiles_despawn_on_non_spawn_cycle_ticks() {
     let _ = crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::new_v4(),
             name: "observer".into(),
             permission_level: 0,
@@ -357,7 +357,7 @@ fn hostile_attempts_run_between_twenty_tick_passes() {
     let _ = crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::new_v4(),
             name: "observer".into(),
             permission_level: 0,
@@ -463,7 +463,8 @@ fn spawn_admission_allows_chunk_with_any_uncapped_observer_in_range() {
 
 #[test]
 fn distant_players_spawn_hostiles_despite_frozen_old_population() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
 
     for frozen_count in [0, 70] {
         let mut state = flat("minecraft:plains", 65);

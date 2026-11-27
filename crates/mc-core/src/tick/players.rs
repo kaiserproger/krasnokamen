@@ -525,7 +525,7 @@ pub(super) fn apply_inputs<'a>(
                         state,
                         actor,
                         target,
-                        crate::boundary::Hand::Main,
+                        mc_domain::Hand::Main,
                         true,
                         intents,
                     );

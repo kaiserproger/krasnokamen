@@ -5,7 +5,8 @@
 //! view work no longer arrive as one whole-regiment release.
 use super::combat::{Action, CombatRuntime, Weapon};
 use super::{ArrowLaunch, BattleState, Frame, Output};
-use crate::boundary::{EntityEvent, Hand};
+use crate::boundary::EntityEvent;
+use mc_domain::Hand;
 use mc_physics::mth;
 use rustc_hash::FxHashMap;
 
@@ -198,7 +199,7 @@ pub(super) fn step(
             out.events.push(EntityEvent::Swing {
                 entity: body.id,
                 hand: Hand::Main,
-                animation: crate::boundary::SwingKind::Whack,
+                animation: mc_domain::SwingKind::Whack,
                 duration_ticks: if crossbow { 75 } else { 40 },
             });
             continue;

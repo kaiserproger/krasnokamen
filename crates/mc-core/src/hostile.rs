@@ -665,7 +665,7 @@ pub(crate) fn ignite(
     state: &mut TickState,
     actor: EntityId,
     target: EntityId,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
 ) -> bool {
     let Some(slot) = state.entities.slot_of(target) else {
         return false;

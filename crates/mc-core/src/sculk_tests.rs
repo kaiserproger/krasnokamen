@@ -91,7 +91,7 @@ fn command(state: &mut TickState, actor: mc_domain::EntityId, text: &str) {
     let parsed = crate::command_world::parse(root, &words.collect::<Vec<_>>()).unwrap();
     crate::command_world::execute(
         state,
-        crate::boundary::ConnectionId(1),
+        mc_domain::ConnectionId(1),
         actor,
         &parsed,
         &mut Default::default(),

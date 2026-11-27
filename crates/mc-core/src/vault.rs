@@ -1,11 +1,11 @@
 //! Per-player vault key admission and persisted reward ejection.
-use crate::boundary::{BlockPos, ChangeSet, Hand};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::tick::{TickState, spawn_item_entity};
 use crate::trial_spawner::{block, key, nearby, position, property, set_properties};
 use mc_data::ItemStack;
 use mc_data::item_nbt::{field, stack_to_fields};
 use mc_data::trial_nbt::{self as nbt, Fields, VaultData};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 use std::collections::BTreeMap;
 

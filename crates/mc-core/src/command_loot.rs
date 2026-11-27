@@ -1,11 +1,11 @@
 //! Operator loot generation against the native catalogs.
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::command_args::{CommandError, Coord};
 use crate::command_item_replace::{self, Destination};
 use crate::commands::Target;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_nbt::Tag;
 
 #[derive(Debug, Clone, PartialEq)]

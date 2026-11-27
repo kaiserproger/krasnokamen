@@ -8,7 +8,7 @@
 
 use krasnokamen_fuzz::PLAY_IDS;
 use libfuzzer_sys::fuzz_target;
-use mc_core::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use mc_edge::decode::{DecodeState, decode_play_frame};
 
 fuzz_target!(|data: &[u8]| {

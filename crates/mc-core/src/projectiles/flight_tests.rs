@@ -3,10 +3,10 @@ use std::sync::Arc;
 use mc_data::{Identifier, ItemStack};
 
 use super::{ProjectileKind, ProjectileState, launch};
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 pub(super) fn setup() -> (TickState, EntityId, [f64; 3]) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());

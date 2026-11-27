@@ -1,7 +1,8 @@
 //! Whole-world pause requested by the local singleplayer operator.
 
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 
 #[derive(Default)]
 pub(crate) struct SingleplayerPause {

@@ -1,10 +1,10 @@
 use super::{flat_player_fixture, join};
-use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerChange, PlayerInput};
 use crate::commands::GameMode;
 use crate::intent::DamageSource;
 use crate::survival::{DamageKind, Difficulty};
 use crate::tick::{DamagePiece, TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 
 fn hit(state: &mut TickState, target: EntityId, kind: DamageKind, source: Option<DamageSource>) {
     let slot = state.entities.slot_of(target).unwrap();

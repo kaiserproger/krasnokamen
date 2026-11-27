@@ -1,11 +1,12 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
 use mc_data::Identifier;
 use mc_data::item_components::{CustomItemDefinition, ItemFacts};
 use mc_data::item_profiles::{AttackShape, DamageKind, ItemConsumption, ProjectileProfile};
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn id(value: &str) -> Identifier {

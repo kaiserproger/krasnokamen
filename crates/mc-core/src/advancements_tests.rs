@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use mc_data::advancements::{AdvancementRewards, Criterion};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 use std::collections::BTreeMap;
 
 fn fixture(mut tree: AdvancementTree) -> (TickState, EntityId) {
@@ -636,7 +637,7 @@ fn accepted_projectile_shield_block_awards_deflection_without_health_damage() {
         .unwrap();
     let player = state.players.get_mut(&entity).unwrap();
     player.inventory.slots[0] = ItemStack::new(shield, 1);
-    player.use_item(&state.registry.item_rules(), crate::boundary::Hand::Main);
+    player.use_item(&state.registry.item_rules(), mc_domain::Hand::Main);
     for _ in 0..5 {
         player.tick_item_use(&state.registry.item_rules());
     }
@@ -717,7 +718,7 @@ fn bare_armour_snapshot_satisfies_piglin_inverted_safe_armour_predicates() {
         &mut state,
         entity,
         piglin,
-        crate::boundary::Hand::Main,
+        mc_domain::Hand::Main,
     ));
     run(&mut state, &mut ChangeSet::default());
     assert_eq!(

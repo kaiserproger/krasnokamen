@@ -659,7 +659,7 @@ fn maintenance_on_the_pool_matches_exhaustive_for_a_large_population() {
 
 fn observer(state: &mut TickState) {
     let number = state.players.len() as u64 + 1;
-    let connection = crate::boundary::ConnectionId(number);
+    let connection = mc_domain::ConnectionId(number);
     crate::tick::run_tick(
         state,
         &[crate::boundary::PlayerInput::Join {

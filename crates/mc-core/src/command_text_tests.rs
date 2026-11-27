@@ -104,7 +104,8 @@ fn text_state() -> (TickState, EntityId, EntityId) {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).expect("registry"));
     let world = flat_world(&registry);
     let mut state = TickState::new(registry, world, 1, 4096);
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     crate::tick::run_tick(
         &mut state,
         &[
@@ -269,15 +270,12 @@ fn tellraw_sends_resolved_chat_with_no_sender_feedback() {
     let mut changes = crate::boundary::ChangeSet::default();
     crate::command_execution::execute(
         &mut state,
-        crate::boundary::ConnectionId(1),
+        mc_domain::ConnectionId(1),
         alice,
         &command,
         &mut changes,
     );
-    for connection in [
-        crate::boundary::ConnectionId(1),
-        crate::boundary::ConnectionId(2),
-    ] {
+    for connection in [mc_domain::ConnectionId(1), mc_domain::ConnectionId(2)] {
         let queue = state.outbox.get(&connection).expect("recipient queue");
         assert_eq!(styled(queue).len(), 1);
         assert_eq!(
@@ -292,14 +290,14 @@ fn tellraw_sends_resolved_chat_with_no_sender_feedback() {
     let mut changes = crate::boundary::ChangeSet::default();
     crate::command_execution::execute(
         &mut state,
-        crate::boundary::ConnectionId(1),
+        mc_domain::ConnectionId(1),
         alice,
         &command,
         &mut changes,
     );
     let queue = state
         .outbox
-        .get(&crate::boundary::ConnectionId(1))
+        .get(&mc_domain::ConnectionId(1))
         .expect("feedback queue");
     assert!(
         styled(queue)
@@ -311,7 +309,7 @@ fn tellraw_sends_resolved_chat_with_no_sender_feedback() {
 
 #[test]
 fn title_shows_resolve_per_player_and_clear_times_feedback() {
-    use crate::boundary::ConnectionId;
+    use mc_domain::ConnectionId;
     // show.title resolves `selector` per target: @s names each recipient.
     let (mut state, alice, _) = text_state();
     let command = crate::commands::parse(r#"title @a title {"selector":"@s"}"#, true).unwrap();

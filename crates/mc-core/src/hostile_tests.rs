@@ -3,14 +3,14 @@
 use std::sync::Arc;
 
 use crate::blueprint::FUSE_TICKS;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::{ConnectionId, EntityId};
 use crate::hostile::{CREEPER_SWELL_DIR_INDEX, launch_arrow};
 use crate::projectiles::{ARROW_IN_GROUND_INDEX, ARROW_STUCK_TICKS};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_domain::EntityId;
 
 /// Platform height: far above the flat fixture floor.
 const Y: i32 = 200;
@@ -613,7 +613,7 @@ fn hostile_gap_spiders_use_local_light_and_retaliate_in_bright_light() {
 
 #[test]
 fn hostile_gap_manual_creeper_ignition_survives_target_departure() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     for (name, hand, index) in [
         ("minecraft:flint_and_steel", Hand::Main, 0),
         ("minecraft:fire_charge", Hand::Off, mc_inventory::OFF_HAND),

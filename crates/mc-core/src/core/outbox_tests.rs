@@ -2,9 +2,10 @@
 //! and the fail-closed halt that keeps reliable batches from being dropped.
 
 use super::*;
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::config::CoreConfig;
 use crate::core::Core;
+use mc_domain::ConnectionId;
 
 fn chat(message: &str) -> PlayerChange {
     PlayerChange::Chat {

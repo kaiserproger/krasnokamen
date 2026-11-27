@@ -8,9 +8,10 @@ use mc_data::ItemStack;
 use mc_data::inventory_semantics_26_1_2::{decrement_stack, take_from_stack};
 use mc_data::statistics::{CustomStat, StatType};
 
-use crate::boundary::{ConnectionId, Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::commands::{self, Command, GameMode};
 use crate::survival::Vitals;
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory, SlotRef};
 

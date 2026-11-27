@@ -342,7 +342,7 @@ pub(crate) fn forget_for_core_team(
 /// Add `members` in chunks of [`MEMBERS_PER_PACKET`].
 fn push_members(
     out: &mut Vec<PlannedPacket>,
-    connection: mc_core::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     faction: u16,
     mut members: Vec<String>,
 ) {

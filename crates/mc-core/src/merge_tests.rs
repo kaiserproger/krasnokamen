@@ -1,9 +1,8 @@
 //! Merge rule tests (assignment §5): single-winner pickup, dual-attacker
 //! damage, break-vs-place determinism. Sibling `*_tests.rs` per repo rule.
 
-use crate::boundary::ConnectionId;
 use crate::intent::{Footprint, Intent, IntentKind, footprints_disjoint};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn intent(actor: i32, seq: u32, kind: IntentKind, footprint: Footprint) -> Intent {
     Intent {

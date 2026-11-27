@@ -1,7 +1,8 @@
 //! Real guest configure -> command -> native mob -> checkpoint -> restart.
-use crate::boundary::{ConnectionId, PlayerInput, TickOutput};
+use crate::boundary::{PlayerInput, TickOutput};
 use crate::config::CoreConfig;
 use crate::core::Core;
+use mc_domain::ConnectionId;
 
 #[path = "../../mc-plugin-host/tests/fixture/mod.rs"]
 pub(super) mod fixture;

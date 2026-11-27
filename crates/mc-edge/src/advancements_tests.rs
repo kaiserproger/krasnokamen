@@ -1,6 +1,6 @@
 use super::*;
-use mc_core::boundary::{ConnectionId, PlayerChange, PlayerInput};
-use mc_domain::EntityId;
+use mc_core::boundary::{PlayerChange, PlayerInput};
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{
     ClientboundRecipeBookAdd, ClientboundSelectAdvancementsTab, ServerboundSeenAdvancements,

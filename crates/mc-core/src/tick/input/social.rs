@@ -1,5 +1,6 @@
-use crate::boundary::{BlockPos, ConnectionId, PlayerChange};
+use crate::boundary::{BlockPos, PlayerChange};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use mc_nbt::Tag;
 
 /// Vanilla's TickThrottler(20, 200), checked before fan-out rather than after it.
@@ -77,8 +78,7 @@ pub(in crate::tick) fn chat(
     };
     // Vanilla `ServerGamePacketListenerImpl.tryHandleChat`: a client that
     // hides chat cannot send it; it is told so, in red, and nothing goes out.
-    if state.connections.chat_visibility_of(*connection) == crate::boundary::ChatVisibility::Hidden
-    {
+    if state.connections.chat_visibility_of(*connection) == mc_domain::ChatVisibility::Hidden {
         let Tag::Compound(mut disabled) =
             crate::command_feedback::translated("chat.disabled.options", Vec::new())
         else {

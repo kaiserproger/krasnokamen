@@ -111,7 +111,7 @@ pub(super) fn bucket_intent(
     state: &mut TickState,
     entity: EntityId,
     slot: EntitySlot,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     yaw: f32,
     pitch: f32,
 ) -> Option<Intent> {
@@ -124,7 +124,7 @@ pub(crate) fn plan_bucket_intent(
     state: &TickState,
     entity: EntityId,
     slot: EntitySlot,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     yaw: f32,
     pitch: f32,
 ) -> Option<Intent> {
@@ -312,7 +312,7 @@ pub(super) fn plan_break(
 pub(super) fn plan_placement(
     state: &TickState,
     entity: EntityId,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     position: BlockPos,
     face: u8,
     cursor: [f32; 3],
@@ -698,13 +698,10 @@ pub(crate) fn plan_client_build_at(
 }
 
 /// Held slot index for a hand (mirrors `PlayerState::held_slot`).
-pub(crate) fn held_slot_index(
-    player: &crate::player::PlayerState,
-    hand: crate::boundary::Hand,
-) -> usize {
+pub(crate) fn held_slot_index(player: &crate::player::PlayerState, hand: mc_domain::Hand) -> usize {
     match hand {
-        crate::boundary::Hand::Main => usize::from(player.inventory.selected.min(8)),
-        crate::boundary::Hand::Off => mc_inventory::OFF_HAND,
+        mc_domain::Hand::Main => usize::from(player.inventory.selected.min(8)),
+        mc_domain::Hand::Off => mc_inventory::OFF_HAND,
     }
 }
 
@@ -712,7 +709,7 @@ pub(crate) fn held_slot_index(
 pub(crate) fn held_debit_below_floor(
     state: &TickState,
     entity: EntityId,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     count: u32,
 ) -> bool {
     let Some(player) = state.players.get(&entity) else {

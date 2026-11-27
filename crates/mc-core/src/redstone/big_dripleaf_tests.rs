@@ -3,7 +3,8 @@ use mc_data::builtin_sounds_26_3::{BIG_DRIPLEAF_TILT_DOWN, BIG_DRIPLEAF_TILT_UP}
 
 use super::*;
 use crate::bees::tests::{POS, joined, place, state};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
+use mc_domain::ConnectionId;
 
 fn tilt(state: &TickState) -> &str {
     crate::farming::prop(

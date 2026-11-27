@@ -107,7 +107,7 @@ impl Connection {
     pub(crate) fn request(
         &mut self,
         server: &Arc<EdgeServer>,
-        connection: mc_core::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
         bytes: &[u8],
     ) {
         let now = Instant::now();

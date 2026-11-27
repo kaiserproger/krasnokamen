@@ -2722,7 +2722,7 @@ fn settlement_create_refuses_without_authenticated_actor_and_creates_nothing() {
     let (mut state, alice, _) = fixture();
     // Simulate a connection whose UUID registration is gone: every mutation
     // must refuse rather than invent a shared owner.
-    let ghost = crate::boundary::ConnectionId(99);
+    let ghost = mc_domain::ConnectionId(99);
     let parsed = parse("settlement create ghost-town", true).unwrap();
     let mut changes = ChangeSet::default();
     super::execute(&mut state, ghost, alice, &parsed, &mut changes);
@@ -3564,7 +3564,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
         "Only the owner or an operator orders construction."
     );
     // Absent actors (lost UUID registration) refuse rather than start work.
-    let ghost_connection = crate::boundary::ConnectionId(99);
+    let ghost_connection = mc_domain::ConnectionId(99);
     let parsed = parse(&format!("settlement build upgrade {}", ghost.0), true).unwrap();
     let mut changes = ChangeSet::default();
     let stock = build_chest_stock(&state);

@@ -836,7 +836,7 @@ fn persistent_despawn_scan_marks_only_nonzero_idle_resets() {
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::from_u128(1),
             name: "JournalObserver".into(),
             permission_level: 0,

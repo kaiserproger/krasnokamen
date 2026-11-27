@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{Hand, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::run_tick;
 use mc_data::Identifier;
+use mc_domain::Hand;
 use mc_inventory::ClickMode;
 
 struct Empty(u32);

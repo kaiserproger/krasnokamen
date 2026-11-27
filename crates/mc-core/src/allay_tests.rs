@@ -1,6 +1,7 @@
 use super::*;
 use crate::bees::tests::{POS, item, joined, mob, place, state};
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::ConnectionId;
 
 #[test]
 fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {

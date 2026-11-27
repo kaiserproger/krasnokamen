@@ -2,9 +2,10 @@
 //! tick thread's authoritative lock set so the edge can fence edge-side
 //! effects before the native gate runs.
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::config::CoreConfig;
 use crate::core::Core;
+use mc_domain::ConnectionId;
 
 fn test_config(dir: std::path::PathBuf, require_plugin_login: bool) -> CoreConfig {
     let mut config = CoreConfig::new(dir, 42);

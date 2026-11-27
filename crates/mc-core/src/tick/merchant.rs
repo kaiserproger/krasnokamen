@@ -1,10 +1,10 @@
 //! Merchant windows are player-owned; the offer and both payment debits are
 //! committed together on the single tick owner, never on an I/O task.
 use super::{TickState, apply_player_effects, within_entity_reach};
-use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::player::PlayerEffects;
 use crate::villager::{VillagerState, trades};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{MenuKind, MerchantMenu};
 use std::sync::Arc;

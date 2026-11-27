@@ -7,12 +7,11 @@ use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::boundary::Hand;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::physical_defense::PhysicalImpact;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 const NATIVE: &str = "__native_physical";
 const ACTIONS: &str = "attacks";

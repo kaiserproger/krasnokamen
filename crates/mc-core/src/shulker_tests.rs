@@ -1,8 +1,8 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerInput};
 use crate::crafter::tests::{fixture, stack};
 use crate::tick::run_tick;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::MenuKind;
 use mc_inventory::shulker::is_item;

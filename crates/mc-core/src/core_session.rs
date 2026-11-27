@@ -1,8 +1,9 @@
 //! Cancellation-safe native admission: one FIFO queue, including reserved Leave.
 use tokio::sync::mpsc::{OwnedPermit, Sender, error::TrySendError};
 
-use crate::boundary::{ClientSettings, ConnectionId, PlayerInput};
+use crate::boundary::{ClientSettings, PlayerInput};
 use crate::config::CoreError;
+use mc_domain::ConnectionId;
 
 /// An admitted edge session. Dropping it queues its native Leave exactly once.
 /// The reserved slot keeps cleanup nonblocking even when ordinary input is full.

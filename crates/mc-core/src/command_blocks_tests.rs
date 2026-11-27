@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
+use mc_domain::ConnectionId;
 
 fn fixture() -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);

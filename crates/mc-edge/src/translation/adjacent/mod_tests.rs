@@ -353,10 +353,11 @@ fn legacy_creative_echo_keeps_unknown_item_but_real_changes_pass() {
 #[test]
 fn legacy_creative_count_edit_preserves_canonical_player_inventory_item() {
     use super::tables::IdMap;
-    use mc_core::boundary::{ConnectionId, PlayerInput};
+    use mc_core::boundary::PlayerInput;
     use mc_core::commands::GameMode;
     use mc_core::player::PlayerState;
     use mc_data::{Identifier, ItemStack};
+    use mc_domain::ConnectionId;
     use mc_inventory::ItemRules;
     use mc_protocol::codec::WriteMc;
 

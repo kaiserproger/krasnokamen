@@ -1,11 +1,12 @@
 //! Difficulty query results are numeric outcomes, not translated feedback.
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerChange, PlayerInput};
 use crate::command_context::{Context, run};
 use crate::command_execution::{CommandResult, execute, supports_store_result};
 use crate::commands::{Command, parse};
 use crate::scoreboard::ScoreboardEvent;
 use crate::survival::Difficulty;
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use mc_nbt::{ListTag, Tag, tag_type};
 
 // Independently established from the official Java 26.1.2 Difficulty IDs.

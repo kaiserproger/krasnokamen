@@ -1,9 +1,9 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn fixture() -> (TickState, EntityId, [f64; 3]) {
     let (mut state, player, mut pos) = flat_player_fixture();
@@ -234,7 +234,7 @@ fn elytra_fast_glide_is_not_corrected_and_shallow_descent_resets_fall_damage() {
         &mut state,
         &[PlayerInput::UseItem {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             yaw: 0.0,
             pitch: 0.0,
             sequence: 1,

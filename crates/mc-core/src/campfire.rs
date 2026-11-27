@@ -8,9 +8,9 @@ use mc_data::recipes::{Recipe, RecipeKind, ingredient_accepts_stack};
 use mc_data::{ItemStack, items::ItemRegistry};
 use mc_nbt::{ListTag, Tag};
 
-use crate::boundary::{BlockPos, Hand, PlayerChange};
+use crate::boundary::{BlockPos, PlayerChange};
 use crate::tick::{TickState, spawn_item_entity};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_inventory::ItemRules;
 
 pub(crate) type Campfires = BTreeMap<(i32, i32, i32), CampfireState>;

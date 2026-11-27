@@ -233,7 +233,7 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
 pub(crate) fn owner_connection(
     state: &TickState,
     id: SettlementId,
-) -> Option<crate::boundary::ConnectionId> {
+) -> Option<mc_domain::ConnectionId> {
     let owner = state.settlements.get(id)?.owner.as_deref()?;
     let uuid = owner.parse::<uuid::Uuid>().ok()?;
     state

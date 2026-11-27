@@ -4,10 +4,11 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::boundary::{DigAction, Hand, PlayerInput, TickOutput};
+use crate::boundary::{PlayerInput, TickOutput};
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::{DigAction, Hand};
 use mc_inventory::ClickMode;
 
 const Y: i32 = 200;

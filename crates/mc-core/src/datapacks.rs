@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use mc_nbt::{ListTag, Tag, tag_type};
 
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::command_feedback::{text, translated};
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 #[path = "datapacks_worldgen.rs"]
 pub(crate) mod worldgen;

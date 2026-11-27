@@ -2,10 +2,10 @@
 //! (WeatheringCopper NEXT/PREVIOUS BiMaps). State changes retain each
 //! block's inventory and all properties; paired copper chests always
 //! share one weathering image.
-use crate::boundary::{BlockPos, Hand};
+use crate::boundary::BlockPos;
+use mc_domain::{Hand, EntityId};
 use crate::tick::TickState;
 use mc_data::Identifier;
-use mc_domain::EntityId;
 use mc_placement::copper::{chest, family, transform};
 use mc_world::BlockStateId;
 

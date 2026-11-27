@@ -1,9 +1,9 @@
 use super::tests::{native_checkpoint, native_state};
 use super::*;
-use crate::boundary::{ChangeSet, ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChangeSet, ChunkPos, PlayerInput};
 use crate::commands::Command;
 use crate::settlements::{commands::SettlementCommand, starter_chest};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::Arc;
 
 const PLAYER: uuid::Uuid = uuid::Uuid::nil();

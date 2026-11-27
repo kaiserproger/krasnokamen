@@ -304,7 +304,7 @@ async fn a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt() {
             mc_core::boundary::ClientSettings {
                 view_distance: 2,
                 locale: "en_us".to_owned(),
-                chat_visibility: mc_core::boundary::ChatVisibility::Full,
+                chat_visibility: mc_domain::ChatVisibility::Full,
             },
         )
         .unwrap();
@@ -317,7 +317,7 @@ async fn a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt() {
                 false,
                 2,
                 "en_us",
-                mc_core::boundary::ChatVisibility::Full,
+                mc_domain::ChatVisibility::Full,
             )
             .await
         })

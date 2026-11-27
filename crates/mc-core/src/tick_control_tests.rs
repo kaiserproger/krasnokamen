@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerInput};
 use crate::command_tick::TickCommand;
 use crate::horde_bench::flat_world;
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 const REQUESTER: ConnectionId = ConnectionId(7);

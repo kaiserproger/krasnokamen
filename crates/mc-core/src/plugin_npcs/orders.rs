@@ -406,7 +406,7 @@ fn order_target(
         } => {
             let id = state
                 .connections
-                .entity_of(crate::boundary::ConnectionId(*target_player))
+                .entity_of(mc_domain::ConnectionId(*target_player))
                 .ok_or(ScriptOperationFailure::NotFound)?;
             let slot = state
                 .entities

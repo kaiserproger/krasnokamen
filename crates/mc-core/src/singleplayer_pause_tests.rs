@@ -1,11 +1,12 @@
 use std::time::Duration;
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::composter::tests::{POS, data_dir, fixture, snapshot_block};
 use crate::core::Core;
 use crate::pause_when_empty_tests::{config, next_tick, runtime, wait_for_pause};
 use crate::tick::run_tick;
 use mc_data::Identifier;
+use mc_domain::ConnectionId;
 use mc_world::ScheduledBlockTick;
 #[test]
 fn singleplayer_pause_stops_world_until_resume() {

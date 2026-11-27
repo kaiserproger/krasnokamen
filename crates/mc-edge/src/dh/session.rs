@@ -6,9 +6,9 @@ use std::sync::{
 };
 use std::time::Instant;
 
-use mc_core::boundary::{ConnectionId, TickOutput};
+use mc_core::boundary::TickOutput;
 use mc_core::dimensions::Dimension;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio::task::{AbortHandle, JoinSet};
 

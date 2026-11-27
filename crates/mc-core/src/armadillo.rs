@@ -2,11 +2,10 @@
 use mc_data::ItemStack;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::Hand;
 use crate::entities::EntityKind;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 const SCARE_DISTANCE: f64 = 7.0;
 const SCARE_DISTANCE_V: f64 = 2.0;

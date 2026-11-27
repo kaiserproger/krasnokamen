@@ -1,8 +1,9 @@
 use super::{flat_player_fixture, join};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::scoreboard::{self, ScoreboardCommand};
 use crate::survival::DamageKind;
 use crate::tick::DamagePiece;
+use mc_domain::ConnectionId;
 
 #[test]
 fn damage_scoreboard_auto_criteria_accept_authoritative_values() {

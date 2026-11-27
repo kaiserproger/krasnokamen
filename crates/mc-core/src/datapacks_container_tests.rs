@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{Hand, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::registry::CoreRegistry;
 use mc_data::Identifier;
+use mc_domain::Hand;
 use mc_world::{BlockPos, Chunk, ChunkGenerator, ChunkPos};
 
 const LOOT: &str = r#"{"type":"minecraft:chest","pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:iron_ingot","modifier":[{"type":"minecraft:set_count","count":7}]}]}]}"#;

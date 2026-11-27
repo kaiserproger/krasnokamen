@@ -1,5 +1,6 @@
 use super::*;
-use mc_core::boundary::{ConnectionId, PlayerInput};
+use mc_core::boundary::PlayerInput;
+use mc_domain::ConnectionId;
 
 fn fixture(require_plugin_login: bool) -> (EdgeServer, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!(

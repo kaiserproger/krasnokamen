@@ -838,7 +838,7 @@ pub(super) fn tell_provenance_wait(
     }
     // `push_to_recipient` drops text for a hidden chat without a trace.
     let Some(connection) = super::super::owner_connection(state, id).filter(|connection| {
-        state.connections.chat_visibility_of(*connection) != crate::boundary::ChatVisibility::Hidden
+        state.connections.chat_visibility_of(*connection) != mc_domain::ChatVisibility::Hidden
     }) else {
         return;
     };

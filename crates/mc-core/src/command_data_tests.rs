@@ -669,9 +669,9 @@ fn map_sound_and_particle_commands_report_delivery() {
             "{command}"
         );
     }
-    assert!(state.outbox[&crate::boundary::ConnectionId(1)].iter().any(|change| matches!(change, crate::boundary::PlayerChange::CommandSound { sound, .. } if sound.as_str() == "minecraft:block.bell.use")));
+    assert!(state.outbox[&mc_domain::ConnectionId(1)].iter().any(|change| matches!(change, crate::boundary::PlayerChange::CommandSound { sound, .. } if sound.as_str() == "minecraft:block.bell.use")));
     assert!(
-        state.outbox[&crate::boundary::ConnectionId(1)]
+        state.outbox[&mc_domain::ConnectionId(1)]
             .iter()
             .any(|change| matches!(
                 change,

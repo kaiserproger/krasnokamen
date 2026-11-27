@@ -102,7 +102,7 @@ pub enum DamageSource {
     },
     /// Explicit `/damage` identity and attribution, captured before merge.
     Command {
-        connection: crate::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
         damage_type: &'static str,
         direct: Option<(EntityId, u32)>,
         cause: Option<(EntityId, u32)>,
@@ -174,7 +174,7 @@ pub enum IntentKind {
     /// lever): the footprint carries the expected and toggled states.
     UseBlock {
         pos: BlockPos,
-        hand: Option<crate::boundary::Hand>,
+        hand: Option<mc_domain::Hand>,
     },
     /// Native animal harvesting; the exact held stack is checked at merge.
     HarvestAnimal {

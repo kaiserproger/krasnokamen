@@ -41,7 +41,8 @@ fn species_id_helpers_match_contract_and_blueprint_names() {
 #[test]
 #[ignore = "release micro: native-100-like 105k mixed mobs"]
 fn native100_like_entity_phase_micro() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     const SIDE: i32 = 384;
     let mobs: usize = std::env::var("N100_MOBS")
         .map(|value| value.parse().expect("N100_MOBS must be an integer"))

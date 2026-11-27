@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::settlements::army::{self, Order};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 
 fn step(state: &mut TickState, count: usize) {
     for _ in 0..count {

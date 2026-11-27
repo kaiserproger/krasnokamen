@@ -470,7 +470,8 @@ fn end_ship_elytra_and_claim_survive_checkpoint_restart() {
 
 #[test]
 fn generated_end_ship_reward_is_obtainable_once() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = fixture_for("minecraft:item_frame", true);
     let mut changes = ChangeSet::default();
     generated::load(&mut state, &[], &mut changes);

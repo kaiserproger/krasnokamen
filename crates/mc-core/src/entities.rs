@@ -30,7 +30,7 @@ pub struct EntitySlot(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityKind {
     Player {
-        connection: crate::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
     },
     Mob {
         /// Protocol entity type id; selects the blueprint.

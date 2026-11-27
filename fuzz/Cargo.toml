@@ -21,13 +21,13 @@ mc-nbt = { path = "../crates/mc-nbt" }
 mc-data = { path = "../crates/mc-data" }
 mc-loader = { path = "../crates/mc-loader" }
 mc-edge = { path = "../crates/mc-edge", optional = true }
-mc-core = { path = "../crates/mc-core", optional = true }
+mc-domain = { path = "../crates/mc-domain", optional = true }
 
 [features]
 # Edge-side targets pull mc-core/wasmtime: rustc needs >10 GB to compile mc-core
 # with coverage instrumentation at opt-level 1+, so they are opt-in and built
 # with `--dev` (see fuzz/README.md).
-edge = ["dep:mc-edge", "dep:mc-core"]
+edge = ["dep:mc-edge", "dep:mc-domain"]
 
 [profile.release]
 debug = "line-tables-only"

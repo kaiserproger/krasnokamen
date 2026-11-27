@@ -3,9 +3,10 @@
 
 use std::collections::HashMap;
 
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::config::CoreConfig;
 use crate::core::Core;
+use mc_domain::ConnectionId;
 
 fn test_config(dir: std::path::PathBuf, outbox_cap: usize) -> CoreConfig {
     let mut config = CoreConfig::new(dir, 42);

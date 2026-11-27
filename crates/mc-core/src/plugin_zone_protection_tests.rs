@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::boundary::{DigAction, Hand};
 use crate::tick::run_tick;
+use mc_domain::{DigAction, Hand};
 
 const VISITOR: ConnectionId = ConnectionId(1);
 const MEMBER: ConnectionId = ConnectionId(2);

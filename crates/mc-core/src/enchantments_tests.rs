@@ -65,7 +65,7 @@ fn unbreaking_existing_player_tool_wear_skips_and_breaks_only_on_admitted_damage
         .max_damage
         .unwrap();
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(4),
+        mc_domain::ConnectionId(4),
         crate::commands::GameMode::Survival,
     );
     let seed = (0..1000)
@@ -112,7 +112,7 @@ fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
             mc_inventory::ClickMode::Throw,
         ] {
             let mut player = crate::player::PlayerState::new(
-                crate::boundary::ConnectionId(4),
+                mc_domain::ConnectionId(4),
                 if creative {
                     crate::commands::GameMode::Creative
                 } else {
@@ -154,7 +154,7 @@ fn vanishing_curse_destroys_inventory_and_full_inventory_cursor_on_death() {
     let mut cursed = enchanted("vanishing_curse", 1);
     cursed.item_id = sword;
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(4),
+        mc_domain::ConnectionId(4),
         crate::commands::GameMode::Survival,
     );
     player.inventory.slots.fill(ItemStack::new(stone, 64));

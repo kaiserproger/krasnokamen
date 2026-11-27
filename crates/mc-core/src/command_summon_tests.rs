@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerChange, PlayerInput};
+use mc_domain::ConnectionId;
 
 #[path = "command_summon_scoreboard_tags_disk_tests.rs"]
 mod scoreboard_tags_disk_tests;

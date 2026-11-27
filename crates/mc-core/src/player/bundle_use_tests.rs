@@ -3,13 +3,13 @@
 //! cannot name the core player). Same three-item catalog as those tests: the
 //! embedded `CoreRegistry::load(None)` catalog has no item facts for bundles,
 //! so `use_item` would refuse them there.
-use crate::boundary::{ConnectionId, Hand};
 use crate::commands::GameMode;
 use crate::player::PlayerState;
 use mc_data::item_components::{ItemFacts, ItemFactsTable};
 use mc_data::items::{ItemRegistry, ItemReport};
 use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::{ItemRules, OFF_HAND, bundle};
 
 const STONE: u32 = 3;

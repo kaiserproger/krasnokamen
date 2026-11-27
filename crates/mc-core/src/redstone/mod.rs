@@ -47,7 +47,7 @@ pub(crate) struct RedstoneState {
     signal_recomputes: usize,
     settled_wires: HashSet<BlockPos>,
     entity_query: entity_query::EntityQuery,
-    event_viewers: Vec<crate::boundary::ConnectionId>,
+    event_viewers: Vec<mc_domain::ConnectionId>,
     piston_entities: Vec<crate::entities::EntitySlot>,
 }
 

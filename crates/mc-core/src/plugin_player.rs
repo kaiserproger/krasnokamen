@@ -12,9 +12,9 @@ use mc_script::{
 use mc_world::BlockPos;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_inventory::ClickMode;
 
 const ZONES: &str = "player-zones";

@@ -1,10 +1,10 @@
 //! Cross-world custody moves occur at the shared commit boundary and WAL batch.
 use super::Dimension;
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, TickOutput};
+use crate::boundary::{ChangeSet, PlayerChange, TickOutput};
 use crate::commands::{Command, Destination, Target};
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

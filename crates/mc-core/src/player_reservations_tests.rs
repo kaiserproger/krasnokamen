@@ -11,11 +11,11 @@ use mc_script::{
 };
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::commands::GameMode;
 use crate::plugin_inventories as inventories;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{ItemRules, MenuKind};
 

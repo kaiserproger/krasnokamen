@@ -1,7 +1,8 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::effects::{ActiveEffect, EffectId};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 
 fn movement(position: [f64; 3]) -> PlayerInput {
     PlayerInput::Move {
@@ -546,7 +547,7 @@ fn gliding_firework_use_boosts_flight_speed() {
         &mut state,
         &[PlayerInput::UseItem {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             yaw: 0.0,
             pitch: 0.0,
             sequence: 1,

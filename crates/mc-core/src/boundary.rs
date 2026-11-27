@@ -12,7 +12,7 @@ use std::sync::Arc;
 mod views;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_stack::ItemStack;
-use mc_domain::EntityId;
+use mc_domain::{ChatVisibility, ConnectionId, DigAction, EntityId, Hand, SwingKind};
 use mc_inventory::ClickMode;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
@@ -21,25 +21,6 @@ pub use views::EntityViews;
 
 /// Simulation tick number. Tick `t` output describes the state after tick `t`.
 pub type Tick = u64;
-
-/// Player identity for the lifetime of one connection, assigned by the edge.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-pub struct ConnectionId(pub u64);
-
-/// The client's chat setting: which text the server may send it (vanilla
-/// `ChatVisiblity`). `System` is "commands only": no player chat, but command
-/// feedback and other system messages; `Hidden` receives neither.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
-pub enum ChatVisibility {
-    #[default]
-    Full,
-    System,
-    Hidden,
-}
 
 /// The client settings admitted together with a player's Join.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -468,19 +449,6 @@ impl PlayerInput {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Hand {
-    Main,
-    Off,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum DigAction {
-    Start,
-    Cancel,
-    Finish,
-}
-
 /// Inputs accepted for one tick, in arrival order per connection.
 #[derive(Debug, Default)]
 pub struct TickInput {
@@ -644,7 +612,7 @@ pub struct BattleCounts {
 
 /// Immutable world state after a tick. Shared read-only; never mutated after
 /// publication. A reader may hold it for as long as it likes: the core never
-/// reuses its storage (copy-on-write pages, see ADR 0013 "Data layout").
+/// reuses its storage (copy-on-write pages, see `docs/architecture/state-ownership.md` rule 3).
 ///
 /// `Clone` exists for one fallback only: a tick snapshot that a second holder
 /// already shares is rebuilt instead of mutated
@@ -793,13 +761,6 @@ pub struct ChangeSet {
     pub entity_events: Vec<EntityEvent>,
     /// Blasts committed this tick (the edge sends the explode packet).
     pub explosions: Vec<ExplosionEvent>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SwingKind {
-    None,
-    Whack,
-    Stab,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

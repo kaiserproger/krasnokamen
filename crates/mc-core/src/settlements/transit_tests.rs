@@ -1,8 +1,9 @@
 //! Migration transit and emigration on real flat terrain with a real player's
 //! simulation area: edge geometry, the leave/join halves, outside removal.
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::settlements::households::{HouseholdOrigin, form};
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 const ANCHOR: [i32; 3] = [8, 64, 8];

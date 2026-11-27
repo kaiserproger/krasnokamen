@@ -895,7 +895,7 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     state.outbox.clear();
     let entity = state
         .connections
-        .entity_of(crate::boundary::ConnectionId(1))
+        .entity_of(mc_domain::ConnectionId(1))
         .unwrap();
     let bone = state
         .registry
@@ -941,7 +941,7 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
         diamond
     );
     assert_eq!(state.players[&entity].inventory_menu.grid[0].item_id, bone);
-    let player = crate::boundary::ConnectionId(1);
+    let player = mc_domain::ConnectionId(1);
     let sent = state.outbox.get(&player).cloned().unwrap_or_default();
     let announced = sent
         .iter()

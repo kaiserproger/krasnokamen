@@ -721,7 +721,7 @@ fn pickup_matches_exhaustive_player_priority_after_swap_remove() {
         crate::tick::run_tick(
             &mut state,
             &[crate::boundary::PlayerInput::Join {
-                connection: crate::boundary::ConnectionId(2),
+                connection: mc_domain::ConnectionId(2),
                 uuid: Uuid::from_u128(200),
                 name: "h02-second".into(),
                 permission_level: 0,
@@ -729,7 +729,7 @@ fn pickup_matches_exhaustive_player_priority_after_swap_remove() {
         );
         let second = state
             .connections
-            .entity_of(crate::boundary::ConnectionId(2))
+            .entity_of(mc_domain::ConnectionId(2))
             .unwrap();
         state
             .entities

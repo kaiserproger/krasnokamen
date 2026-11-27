@@ -1,8 +1,8 @@
-use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, DigAction, EntityId, Hand};
 
 const POS: BlockPos = BlockPos {
     x: 1,

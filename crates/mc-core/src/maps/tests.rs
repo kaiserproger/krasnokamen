@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ChangeSet, Hand, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::dimensions::Dimension;
 use crate::maps::{Maps, SavedMap};
+use mc_domain::Hand;
 use mc_inventory::cartography::map_id;
 
 #[test]

@@ -201,7 +201,7 @@ fn waterlogged_bucket_fill_drain_and_break_preserve_one_source_and_one_drop() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: pos,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 4,
         }],
     );
@@ -555,7 +555,7 @@ fn double_plant_replaces_clicked_vegetation_and_upper_break_drops_one_lower_loot
                 y: pos.y + 1,
                 ..pos
             },
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 2,
         }],
     );

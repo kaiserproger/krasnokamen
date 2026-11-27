@@ -1,7 +1,8 @@
 use super::*;
 use crate::battle::combat::{Action, Weapon};
 use crate::battle::staging::{self, BattleCommand};
-use crate::boundary::{ConnectionId, EntityEvent, Hand, PlayerInput};
+use crate::boundary::{EntityEvent, PlayerInput};
+use mc_domain::{Hand, ConnectionId};
 use crate::tick::run_tick;
 use mc_data::entity_data_value::EntityDataValue;
 

@@ -99,9 +99,9 @@ fn weapon_cycles_emit_full_duration_and_only_strike_on_contact_tick() {
             entity: actor,
             hand: Hand::Main,
             animation: if weapon == Weapon::Spear {
-                crate::boundary::SwingKind::Stab
+                mc_domain::SwingKind::Stab
             } else {
-                crate::boundary::SwingKind::Whack
+                mc_domain::SwingKind::Whack
             },
             duration_ticks: i32::from(weapon.cycle())
         }));
@@ -180,7 +180,7 @@ fn shield_window_is_inclusive_and_parry_staggers_without_damage() {
             assert!(out.events.contains(&EntityEvent::Swing {
                 entity: actor,
                 hand: Hand::Main,
-                animation: crate::boundary::SwingKind::None,
+                animation: mc_domain::SwingKind::None,
                 duration_ticks: 18
             }));
             assert_eq!(

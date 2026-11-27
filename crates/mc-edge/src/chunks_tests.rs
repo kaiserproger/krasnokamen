@@ -102,11 +102,11 @@ fn biome_registry_probe_orders_names() {
 // pins positions, while the zero-chunk-packet asserts prove no wire-visible
 // content moved under the held view.)
 
-use mc_core::boundary::{ConnectionId, PlayerInput};
+use mc_core::boundary::PlayerInput;
 use mc_core::config::CoreConfig;
 use mc_core::tick::{TickState, run_tick};
 use mc_core::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_world::{BlockStateId, ChunkGenerator};
 
 struct FlatStone {

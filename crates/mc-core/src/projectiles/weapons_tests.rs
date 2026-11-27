@@ -536,8 +536,9 @@ fn zero_creative_spectator_nondurable_and_unbreaking_wear_do_not_queue_advanceme
 
 #[test]
 fn ground_rocket_block_use_launches_from_face_with_held_components() {
-    use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
     use crate::tick::run_tick;
+    use mc_domain::ConnectionId;
 
     for hand in [Hand::Main, Hand::Off] {
         for creative in [false, true] {
@@ -605,8 +606,9 @@ fn ground_rocket_block_use_launches_from_face_with_held_components() {
 
 #[test]
 fn ground_rocket_block_use_respects_reserved_custody() {
-    use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
     use crate::tick::run_tick;
+    use mc_domain::ConnectionId;
 
     let (mut state, actor, centre) = super::super::flight_tests::setup();
     let rocket = stack(&state, "firework_rocket", 1);

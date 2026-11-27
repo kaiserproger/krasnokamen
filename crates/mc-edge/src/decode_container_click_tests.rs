@@ -1,7 +1,7 @@
 //! Native click decoding, current-custody admission and full-image resync.
 use super::{DecodeState, decode_play_frame_for};
 use crate::plan::{ViewerState, plan_player_changes};
-use mc_core::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
+use mc_core::boundary::{BlockPos, PlayerChange, PlayerInput};
 use mc_core::commands::GameMode;
 use mc_core::config::CoreConfig;
 use mc_core::player::PlayerState;
@@ -11,7 +11,7 @@ use mc_core::villager::{VillagerProfession, VillagerTradeOffer};
 use mc_core::world::ChunkWorld;
 use mc_data::recipes::CookingKind;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_inventory::{MenuKind, SlotRef};
 use mc_protocol::frame::Compression;
 use mc_protocol::packets::Packet;

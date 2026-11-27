@@ -292,7 +292,7 @@ impl LodConnection {
     pub(crate) fn request(
         &mut self,
         server: &Arc<EdgeServer>,
-        connection: mc_core::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
         payload: &[u8],
     ) -> anyhow::Result<()> {
         if server.hub.session_locked(connection) {
