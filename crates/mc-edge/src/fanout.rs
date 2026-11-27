@@ -331,35 +331,7 @@ pub(crate) fn publish_with_registries_chain<'a>(
             viewer.chunk_unsent(pos);
         }
     }
-    // Cache misses had no encoded bytes during planning. Apply the actual
-    // sizes now, admitting one oversize world frame (or chunk plus markers)
-    // for progress, but no later world dependency after the first deferral.
-    for ((connection, packets), viewer) in planned.iter_mut().zip(viewers.iter_mut()) {
-        debug_assert_eq!(*connection, viewer.connection);
-        let mut bytes = viewer.world_bytes;
-        let mut first_chunk = true;
-        let mut deferred = false;
-        packets.retain(|packet| {
-            if packet.reliable {
-                return true;
-            }
-            if bytes == 0 {
-                deferred = true;
-                return false;
-            }
-            let framing = if packet.chunk.is_some() && first_chunk {
-                first_chunk = false;
-                7
-            } else {
-                0
-            };
-            bytes = bytes.saturating_sub(packet.data.len() + framing);
-            true
-        });
-        if deferred {
-            viewer.world_frame_unsent();
-        }
-    }
+    charge_planned_bytes(&mut planned, &mut viewers);
     if let (Some(start), Some(index_start), Some(plan_clock), Some(fill_start), Some(fill_time)) =
         (probe, index_start, plan_clock, fill_start, fill_time)
     {
@@ -480,6 +452,41 @@ pub fn reliable_overflow(packets: &[AddressedPacket]) -> Vec<ConnectionId> {
         .filter(|(_, count)| *count > RELIABLE_QUEUE_BOUND)
         .map(|(connection, _)| connection)
         .collect()
+}
+
+/// Cache misses had no encoded bytes during planning. Apply the actual sizes
+/// now, admitting one oversize world frame (or chunk plus markers) for
+/// progress, but no later world dependency after the first deferral.
+fn charge_planned_bytes(
+    planned: &mut [(ConnectionId, Vec<PlannedPacket>)],
+    viewers: &mut [&mut ViewerState],
+) {
+    for ((connection, packets), viewer) in planned.iter_mut().zip(viewers.iter_mut()) {
+        debug_assert_eq!(*connection, viewer.connection);
+        let mut bytes = viewer.world_bytes;
+        let mut first_chunk = true;
+        let mut deferred = false;
+        packets.retain(|packet| {
+            if packet.reliable {
+                return true;
+            }
+            if bytes == 0 {
+                deferred = true;
+                return false;
+            }
+            let framing = if packet.chunk.is_some() && first_chunk {
+                first_chunk = false;
+                7
+            } else {
+                0
+            };
+            bytes = bytes.saturating_sub(packet.data.len() + framing);
+            true
+        });
+        if deferred {
+            viewer.world_frame_unsent();
+        }
+    }
 }
 
 #[cfg(test)]
