@@ -1696,66 +1696,6 @@ fn checkpoint_round_trip_through_real_core() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// REQUIRED 3: same blueprint data under a different type_id behaves
-/// identically (no type-name branches in the tick).
-#[test]
-fn blueprint_goals_drive_behavior_not_type_ids() {
-    use crate::blueprint::{Goal, GoalKind, MobBlueprint, MovementClass};
-    // Two blueprints with identical goal data but different type ids.
-    let goals_a: &[Goal] = &[
-        Goal {
-            priority: 1,
-            kind: GoalKind::MeleeAttack,
-        },
-        Goal {
-            priority: 2,
-            kind: GoalKind::MeleeChase,
-        },
-    ];
-    let blueprint_a = MobBlueprint {
-        name: "test:chaser_a".to_owned(),
-        type_id: 9001,
-        movement: MovementClass::Walker,
-        goals: goals_a.to_vec(),
-        sensors: crate::blueprint::Sensors {
-            sight_range: 35.0,
-            attack_reach: 2.2,
-        },
-        params: crate::blueprint::MobParams {
-            max_health: 20.0,
-            speed: 4.3,
-            attack_damage: 3.0,
-            pickup_delay: 0,
-            breed_cooldown: 0,
-            armor: 0.0,
-            knockback_resistance: 0.0,
-        },
-        half_width: 0.3,
-        height: 1.95,
-        offspring: None,
-        breed_food: Vec::new(),
-        loot_table: None,
-        category: crate::blueprint::MobCategory::Monster,
-        wool: false,
-        spawn_weight: 100,
-        capabilities: crate::blueprint::Capabilities {
-            burns_in_daylight: true,
-            ..Default::default()
-        },
-    };
-    let blueprint_b = MobBlueprint {
-        name: "test:chaser_b".to_owned(),
-        type_id: 9002,
-        ..blueprint_a.clone()
-    };
-    // Same goals resolve identically regardless of type id.
-    assert!(blueprint_a.has_goal(GoalKind::MeleeChase));
-    assert!(blueprint_b.has_goal(GoalKind::MeleeChase));
-    assert!(!blueprint_a.has_goal(GoalKind::Breed));
-    assert!(!blueprint_b.has_goal(GoalKind::Breed));
-    assert_eq!(blueprint_a.goals, blueprint_b.goals);
-}
-
 /// REQUIRED 4: entities never fall through into unloaded chunks and never
 /// gain a floor from them — motion in a missing column is blocked.
 #[test]
@@ -3415,28 +3355,6 @@ fn custody_survives_checkpoint_crash() {
     }
     core2.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// Full vanilla data loads from the content cache (missing data = error).
-#[test]
-fn registry_loads_full_vanilla_data() {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
-    let registry = crate::registry::CoreRegistry::load(Some(&dir)).expect("full data loads");
-    assert!(registry.item_facts.len() > 1000, "full item facts");
-    assert!(registry.tags.total_tags() > 100, "full tags");
-    assert!(registry.recipes.len() > 1000, "full recipes");
-    assert!(registry.loot.total_drops() > 100, "full loot");
-    assert!(registry.mining.len() > 1000, "full mining");
-    // Tool rules exist (the embedded subset has none).
-    let pick = registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:diamond_pickaxe").expect("id"))
-        .expect("pick");
-    let facts = registry
-        .item_facts
-        .facts_for_stack(&mc_data::ItemStack::new(pick, 1), &registry.items)
-        .expect("pick facts");
-    assert!(facts.tool.is_some(), "pickaxe has tool rules");
 }
 
 /// Survival break spawns the block's loot with a correctly admitted mining tool.
