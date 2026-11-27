@@ -119,10 +119,12 @@ every profile and what it needs.
    expectation or the fixture to make it pass. **Never widen a tolerance,
    bound, timeout or retry count** to make a mismatch go away; a difference
    beyond the bound is a bug.
-4. **Intended differences from vanilla are named per case with a reason**
-   (`known_divergence` in the scenario, [decision P7](DECISIONS.md#product)).
-   The marker fails the gate once Krasnokamen matches; remove it then. An
-   unnamed difference is a bug.
+4. **Differences from vanilla are named per case with a reason** in
+   [`known-diffs.json`](tools/harness/quirk_parity/known-diffs.json), including
+   the exact mismatch IDs ([quirk parity](docs/QUIRK_PARITY.md#known-differences),
+   [decision P7](DECISIONS.md#product)). A listed mismatch that no longer occurs
+   fails the gate; remove it when the difference closes. An unlisted difference
+   is a failure.
 5. **Three changes without a gained case: stop and ask.** When three edits in
    a row leave the failing case as it was, stop editing, write down the
    remaining mismatch and the premise you worked from, and ask the maintainer
