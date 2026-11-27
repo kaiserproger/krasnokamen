@@ -1,0 +1,11 @@
+diff --git a/crates/mc-core/src/battle/steering.rs b/crates/mc-core/src/battle/steering.rs
+--- a/crates/mc-core/src/battle/steering.rs
++++ b/crates/mc-core/src/battle/steering.rs
+@@ -471,6 +471,7 @@
+         .formation
+         .neighbours
+         .rebuild(&battle.formation.members);
++    record_grid_overflow(&mut battle.formation);
+     let formation = &battle.formation;
+     let drives = &mut battle.columns.drive[..formation.members.len()];
+     let sample = |(chunk_index, chunk): (usize, &mut [[f64; 3]])| {

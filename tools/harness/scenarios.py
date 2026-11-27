@@ -1329,15 +1329,20 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one spectator and one respawn; the client's camera entity id is the assertion, not a pixel view",
     ),
     "battle-crash-handoff": _entry(
-        id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
+        id="battle-crash-handoff",
+        summary="The battle runner keeps the crash handoff for pre-stage, staged and exporter-first SIGKILLs",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-crash-handoff", requires=("xvfb",),
         sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py",
                  "tools/harness/wal_frame.py"),
-        fixture="two runner sessions (SIGKILL before battle setup; SIGKILL staged before start), real Horizon clients",
+        fixture="three runner sessions (SIGKILL before battle setup; SIGKILL staged before start; a stalled server "
+                "whose exporter times out first and is SIGKILLed inside the runner's crash decision), real Horizon clients",
         proves="the runner exits 0 with crash-handoff.json, the crash copy and a clean WAL archive; recovery starts "
-               "from them, the clients rejoin, the staged battle resumes with both roles and strikes",
-        limits="the runner race is timing-dependent: one green run does not prove every interleaving",
+               "from them, the clients rejoin, the staged battle resumes with both roles and strikes; on the "
+               "stalled cut the exporter's own deadline passed before the SIGKILL, so a tree that samples "
+               "`poll()` instead of waiting loses the handoff deterministically",
+        limits="the two plain-SIGKILL cuts keep the runner race timing-dependent: one green run does not prove "
+               "every interleaving; the stalled cut is deterministic",
     ),
     "transit-crash": _entry(
         id="transit-crash", summary="Migration transit custody survives SIGKILL at departure, in transit and arrival",
