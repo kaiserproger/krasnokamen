@@ -11,7 +11,7 @@ Design choices are in [DECISIONS.md](../DECISIONS.md), mistakes already made in
 ## Which rule wins
 
 - The latest explicit owner instruction. `Stop`, `стоп`, `забей`, `поправка` replace the task at once, after you safely inspect your running jobs and worktrees; `Retry`/`продолжай` means revalidate state, then continue. (contract)
-- Then this file and PITFALLS, then the page that owns the area, then prompts, skills, notes and memory. Code, tests and observed runtime beat any document: fix the document.
+- Then this file and PITFALLS, then [DECISIONS](../DECISIONS.md) and the page that owns the area, then prompts, skills, notes and memory. Code, tests and observed runtime beat any document: fix the document.
 - When goals conflict, in this order: do no harm to the owner, his machine or his live players; never claim more than you observed; follow the owner; make it work for a real player; write clean code; be fast.
 
 ## Work
@@ -45,7 +45,7 @@ Design choices are in [DECISIONS.md](../DECISIONS.md), mistakes already made in
 
 ## Code
 
-- Each fact has one owner and each problem is fixed where it starts: no duplicate paths, shims, aliases or legacy branches; migrate the callers and delete the old.
+- Each fact has one owner and each problem is fixed where it starts: no duplicate paths, shims, aliases or legacy branches; migrate the callers and delete the old ([DECISIONS P6](../DECISIONS.md#product)).
 - Never mask a cause with a fallback, retry, default or guard; no sleeps or polling in place of a real signal, in code, tests, harness or agent work: launch a job once and consume its completion once.
 - Nothing speculative or dead: no unused abstractions, flags, stubs, placeholders or fake success.
 - Vanilla facts come from local jars, data, probes or minecraft.wiki, never from memory ([DECISIONS C1–C3](../DECISIONS.md#content-and-protocol)).

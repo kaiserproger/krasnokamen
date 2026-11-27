@@ -163,7 +163,7 @@ Mistakes already made, with the check for each, are in
 | A bug fix | the test or scenario the row's `regression` names ([ledger](docs/bugs/README.md#filing-a-bug)) | `python3 -m tools.harness ledger show <ID>` |
 | Logic inside one module | a focused sibling `<module>_tests.rs` beside the module | `python3 -m tools.harness run test -p <crate> --lib <filter>` |
 | Saves, WAL and recovery | `crates/mc-core` tests through checkpoint, action and restart with replay ([persistence](docs/architecture/persistence.md)) | same |
-| Packets and codecs | `crates/mc-protocol/src/*_tests.rs` from wire-probe bytes; version steps in `crates/mc-edge/src/translation/adjacent/*_tests.rs` | same |
+| Packets and codecs | `crates/mc-protocol/src/**/*_tests.rs` from wire-probe bytes; version steps in `crates/mc-edge/src/translation/adjacent/*_tests.rs` | same |
 | World import and export | `crates/mc-world-conversion/src/*_tests.rs`, on worlds vanilla wrote | same |
 | Content data (recipes, loot) | `crates/mc-data/tests/` | same |
 | Plugin host and package contract | `crates/mc-plugin-host/tests/` | same |
