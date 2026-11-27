@@ -128,27 +128,15 @@ a different name.
 The 8 GiB shape also needs the one queue between the simulation and the network
 layer bounded, because the tick never waits for a slow edge:
 `[data] outbox_queue_bytes` (256 MiB by default) caps the queued reliable
-backlog and warns once per crossing at 8 MiB (re-armed only after the queue falls
-below 4 MiB), naming the queued bytes. Two exceptions may exceed the cap: one
-batch larger than the whole cap is admitted alone into an empty queue, and a
-halt's terminal disconnect batch is admitted past it so the reason can still be
-delivered. A batch that no longer fits under the cap, or a backlog that consumes
-no batch for 10 s, stops the server fail-closed (no publish, no checkpoint), and
-the process exits after the journal's final flush even when the edge pump is the
-wedged part: the edge watches the core's own closing signal, waits up to 5 s for
-connections to close (the pump's chance to route the terminal batch), then kicks
-every remaining connection with the core's halt reason itself. The reason is best
-effort: a connection whose queue is full, or whose kick times out behind a
-registry lock the wedged pump holds, gets no reason; every connection still
-closes when the process exits. Those waits run on the edge runtime; when no
-runtime worker is free to finish them (a single-CPU host with the pump stuck), an
-OS watchdog thread ends the process with status 1 once 60 s pass after the halt,
-after the journal's final flush. The next start replays the retained WAL
+backlog and warns once per crossing at 8 MiB, naming the queued bytes. A batch
+that no longer fits under the cap, or a backlog that consumes no batch for 10 s,
+stops the server fail-closed (no publish, no checkpoint); connections are kicked
+with the halt reason where possible, the process exits after the journal's final
+flush (an OS watchdog ends it 60 s after the halt if the edge is wedged), and the
+next start replays the retained WAL
 ([persistence](architecture/persistence.md#hazards-and-defense-layers)). Read the
-warning's byte count before raising the cap. The queued and peak byte counters
-exist on the core handle (`Core::outbox_queued_bytes`/`outbox_peak_bytes`) and in
-the tick's own logs, not on the dashboard; the dashboard's `reliable_drops` counts
-a different thing — frames dropped by one connection's edge-side reliable queue,
+warning's byte count before raising the cap. The dashboard's `reliable_drops`
+counts something else: frames dropped by one connection's own reliable queue,
 which is where an individual slow client shows up.
 
 ### Singleplayer with software Vulkan
@@ -567,32 +555,15 @@ rules (comments, `=`/`:`/whitespace separators, continuations, `\uXXXX`, Latin-1
 bytes, last duplicate wins). Every unsupported key warns by name without printing
 its value; invalid supported values fail startup.
 
-| Vanilla property | Krasnokamen TOML key |
-| --- | --- |
-| `motd` | `server.motd` |
-| `max-players` | `server.max_players` |
-| `view-distance`, `simulation-distance` | `server.view_distance`, `server.simulation_distance` |
-| `accepts-transfers`, `pause-when-empty-seconds` | `server.accepts_transfers`, `server.pause_when_empty_seconds` |
-| `white-list` | `server.whitelist` (initial persisted policy) |
-| `enable-command-block` | `server.enable_command_block` |
-| `spawn-protection` | `server.spawn_protection` |
-| `server-ip`, `server-port` | `network.bind_address`, `network.port` |
-| `online-mode` | `auth.online_mode` |
-| `level-name`, `level-seed` | `data.world_dir`, `data.seed` |
-| `enable-rcon`, `rcon.port`, `rcon.password` | `rcon.enabled`, `rcon.port`, `rcon.password` |
-| `enable-query`, `query.port` | `query.enabled`, `query.port` |
-| `resource-pack`, `resource-pack-sha1` | `resource_pack.url`, `resource_pack.sha1` |
-| `require-resource-pack`, `resource-pack-prompt`, `resource-pack-id` | `resource_pack.required`, `resource_pack.prompt`, `resource_pack.id` |
-
-An empty `server-ip` means `0.0.0.0`. Non-numeric seeds use Java's UTF-16 string
-hash; an empty seed keeps Krasnokamen's default rather than a random one. Importing
+The full key-by-key mapping, including the keys that are ignored or mean
+something different here, is the
+[`server.properties` mapping](MIGRATION.md#serverproperties-mapping). An empty
+`server-ip` means `0.0.0.0`. Non-numeric seeds use Java's UTF-16 string hash; an
+empty seed keeps Krasnokamen's default rather than a random one. Importing
 `level-name` does **not** import Anvil data: convert the stopped world
-explicitly ([MIGRATION.md](MIGRATION.md)).
-
-The vanilla `gamemode` property has no TOML key. New players join in the world's
-default game mode: a converted world's `level.dat` `Data.GameType`, changed at
-runtime by `/defaultgamemode` and persisted with the world (see the `gamemode`
-row in [MIGRATION.md](MIGRATION.md)).
+explicitly ([MIGRATION.md](MIGRATION.md)). The vanilla `gamemode` property has
+no TOML key: new players join in the world's default game mode (a converted
+world's `level.dat` `GameType`, changed by `/defaultgamemode`).
 
 ## Administration
 
@@ -950,11 +921,6 @@ world or a copy restored from backup: several of its effects stay after
   Restore a consistent native backup, not an Anvil export. `battle reset` removes
   the durable battle history, tagged units and ticket together on the next
   published tick; it does not restore the other world/player settings above.
-- Upgrading past the battle WAL-patch format (fighter fight-loop clock): a world
-  whose battle history an older binary wrote after its first battle tick refuses
-  startup with the new binary. Before swapping binaries, run `battle reset`, wait
-  one tick, then `save-all flush` with the old binary, or restore a backup the
-  old binary saved without a battle.
 - Known limit: foot units visibly jitter in dense combat; battle movement remains **not-ready** ([BATTLE-FOOT-STEERING-REVERSALS](bugs/rows/BATTLE-FOOT-STEERING-REVERSALS.toml)).
 
 ### Block log and rollback
@@ -1008,35 +974,53 @@ startup. Death-grave custody can be verified offline with
 
 ## World operations and backup
 
-### Settlement schema upgrades
+### Changing the binary
 
-Before upgrading to the owner-approved daughter-founding schema, retain a
-complete pre-upgrade world backup. Old checkpoint and WAL settlement rows
-without `founding` decode as `None`; the new binary writes the new field.
-After those writes, do not open that world with an older binary whose strict
-settlement schema rejects the field. Roll back the binary **and its matching
-pre-upgrade world backup**, not just the executable. The founding schema and
-atomic handover contract are in
-[settlement architecture](architecture/settlements.md#native-daughter-founding).
+Native formats have no compatibility read path and no downgrade path
+([decision W4](../DECISIONS.md#persistence)): a binary refuses saved state it
+cannot read before it publishes anything, and never converts it silently.
 
-### Structure ledger format
+1. Back up the whole world directory (`backup`) and keep the backup with the
+   binary that wrote it.
+2. Stop cleanly: `save-all flush`, then `stop`, and wait for the final
+   checkpoint (the console prints its tick). Most format fences only bite on an
+   unclean WAL tail.
+3. Start the new binary on a copy first. A refusal names what it cannot read:
+   restore the matching backup with the matching binary instead of editing
+   files. Never delete, rename or move journal files to get past a refusal. A
+   journal batch at or below a published checkpoint is never replayed, so
+   leaving it is harmless, and the refusal is what keeps a tail out of a world
+   it does not belong to.
 
-The structure ledger (settlement construction and plugin builds) is stored as
-one key per structure, survey and worksite, not as one image
-([layout](architecture/persistence.md#structure-ledger-keys)). There is no
-converter between the two formats; each binary refuses the other's ledger at
-startup before it publishes anything. Opening the native database may still
-update its file bookkeeping, so try a binary switch on a copy.
+Never open a world with an older binary than the one that last wrote it:
+manifests and WAL records are forward-only, and an older reader refuses the
+tail or drops newer fields (an older binary that checkpoints a loaded chunk
+loses cow, pig, chicken and zombie-nautilus variants silently). The only
+conversions are named stopped-world commands:
+[`world upgrade-worldgen`](#native-worlds-and-anvil-interchange) and
+[`world upgrade-game-clock`](architecture/persistence.md#explicit-conversion-of-legacy-frozen-clocks).
 
-- A world where no structure, survey or worksite was ever written (no
-  settlement construction, no plugin builds) upgrades in place.
-- Any other world cannot be upgraded: every saved world with settlement
-  construction or plugin builds refuses on the new binary, not only the test
-  deployment. Keep it on the old binary, or reset the world before switching.
-  Dropping only the ledger is not an option: committed
-  structures back settlement buildings, and an Anvil export drops native
-  settlements as well.
-- Back up before switching binaries, as always.
+Fences this build enforces, and what to do:
+
+| Saved state | This build | Do |
+|---|---|---|
+| A store from RC5 or older (header without `store_uuid`) | refuses it: "native store id missing" | Start the old binary, `world export-anvil`, then import the export into a fresh world with this build ([MIGRATION](MIGRATION.md#5-convert-the-stopped-world)). Native-only state (settlements, plugin rows, entity payloads, the block log, chunk overlays never exported) is lost; keep the original until the import is checked in play. |
+| A WAL tail in frame format 1 or 2 over a compatible store | reads the checkpoint, refuses the tail | With the old binary and the same content cache and packs: `save-all flush`, `stop`. The checkpoint tick must be at least the last batch tick (`ls journal/batch-*-*.bin`, second number); repeat until it is, then start this build. |
+| The old scalar `rider` in a WAL tail, or `krasnokamen:Rider` in a checkpoint | refuses both, the checkpoint key even after a clean stop | Stop cleanly before deploying and test opening a copy first. |
+| A structure ledger stored as one image | refuses it | A world that never wrote a structure, survey or worksite upgrades in place; any other stays on the old binary or is reset (an Anvil export drops settlements too). |
+| Battle history written after the first battle tick, before the fight-loop clock | refuses it | With the old binary: `battle reset`, wait one tick, `save-all flush`; or restore a backup saved without a battle. |
+| A world saved without `KrasnokamenWorldgenInputs`, with an unclean WAL | refuses: "missing immutable baseline" | Start the previous binary once and stop it cleanly (its final checkpoint stores the chunks), then upgrade. |
+| Settlement rows with `founding` (written by this build) | — | Older binaries refuse them: roll back the binary together with its pre-upgrade backup ([daughter founding](architecture/settlements.md#native-daughter-founding)). |
+
+The worldgen identity is written only by a checkpoint, so a crash after changing
+packs or the content cache, before the next checkpoint, can refuse the next
+start even with the new packs: put the previous packs and cache back, start,
+stop cleanly, then change them again. Each dimension holds at most 1024
+generated baselines waiting for the native writer; a replay that must
+regenerate more chunks with WAL edits and no stored baseline (practically only
+a legacy builtin-generator world with a long unclean WAL) refuses with
+"required generated baseline capacity exhausted" on every start. Recover the
+same way: start the previous binary and stop it cleanly.
 
 ### Native worlds and Anvil interchange
 
@@ -1061,77 +1045,6 @@ happened, so an empty queue does not close this window. Second, the journal dire
 fsynced only every `journal_fsync_every_batches` published batches (10 by
 default), so a host power loss can also drop up to that many published batches.
 A clean stop flushes both.
-
-When upgrading from a build with the old scalar rider format, stop it cleanly
-before deploying: an old unclean WAL tail containing `rider` is refused at
-startup. A checkpoint containing the old `krasnokamen:Rider` key is also
-refused, even after a clean stop. Back up the world and test opening a copy with
-the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
-
-### Upgrading a world whose WAL this build cannot read
-
-A journal frame names the store, the branch of that store and the block palette
-that wrote it (format 3). This build refuses format-1 and format-2 frames and
-refuses to replay a tail from another store, another copy of the store or
-another palette, so an upgrade from a build that wrote an older format needs one
-of the two procedures below. **There is no dual reader and no serving fallback,
-and no procedure asks you to delete or move the `journal/` directory**: a journal
-file at or below a published checkpoint is never replayed, so leaving it in
-place is harmless. The checkpoint marker of a world that was never restored
-keeps its layout, so a clean stop is all the upgrade needs.
-
-**A release whose native header predates `store_uuid` (RC5 and older).** This
-build refuses that store outright ("native store id missing"), before any WAL
-frame is decoded, so no pin swap reads the world at all. Recover with the old
-build: start the old pin on the world, let it settle, then export the world with
-its `world export-anvil` and import the result into a fresh world with this
-build. Native-only state — checkpointed chunk overlays that were never exported,
-settlement and plugin rows, entity payloads, the block log — is **lost** in that
-conversion; the export/import procedure and its losses are described in
-[MIGRATION.md](MIGRATION.md) (see "Exporting and importing a world"). Keep the
-original directory until the imported world has been checked in play.
-
-**A compatible native pin that writes WAL format 1 or 2** (same native schema and
-header identity as this build). The checkpoint is readable, only the tail is
-not, so:
-
-1. Start the **same old binary** with the **same content cache and packs** the
-   world was last run with, and stop it with `save-all flush` followed by
-   `stop`; wait for the process to exit and for its final checkpoint to be
-   published (the console prints the checkpoint tick).
-2. Confirm that checkpoint tick is at least the highest published batch tick
-   (`ls journal/batch-*-*.bin`, the second number of the last name). If it is
-   lower — a refused final checkpoint — start the old binary again and stop it
-   again; a world that cannot publish a covering checkpoint must not be upgraded.
-3. Start this build. Batches below the covering checkpoint are ignored and any
-   older-format batch above it is refused, which means step 2 was not met.
-
-Do not remove, rename or "move aside" journal files to get past a refusal: the
-refusal is the check that keeps a tail from being applied to a world it does not
-belong to.
-
-**Stop cleanly before upgrading and before changing worldgen packs or the content
-cache.** A WAL edit on a chunk whose immutable baseline is not in the native
-database replays only when the saved worldgen identity proves the inputs that would
-regenerate it; otherwise startup and `world export-anvil` refuse with "missing
-immutable baseline … restore the baseline or original inputs". Two operator paths
-lead there:
-
-- A world saved by a build that did not record `KrasnokamenWorldgenInputs`, with an
-  unclean WAL and the vanilla content cache configured: start the previous binary
-  once and stop it cleanly (its final checkpoint stores the chunks), then upgrade.
-- The identity is written only by a checkpoint. A crash after changing packs or the
-  cache, before the next checkpoint, can refuse the next start even with the same
-  packs: put the previous packs and cache back, start, stop cleanly, then change
-  them again.
-
-Known limit: each dimension holds at most 1024 generated baselines waiting for the
-native writer. A startup replay that must regenerate more than 1024 chunks with WAL
-edits and no stored baseline (practically only a legacy builtin-generator world
-with a long unclean WAL) refuses with "required generated baseline capacity
-exhausted" on every start, because the queue lives in memory. While running, the
-same refusal leaves that chunk failed until restart and checkpoints are refused.
-Recover as above: start the previous binary and stop it cleanly.
 
 Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:
@@ -1370,10 +1283,6 @@ the manifest is durable, so a failed backup leaves nothing behind. Restore with
 to tick `N`, exactly as crash recovery does. Pointing `world_dir` at a plain copy
 of the backup directory also opens it, but that copy keeps the backup's branch
 (see above). It covers world state only.
-
-Never open a world with an older binary than the one that last wrote it: newer
-manifests and WAL records are forward-only, and an older reader either defaults
-the newer state away or refuses the tail.
 
 ## Observability
 

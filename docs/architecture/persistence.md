@@ -299,7 +299,7 @@ checkpoint **or** tail, schema ≠2, records without meta, unknown prefixes/fiel
 record revision above meta or watermark above its revision. An advance gives a
 new global revision and increments watermark; neither decreases.
 Older binaries also refuse new metadata (missing their required fields).
-[Operator reset boundary](../OPERATING.md#structure-ledger-format).
+[Operator reset boundary](../OPERATING.md#changing-the-binary).
 
 Work receipts are returned, not stored: next sequence = stored watermark+1.
 Only `watermark <= snapshot.revision` is checked; per-receipt sequence/identity/
