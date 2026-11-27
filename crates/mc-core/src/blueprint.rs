@@ -1387,6 +1387,50 @@ const ZOMBIE_FAMILY: [&str; 4] = [
     "minecraft:zombie_villager",
 ];
 
+/// Vanilla Animal/AgeableWaterCreature families; villagers own their age separately.
+pub fn ageable(name: &str) -> bool {
+    matches!(
+        name,
+        "minecraft:sheep"
+            | "minecraft:cow"
+            | "minecraft:mooshroom"
+            | "minecraft:chicken"
+            | "minecraft:pig"
+            | "minecraft:goat"
+            | "minecraft:rabbit"
+            | "minecraft:camel"
+            | "minecraft:camel_husk"
+            | "minecraft:armadillo"
+            | "minecraft:axolotl"
+            | "minecraft:bee"
+            | "minecraft:cat"
+            | "minecraft:wolf"
+            | "minecraft:horse"
+            | "minecraft:donkey"
+            | "minecraft:mule"
+            | "minecraft:skeleton_horse"
+            | "minecraft:zombie_horse"
+            | "minecraft:llama"
+            | "minecraft:trader_llama"
+            | "minecraft:ocelot"
+            | "minecraft:fox"
+            | "minecraft:hoglin"
+            | "minecraft:strider"
+            | "minecraft:dolphin"
+            | "minecraft:squid"
+            | "minecraft:glow_squid"
+            | "minecraft:nautilus"
+            | "minecraft:zombie_nautilus"
+            | "minecraft:happy_ghast"
+            | "minecraft:sniffer"
+            | "minecraft:panda"
+            | "minecraft:polar_bear"
+            | "minecraft:turtle"
+            | "minecraft:frog"
+            | "minecraft:parrot"
+    )
+}
+
 /// Vanilla capability data: the only place the shared-behaviour type lists
 /// live. The tick reads [`MobBlueprint::capabilities`] and params, never names.
 fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
@@ -1492,7 +1536,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
                 | "minecraft:zoglin"
                 | "minecraft:zombie_horse"
         ),
-        ageable: crate::entity_life::ageable(name),
+        ageable: ageable(name),
         milkable: matches!(
             name,
             "minecraft:cow" | "minecraft:goat" | "minecraft:mooshroom"
