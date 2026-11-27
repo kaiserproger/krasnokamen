@@ -11,9 +11,16 @@ changing a step. Never infer packet IDs or layouts from memory.
 [Decision C2](../../DECISIONS.md#content-and-protocol) permits
 reading official unobfuscated jar **metadata** as protocol reference: packet
 registrations, class and field names and types, record order and constants.
-It does not permit translating Java source or copying algorithms; keep Krasnokamen
-identifiers independent. Never commit Mojang classes, jars or extracted data.
-Record the vanilla version, class and `javap` evidence when changing wire facts.
+It does not permit translating Java source or copying algorithms (lighting, RNG,
+worldgen formulas). Keep Krasnokamen identifiers independent: no Mojang class
+names as Rust identifiers (vanilla `ClientboundLoginPacket` is our
+`packets::play::LoginPlay`; cross-references go in comments) and no constants
+named after internals that are not part of the wire format. Never commit Mojang
+classes, jars, dumps or captures; they stay in ignored `.analysis/` or receipts
+outside Git. A packet id or layout derived from metadata names the vanilla
+version, class and local `javap` capture in the codec's comment or commit; the
+layout fact itself lives at the codec and its test (for example
+`UpdateEnabledFeatures` in `crates/mc-protocol/src/packets/configuration.rs`).
 
 This is not permission to copy client-rendering values: for native client visual
 work, the [render oracle rules](real-client-gates.md#vanilla-render-oracle-native-visual-parity)

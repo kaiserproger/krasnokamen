@@ -12,10 +12,9 @@ The primary player is not an operator. In the isolated QA world, spawn protectio
 
 ## Owner order
 
-`village-owner-order-qa` uses a fresh seed-100 world and an operator teleport fixture near the generated anchor; it does not prove navigation to the bell. It claims the village, confirms an active project, and queues House L1 as pending. A different Farm order must receive the fresh queue-full chat reply without replacing House or changing the active project. After restart the pending House must survive; bounded console `item replace block` fixtures fund it, and the harness checks its fresh start notification and project status before testing a busy Farm order and its cancellation. This supplied-material scenario is not proof of autonomous material production.
+`village-owner-order-qa` checks the [construction text contract](menus.md#construction-text-contract-d8) on a fresh seed-100 world. An operator teleport fixture puts the owner near the generated anchor, so the gate does not prove navigation to the bell. After the claim it stops the clock, empties the founding chest and queues House and Farm as two pending orders. Bounded console `item replace block` fixtures then stock Farm, Storage and the incumbent projects, withholding the wool the House head needs: the funded later Farm must start as one new site while the unfunded House head keeps autonomous admission waiting, and a Storage order must start beside it with both sites advancing. Every sample must leave a free slot under the eight-project cap and contain no site the gate did not admit. At night a Barracks order joins House as the second pending order, the map must list every active site, and the same projects and orders must survive a real server and client restart. After restart the gate fills the queue to eight, requires `Construction queue is full: MAX_ORDERS=8.` with the queue unchanged, and cancels order #2 by index. The supplied materials make this no proof of autonomous material production.
 
-`D5_QUEUE_CONTROL=no-second-order` omits the refused request and must fail at
-the fresh-refusal assertion. Ledger execution forbids this control override.
+The negative control runs the **unchanged gate** against a separate tree with the parallel cap (`MAX_PROJECTS`) reverted to one and its own `pin-release` binary; no environment switch skips commands or manufactures a failing observation. Count parsing accepts the displayed capacity, so the cap-one control reaches `two_projects_advance` and fails there rather than at parsing its status screen.
 
 ## Civilization observation
 
