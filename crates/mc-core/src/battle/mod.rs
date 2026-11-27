@@ -544,8 +544,8 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
         state,
         slot,
         LIVING_FLAGS,
-        crate::boundary::EntityDataValue::Byte(0),
-        crate::boundary::EntityDataValue::Byte(flags),
+        mc_data::entity_data_value::EntityDataValue::Byte(0),
+        mc_data::entity_data_value::EntityDataValue::Byte(flags),
     ) {
         state.appearance_changed.push(id);
     }

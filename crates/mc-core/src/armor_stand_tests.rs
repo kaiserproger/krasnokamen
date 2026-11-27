@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{ConnectionId, EntityDataValue, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::tick::run_tick;
+use mc_data::entity_data_value::EntityDataValue;
 
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

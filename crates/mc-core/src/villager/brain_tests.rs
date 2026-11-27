@@ -334,7 +334,7 @@ fn village_control_walks_to_composter_and_publishes_farmer_metadata() {
         farmer_update |= output.changes.entities_appearance_changed.contains(&id)
             && view.appearance.extra.contains(&(
                 19,
-                crate::boundary::EntityDataValue::VillagerData {
+                mc_data::entity_data_value::EntityDataValue::VillagerData {
                     kind: super::super::VillagerKind::Plains as i32,
                     profession: Profession::Farmer.profession_id(),
                     level: 1,
@@ -973,7 +973,7 @@ fn rest_sleeps_in_owned_bed_and_morning_wakes_metadata() {
     assert!(state.entities.row(slot).villager.as_ref().unwrap().sleeping);
     assert_eq!(state.entities.row(slot).appearance.pose, 2);
     assert!(state.entities.row(slot).appearance.extra.iter().any(|(_, value)|
-        matches!(value, crate::boundary::EntityDataValue::OptionalBlockPos(Some(p)) if *p == [8, 201, 8])));
+        matches!(value, mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(Some(p)) if *p == [8, 201, 8])));
     state.day_time = 1000;
     step(&mut state);
     assert!(!state.entities.row(slot).villager.as_ref().unwrap().sleeping);

@@ -548,7 +548,7 @@ pub struct MergeSpawn {
     pub health: f32,
     pub wool: Option<u8>,
     /// Climate variant inherited from one parent (cow, pig, chicken).
-    pub variant: Option<(u8, crate::boundary::EntityDataValue)>,
+    pub variant: Option<(u8, mc_data::entity_data_value::EntityDataValue)>,
     pub taming: Option<crate::taming::TamingState>,
     pub advancement_breeding: Option<(EntityId, serde_json::Value)>,
 }
@@ -563,7 +563,7 @@ pub(crate) fn wool_of(appearance: &EntityAppearance) -> u8 {
         .extra
         .iter()
         .find_map(|(index, value)| match value {
-            crate::boundary::EntityDataValue::Byte(byte)
+            mc_data::entity_data_value::EntityDataValue::Byte(byte)
                 if *index == crate::blueprint::SHEEP_WOOL_DATA_INDEX =>
             {
                 Some(*byte as u8)
@@ -575,7 +575,7 @@ pub(crate) fn wool_of(appearance: &EntityAppearance) -> u8 {
 
 /// Writes the wool byte of a wool-growing mob.
 pub(crate) fn set_wool(appearance: &mut EntityAppearance, wool: u8) {
-    let value = crate::boundary::EntityDataValue::Byte(wool as i8);
+    let value = mc_data::entity_data_value::EntityDataValue::Byte(wool as i8);
     match appearance
         .extra
         .iter_mut()

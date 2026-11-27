@@ -1,8 +1,8 @@
 //! Tamed cat relaxation and morning gifts around a sleeping owner.
-use crate::boundary::EntityDataValue;
 use crate::cat::{Relax, TYPE};
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
 use std::sync::Arc;
 

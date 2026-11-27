@@ -365,19 +365,19 @@ pub(crate) fn initialize_appearance(
             state,
             slot,
             8,
-            crate::boundary::EntityDataValue::Byte(flags),
+            mc_data::entity_data_value::EntityDataValue::Byte(flags),
         );
         set_extra(
             state,
             slot,
             9,
-            crate::boundary::EntityDataValue::Byte(record.piercing.min(127) as i8),
+            mc_data::entity_data_value::EntityDataValue::Byte(record.piercing.min(127) as i8),
         );
         set_extra(
             state,
             slot,
             10,
-            crate::boundary::EntityDataValue::Boolean(record.stuck),
+            mc_data::entity_data_value::EntityDataValue::Boolean(record.stuck),
         );
     }
     if record.kind == ProjectileKind::Trident {
@@ -386,13 +386,15 @@ pub(crate) fn initialize_appearance(
             state,
             slot,
             11,
-            crate::boundary::EntityDataValue::Byte(loyalty),
+            mc_data::entity_data_value::EntityDataValue::Byte(loyalty),
         );
         set_extra(
             state,
             slot,
             12,
-            crate::boundary::EntityDataValue::Boolean(!record.stack.enchantments.is_empty()),
+            mc_data::entity_data_value::EntityDataValue::Boolean(
+                !record.stack.enchantments.is_empty(),
+            ),
         );
     }
     if record.kind == ProjectileKind::Firework {
@@ -405,7 +407,7 @@ pub(crate) fn initialize_appearance(
             state,
             slot,
             9,
-            crate::boundary::EntityDataValue::OptionalUnsignedInt(attached),
+            mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(attached),
         );
     }
 }
@@ -414,7 +416,7 @@ fn set_extra(
     state: &mut TickState,
     slot: EntitySlot,
     index: u8,
-    value: crate::boundary::EntityDataValue,
+    value: mc_data::entity_data_value::EntityDataValue,
 ) {
     if state
         .entities

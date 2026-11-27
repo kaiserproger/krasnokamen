@@ -752,8 +752,8 @@ pub(crate) fn variant_registry(entity: &str) -> Option<&'static str> {
 pub(crate) fn variant_data(
     entity: &str,
     value: u32,
-) -> Option<(u8, crate::boundary::EntityDataValue)> {
-    use crate::boundary::EntityDataValue;
+) -> Option<(u8, mc_data::entity_data_value::EntityDataValue)> {
+    use mc_data::entity_data_value::EntityDataValue;
     Some(match entity {
         VARIANT_CHICKEN => (
             CHICKEN_VARIANT_DATA_INDEX,

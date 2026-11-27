@@ -1,7 +1,7 @@
 use super::*;
-use crate::boundary::EntityDataValue;
 use crate::mounts::tests::{fixture, slot, spawn};
 use crate::tick::run_tick;
+use mc_data::entity_data_value::EntityDataValue;
 
 #[test]
 fn frog_shoots_tongue_at_small_slime_and_clears_target() {

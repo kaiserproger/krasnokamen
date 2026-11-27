@@ -134,7 +134,7 @@ fn total(state: &TickState) -> i32 {
 #[test]
 fn comparator_reads_item_frames_through_backing_block_in_all_horizontal_directions() {
     use super::super::{offset, signal::comparator_input};
-    use crate::boundary::EntityDataValue;
+    use mc_data::entity_data_value::EntityDataValue;
 
     let mut state = state();
     place(&mut state, HOPPER, "stone", &[]);

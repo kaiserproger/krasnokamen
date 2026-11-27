@@ -1,10 +1,12 @@
 //! Native copper golems: construction, bounded chest sorting and weathering.
 //! Vanilla CopperGolem saves weather_state (string), next_weather_age (long);
 //! carried items/antenna use ordinary equipment (mainhand/saddle).
-use crate::boundary::{BlockPos, EntityDataValue, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::entities::EntitySlot;
 use crate::special_mobs::Retained;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
 use mc_domain::EntityId;
 use mc_nbt::Tag;

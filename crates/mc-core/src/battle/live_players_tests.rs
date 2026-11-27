@@ -1,8 +1,9 @@
 use super::*;
 use crate::battle::combat::{Action, Weapon};
 use crate::battle::staging::{self, BattleCommand};
-use crate::boundary::{ConnectionId, EntityDataValue, EntityEvent, Hand, PlayerInput};
+use crate::boundary::{ConnectionId, EntityEvent, Hand, PlayerInput};
 use crate::tick::run_tick;
+use mc_data::entity_data_value::EntityDataValue;
 
 const ORIGIN: [f64; 3] = [8.5, 64.0, 8.5];
 

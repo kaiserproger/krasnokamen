@@ -10,8 +10,8 @@ fn shield(state: &mut TickState, id: EntityId, raised: bool) {
         state,
         slot,
         crate::battle::LIVING_FLAGS,
-        crate::boundary::EntityDataValue::Byte(0),
-        crate::boundary::EntityDataValue::Byte(if raised { 3 } else { 0 }),
+        mc_data::entity_data_value::EntityDataValue::Byte(0),
+        mc_data::entity_data_value::EntityDataValue::Byte(if raised { 3 } else { 0 }),
     ));
     state.appearance_changed.push(id);
 }
@@ -27,7 +27,7 @@ fn toggle_shield(state: &mut TickState, id: EntityId) {
         .iter()
         .any(|(index, value)| {
             *index == crate::battle::LIVING_FLAGS
-                && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if *flags != 0)
+                && matches!(value, mc_data::entity_data_value::EntityDataValue::Byte(flags) if *flags != 0)
         });
     shield(state, id, !raised);
 }
@@ -730,8 +730,8 @@ fn unmarked_appearance_change_is_caught_by_the_fence() {
         &mut state,
         slot,
         crate::battle::LIVING_FLAGS,
-        crate::boundary::EntityDataValue::Byte(0),
-        crate::boundary::EntityDataValue::Byte(3),
+        mc_data::entity_data_value::EntityDataValue::Byte(0),
+        mc_data::entity_data_value::EntityDataValue::Byte(3),
     ));
     let _ = journal_entries_for_tick(&mut state, &output).unwrap();
     let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

@@ -613,7 +613,7 @@ fn goat_ram_into_stone_drops_one_horn_with_instrument_and_updates_metadata() {
             .iter()
             .any(|(index, value)| {
                 (*index == 19 || *index == 20)
-                    && *value == crate::boundary::EntityDataValue::Boolean(false)
+                    && *value == mc_data::entity_data_value::EntityDataValue::Boolean(false)
             })
     );
 }
@@ -736,7 +736,7 @@ fn hurt_axolotl_in_water_plays_dead_and_regenerates() {
             .extra
             .iter()
             .any(|(index, value)| {
-                *index == 19 && *value == crate::boundary::EntityDataValue::Boolean(true)
+                *index == 19 && *value == mc_data::entity_data_value::EntityDataValue::Boolean(true)
             })
         {
             assert!(
@@ -780,7 +780,8 @@ fn playing_dead_axolotl_releases_attackers_and_wakes_after_200_active_ticks() {
             .extra
             .iter()
             .any(|(index, value)| {
-                *index == 19 && *value == crate::boundary::EntityDataValue::Boolean(false)
+                *index == 19
+                    && *value == mc_data::entity_data_value::EntityDataValue::Boolean(false)
             })
     );
 }

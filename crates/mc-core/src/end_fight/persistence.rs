@@ -291,14 +291,14 @@ pub(crate) fn entity_fields(
                 .extra
                 .iter()
                 .find_map(|(i, v)| match (i, v) {
-                    (9, crate::boundary::EntityDataValue::Boolean(v)) => Some(*v),
+                    (9, mc_data::entity_data_value::EntityDataValue::Boolean(v)) => Some(*v),
                     _ => None,
                 })
                 .unwrap_or(true),
         )),
     )];
     if let Some(beam) = row.appearance.extra.iter().find_map(|(i, v)| match (i, v) {
-        (8, crate::boundary::EntityDataValue::OptionalBlockPos(v)) => *v,
+        (8, mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(v)) => *v,
         _ => None,
     }) {
         fields.push(("beam_target".into(), Tag::IntArray(beam.to_vec())));

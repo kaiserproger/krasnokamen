@@ -1458,8 +1458,8 @@ fn shield(state: &mut TickState, id: EntityId, raised: bool) {
         state,
         slot,
         crate::battle::LIVING_FLAGS,
-        crate::boundary::EntityDataValue::Byte(0),
-        crate::boundary::EntityDataValue::Byte(if raised { 3 } else { 0 }),
+        mc_data::entity_data_value::EntityDataValue::Byte(0),
+        mc_data::entity_data_value::EntityDataValue::Byte(if raised { 3 } else { 0 }),
     ));
     state.appearance_changed.push(id);
 }
@@ -1474,7 +1474,7 @@ fn shield_pose(state: &TickState, id: EntityId) -> Option<i8> {
         .iter()
         .find(|(index, _)| *index == crate::battle::LIVING_FLAGS)
         .map(|(_, value)| match value {
-            crate::boundary::EntityDataValue::Byte(flags) => *flags,
+            mc_data::entity_data_value::EntityDataValue::Byte(flags) => *flags,
             other => panic!("living flags is a byte, got {other:?}"),
         })
 }

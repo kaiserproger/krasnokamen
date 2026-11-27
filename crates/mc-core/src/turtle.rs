@@ -1,7 +1,8 @@
 //! Turtle egg custody, homeward movement and beach nesting.
-use crate::boundary::{BlockPos, EntityDataValue};
+use crate::boundary::BlockPos;
 use crate::entities::{ColdRow, EntitySlot};
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 

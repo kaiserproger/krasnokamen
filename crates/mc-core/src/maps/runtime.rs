@@ -1,6 +1,7 @@
 use super::{SavedMap, decoration_id, map_id};
-use crate::boundary::{ConnectionId, EntityDataValue, PlayerChange};
+use crate::boundary::{ConnectionId, PlayerChange};
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 

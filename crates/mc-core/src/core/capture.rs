@@ -21,7 +21,7 @@ pub(crate) enum VariantError {
 /// An absent field is the vanilla default.
 pub(crate) fn variant_from_vanilla_entity(
     record: &mc_data::entity_nbt::VanillaEntity,
-) -> Result<Option<(u8, crate::boundary::EntityDataValue)>, VariantError> {
+) -> Result<Option<(u8, mc_data::entity_data_value::EntityDataValue)>, VariantError> {
     let Some(registry) = crate::blueprint::variant_registry(&record.id) else {
         return Ok(None);
     };
@@ -68,7 +68,7 @@ pub(crate) fn validate_variant_images(
     name: &str,
     extra: &[(u8, crate::journal::EntityDataValueImage)],
 ) -> Result<(), String> {
-    use crate::boundary::EntityDataValue as V;
+    use mc_data::entity_data_value::EntityDataValue as V;
     let species_index = crate::blueprint::variant_data(name, 0).map(|(index, _)| index);
     for (index, image) in extra {
         let value = restore_data_value(image);
@@ -485,22 +485,22 @@ pub(super) fn entity_capture_record(
                 (
                     crate::blueprint::VARIANT_CHICKEN,
                     crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::ChickenVariant(id),
+                    mc_data::entity_data_value::EntityDataValue::ChickenVariant(id),
                 )
                 | (
                     crate::blueprint::VARIANT_COW,
                     crate::blueprint::COW_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::CowVariant(id),
+                    mc_data::entity_data_value::EntityDataValue::CowVariant(id),
                 )
                 | (
                     crate::blueprint::VARIANT_PIG,
                     crate::blueprint::PIG_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::PigVariant(id),
+                    mc_data::entity_data_value::EntityDataValue::PigVariant(id),
                 )
                 | (
                     crate::blueprint::VARIANT_ZOMBIE_NAUTILUS,
                     crate::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::ZombieNautilusVariant(id),
+                    mc_data::entity_data_value::EntityDataValue::ZombieNautilusVariant(id),
                 ) => *id,
                 _ => return None,
             };
