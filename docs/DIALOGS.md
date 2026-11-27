@@ -1,19 +1,20 @@
 # Server-driven dialogs
 
-Vanilla 26.1.2 clients (and the Krasnokamen native client) render server-sent dialogs with no mod. The
+Vanilla clients (and the Krasnokamen native client) render server-sent dialogs with no mod. The
 tick decides what to show and acts on the answer; the edge only converts between packets and
-core values.
+core values. The ids below are 26.3's (protocol 777); older sessions get the same packets through
+the edge's adjacent translation chain.
 
 | Direction | Packet | Core value |
 |---|---|---|
-| server → client | Play `show_dialog` (0x8C, inline holder id 0 + network NBT) | `PlayerChange::ShowDialog { dialog: Tag }` |
-| server → client | Play `clear_dialog` (0x8B, empty) | `PlayerChange::ClearDialog` |
+| server → client | Play `show_dialog` (0x8F, inline holder id 0 + network NBT) | `PlayerChange::ShowDialog { dialog: Tag }` |
+| server → client | Play `clear_dialog` (0x8E, empty) | `PlayerChange::ClearDialog` |
 | client → server | Play `custom_click_action` (0x44, identifier + length-prefixed optional NBT) | `PlayerInput::DialogClick { connection, id, payload }` |
 
-IDs and layouts come from the local `data/vanilla/reports/packets.json` and the decompiled 26.1.2
+IDs come from the content cache's `reports/packets.json`; layouts from vanilla's
 `ClientboundShowDialogPacket`, `ClientboundClearDialogPacket`, `ServerboundCustomClickActionPacket`
-and `net.minecraft.server.dialog.*`. Registry dialog references (holder id > 0) are never sent and
-are rejected on decode.
+and `net.minecraft.server.dialog.*` ([decision C2](../DECISIONS.md#content-and-protocol)). Registry
+dialog references (holder id > 0) are never sent and are rejected on decode.
 
 ## Core API (`mc_core::dialog`)
 
