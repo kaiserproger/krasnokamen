@@ -51,10 +51,11 @@ in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
 - `-x`: quiet measurement, not extra-memory convenience. Freeze preemptible
   builds, wait for running tests/servers, hold new work until completion.
   Descendants of already-running scopes continue, or the ancestor wait deadlocks.
-  Admission uses `tools/dev/measurement-windows`: recurring local intervals and
-  dated one-offs (may cross midnight; never recur after expiration).
-  Baseline recurring `01:00-02:30` precedes normally-03:00 nightly fuzz (parked
-  during Stage3); the current announcement plan owns dated allocations.
+  Admission uses `tools/dev/measurement-windows`: daily intervals and dated
+  one-offs (may cross midnight; never recur after expiration). The daily
+  `01:00-02:30` baseline was removed on 2026-11-16 ("do the tasks, measure
+  everything later"); on 2026-11-27 every dated grant has expired, so `-x` needs
+  a new owner-dated window.
   Outside a grant, refuse 75 and name next start, before acquiring locks.
   Only Main's explicitly authorized `KRASNOKAMEN_WINDOW_OVERRIDE=1` overrides.
 - A guardian kills cancelled jobs' scopes and retains locks until empty.
