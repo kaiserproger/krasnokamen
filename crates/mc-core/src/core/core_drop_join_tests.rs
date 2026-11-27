@@ -68,6 +68,7 @@ fn subscribe(core: &Core) -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
 }
 
 fn wait_for<T>(
+    core: &Core,
     events: &mpsc::Receiver<Event>,
     what: &str,
     mut found: impl FnMut(&TickObservation) -> Option<T>,
@@ -82,9 +83,16 @@ fn wait_for<T>(
                     return value;
                 }
             }
-            Ok(Event::TickStreamClosed) => panic!("tick stream closed while waiting for {what}"),
+            Ok(Event::TickStreamClosed) => panic!(
+                "tick stream closed while waiting for {what}: the tick owner halted with {:?} \
+                 (None means it ended without a fail-closed reason)",
+                core.halt_reason()
+            ),
             Ok(Event::DropReturned) => panic!("drop returned while waiting for {what}"),
-            Err(RecvTimeoutError::Timeout) => panic!("timed out waiting for {what}"),
+            Err(RecvTimeoutError::Timeout) => panic!(
+                "timed out waiting for {what}: the tick owner's halt reason is {:?}",
+                core.halt_reason()
+            ),
             Err(RecvTimeoutError::Disconnected) => {
                 panic!("event channel ended while waiting for {what}")
             }
@@ -104,7 +112,7 @@ fn write_a_block(core: &Core, events: &mpsc::Receiver<Event>) -> (BlockPos, u32)
         name: "DropProbe".into(),
         permission_level: 4,
     }));
-    wait_for(events, "join", |output| {
+    wait_for(core, events, "join", |output| {
         output
             .snapshot
             .entities
@@ -123,7 +131,7 @@ fn write_a_block(core: &Core, events: &mpsc::Receiver<Event>) -> (BlockPos, u32)
         ),
         permission_level: 4,
     }));
-    wait_for(events, "the block write", |output| {
+    wait_for(core, events, "the block write", |output| {
         output
             .changes
             .blocks
