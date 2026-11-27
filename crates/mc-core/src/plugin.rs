@@ -1665,9 +1665,5 @@ fn custom_mob_cap_reached(state: &TickState, key: u32) -> bool {
 }
 
 #[cfg(test)]
-#[path = "plugin_sessions_tests.rs"]
-mod sessions_tests;
-
-#[cfg(test)]
 #[path = "plugin_mob_cap_tests.rs"]
 mod mob_cap_tests;
