@@ -4,7 +4,7 @@ title = "`content import` waits on the bundle's datagen, javac and the Java extr
 area = "gameplay"
 repro = "command"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = """CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced:
 crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via -DbundlerMainClass), :923-934 (javac
 of the in-tree extractors) and :948-954 (extractor run) called Command::new(java|javac) ... .output()
@@ -20,7 +20,19 @@ readers get a bounded 5 s grace, so a wrapper `java` whose descendant inherited 
 the import either (the orphan case the review named). `run_datagen`, `run_datagen_bounded` and
 `run_java_extractors` are async; their callers in `derive_into` and `derive_profile` await them; the
 seam `run_datagen_bounded(..., limit)` stays for the test. The registry capture
-(mc_vanilla::registry_capture) is a separate driver and unchanged."""
+(mc_vanilla::registry_capture) is a separate driver and unchanged.
+
+Original command rerun on the fixed candidate build (2026-11-27, pinned release binary of the
+tree being promoted): `content import --version 26.3 --from tools-cache/minecraft/26.3/server.jar
+--gameplay-from tools-cache/minecraft/26.1.2/server.jar --cache <private cache>`, with `JAVA`
+pointed at a stand-in that SIGSTOPs the bundle's datagen JVM. The licensed bundles are supplied
+locally instead of `--download` (a download needs a licence run and writes the shared
+hard-linked content caches); the derive path is the same `run_datagen` -> `run_jvm_child`. The
+command printed `running the server bundle's own datagen for reports` and, exactly 900 s later,
+`the server bundle's datagen did not finish within 900 s and was killed (a JVM waiting on a lock,
+on stdin or on a full disk must not block the import): stall-java: datagen JVM stopping itself on
+purpose (SIGSTOP)`, exiting non-zero instead of hanging.
+Receipt: receipts/D124/D124PackCoreRows/content-import-run/stalled-import.log."""
 regression = [
   "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error",
   "cargo:mc-edge:content_import::tests::a_stalled_jvm_child_is_killed_at_the_deadline",
@@ -42,3 +54,4 @@ Still missing for promotion (a `command` row): the original command rerun on the
 receipt in `source`, i.e. one real `krasnokamen content import --version <v> --download` whose datagen
 child is SIGSTOPped while the step runs, showing the bounded refusal instead of a hang. Not run here:
 it downloads a licensed bundle and writes the shared content caches the worktrees hard-link."""
+promotion = "docs/bugs/promotions/CONTENT-IMPORT-JVM-NO-TIMEOUT.json"
