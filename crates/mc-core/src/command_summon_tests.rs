@@ -1656,17 +1656,6 @@ fn chested_horse_summon_carries_vanilla_items_cargo() {
     assert_eq!(mount.cargo.len(), 9);
     assert_eq!(mount.cargo[8].item_id, item(&state, "wheat"));
 
-    // Cargo without the chest is inert in vanilla: the field is accepted, the mount
-    // stays unchested and keeps no stacks.
-    let (state, id) = summon(
-        "mule",
-        "{Tame:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}",
-    );
-    let slot = state.entities.slot_of(id).unwrap();
-    let mount = &state.entities.row(slot).entity_life.mount;
-    assert!(!mount.chested);
-    assert!(mount.cargo.is_empty());
-
     // A horse has no mount cargo; the slot bound and the field set are the mount's own,
     // and every refusal happens before the entity exists.
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
@@ -1697,4 +1686,22 @@ fn chested_horse_summon_carries_vanilla_items_cargo() {
             "{kind} {nbt} must be refused"
         );
     }
+}
+
+/// Cargo without the chest is inert in vanilla: `Items` on an unchested mule is
+/// parsed and dropped, so the summon succeeds and the mount keeps no stacks.
+///
+/// Its own test, not a case inside the chested suite: a tree that refuses `Items`
+/// must fail here naming the field, instead of panicking earlier in the chested
+/// cases that list `ChestedHorse` first.
+#[test]
+fn summon_mule_accepts_items_without_a_chest_and_keeps_no_cargo() {
+    let (state, id) = summon(
+        "mule",
+        "{Tame:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let mount = &state.entities.row(slot).entity_life.mount;
+    assert!(!mount.chested);
+    assert!(mount.cargo.is_empty());
 }
