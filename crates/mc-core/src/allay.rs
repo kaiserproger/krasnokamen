@@ -6,7 +6,6 @@ use crate::config::CoreError;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_nbt::{stack_from_fields, stack_to_fields};
 use mc_data::{Identifier, ItemStack, items::ItemRegistry};
 use mc_domain::EntityId;
