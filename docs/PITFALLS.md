@@ -107,13 +107,14 @@ written before the first `rm`, and `tools/dev/wt-done` refuses a tree whose
 `.analysis` holds worlds, WAL, stores or crash copies.
 
 **Cited pins and raw WAL were deleted after a scan that did not look
-everywhere.** A pin classifier (2026-11-27) searched two receipt lanes; 357 of
-the 407 clean pins it deleted were cited elsewhere under `receipts/`, and a
-raw-data list removed WAL batches a battle handoff cited as evidence for two
-blockers. A rebuilt pin is not guaranteed to match the old binary hash. A
-deletion scan covers all of `receipts/`, tracked files and the ledger; failed
-runs, controls and cited data are never deleted. Check: the scan finds a known
-citation before anything is unlinked.
+everywhere.** A pin classifier (2026-11-27) searched two receipt lanes. Of the
+407 deleted clean pins, 357 had matching short hashes elsewhere under `receipts/`;
+that includes bare commit mentions, not just pin citations. Some receipts named
+deleted pins explicitly. A raw-data list also removed WAL batches cited by a
+battle handoff as evidence for two blockers. A rebuilt pin is not guaranteed to
+match the old binary hash. A deletion scan covers all of `receipts/`, tracked
+files and the ledger; failed runs, controls and cited data are never deleted.
+Check: the scan finds a known citation before anything is unlinked.
 
 **A full disk looked like a hang.** The journal died, no subscriber saw its
 channel close, and an L2 run hung for 54 minutes (2026-10-09). When a gate
