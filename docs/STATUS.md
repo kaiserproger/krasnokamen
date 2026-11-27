@@ -10,7 +10,8 @@ Labels ([decision V1](../DECISIONS.md#evidence)):
   (unmodded, or with the Loader or the client mod the row names), or a
   differential test compared our result with a real Mojang server on the same
   input.
-- **Native-gated**: run end to end with our native client under the harness
+- **Native-gated** (proposed label, owner decision pending; if declined, read
+  it as Tested): run end to end with our native client under the harness
   (graphical, Xvfb). It proves our server and our client together, not vanilla
   compatibility.
 - **Tested**: unit, fixture, in-process or TCP protocol-bot tests only.

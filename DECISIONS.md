@@ -116,7 +116,7 @@ How it works: [persistence](docs/architecture/persistence.md).
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| V1 | STATUS labels: **Verified** = a real vanilla client gate or a differential test against real vanilla; **Native-gated** = end to end with our native client only; **Tested** = unit, fixture or protocol-bot tests only; **Not run**. | Owner D129; fixtures written by the author prove less than real input, and our own client proves our server and client together, not vanilla compatibility. |
+| V1 | STATUS labels: **Verified** = a real vanilla client gate or a differential test against real vanilla; **Tested** = unit or fixture tests only; **Not run**. *Proposed, owner decision pending:* **Native-gated** = end to end with our native client only (otherwise counted as Tested). | Owner D129; fixtures written by the author prove less than real input. Our own client proves our server and client together, not vanilla compatibility, and is neither of the owner's first two labels. |
 | V2 | Gameplay coverage comes from differential tests against a real local vanilla server, not from piles of unit tests. | Owner D60, D107, D128: unit tests written by the implementer kept passing while the feature was broken. |
 | V3 | A unit test cannot close a known real-client failure; client surfaces need a real-client gate. | A green unit test has repeatedly coexisted with a broken client. |
 
