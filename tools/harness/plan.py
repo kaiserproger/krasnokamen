@@ -66,7 +66,7 @@ PERSISTENCE_GLOBS = (
     "crates/mc-core/src/**/*persistence*",
     "crates/mc-core/src/**/*residency*",
     "crates/mc-core/src/**/*hydration*",
-    "crates/mc-core/src/chunk_loader*",
+    "crates/mc-chunk-loader/**",
     "crates/mc-core/src/chunk_tickets*",
     "crates/mc-core/src/hot_backup.rs",
     "crates/mc-core/src/core/capture.rs",

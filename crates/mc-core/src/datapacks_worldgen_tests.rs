@@ -931,15 +931,10 @@ fn removed_pack_saved_start_survives_live_wal_checkpoint_restart_and_reactivatio
     let (command, completed) = crate::command_console::ConsoleCommand::new(command);
     assert!(core.submit(crate::boundary::PlayerInput::ConsoleCommand(command)));
     completed.blocking_recv().unwrap();
-    assert!(catalog.warned.lock().contains(&structure));
     assert_eq!(
-        catalog
-            .warned
-            .lock()
-            .iter()
-            .filter(|id| *id == &structure)
-            .count(),
-        1
+        catalog.warned_count(&structure),
+        1,
+        "the same inactive start warns once, not per chunk"
     );
     assert!(core.checkpoint());
     let registry = Arc::clone(core.registry());

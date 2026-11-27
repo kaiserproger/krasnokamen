@@ -230,8 +230,13 @@ pub mod world;
 mod blueprint_tests;
 #[cfg(test)]
 mod chat_visibility_tests;
+// The chunk-loader tests stay in mc-core after the loader moved to
+// `mc-chunk-loader`; the module path is part of the ledger's
+// `cargo:mc-core:chunk_loader::tests::...` regression references.
 #[cfg(test)]
-mod chunk_loader_world_tests;
+mod chunk_loader {
+    mod tests;
+}
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]

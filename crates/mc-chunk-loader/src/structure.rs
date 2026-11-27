@@ -9,7 +9,9 @@ use mc_data::Identifier;
 pub struct StructureCatalog {
     pub active: BTreeSet<Identifier>,
     pub owners: BTreeMap<String, String>,
-    pub warned: parking_lot::Mutex<BTreeSet<Identifier>>,
+    /// Ownership of the warn-once state stays here: it is mutated only through
+    /// [`Self::observe`], never by holders of the published `Arc`.
+    warned: parking_lot::Mutex<BTreeSet<Identifier>>,
 }
 
 impl StructureCatalog {
@@ -21,6 +23,16 @@ impl StructureCatalog {
             owners,
             warned: parking_lot::Mutex::new(BTreeSet::new()),
         }
+    }
+
+    /// How many times this saved start was reported (a set keeps it 0 or 1).
+    #[must_use]
+    pub fn warned_count(&self, structure: &Identifier) -> usize {
+        self.warned
+            .lock()
+            .iter()
+            .filter(|id| *id == structure)
+            .count()
     }
 
     pub fn observe(&self, chunk: &mc_world::Chunk) -> Result<(), String> {
