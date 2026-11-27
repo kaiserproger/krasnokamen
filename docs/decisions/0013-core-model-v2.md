@@ -209,7 +209,7 @@ join deadline and the 10 s outbox stall watch. Limits of this policy:
   halts fail-closed.
 
 Datapack reloads and `/debug function` trace-file writes run as jobs on a
-short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1322-1326`),
+short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs`),
 handing the result back over a bounded `sync_channel(1)`, so they execute
 outside the tick and never hold it.
 
@@ -597,11 +597,13 @@ without creation or truncation: Windows
 ## Plugin admission
 
 Independently deployed `krasnokamen:plugin@0.9.0` components execute outside the
-tick. Guests receive owned values and opaque handles, not native pointers,
-locks, slots or world ownership. The native owner validates current identities,
-revisions, complete custody and capabilities when applying operations. Plugin
-KV and native effects share the tick journal; completion follows append ACK,
-not fsync. Unsupported declarations and invalid packages fail startup.
+tick, one callback at a time. Guests receive owned values and opaque handles,
+not native pointers, locks, slots or world ownership; they never own world state
+or a region. Observing an event is not a commit: a guest submits
+capability-gated commands, and the native owner validates current identities,
+revisions, complete custody and capabilities when applying them. Plugin KV and
+native effects share the tick journal; completion follows append ACK, not
+fsync. Unsupported declarations and invalid packages fail startup.
 See [plugin contract](../PLUGINS.md) and [settlements](../architecture/settlements.md).
 
 ## Residency and tickets

@@ -32,7 +32,7 @@ are disconnected with the vanilla illegal-characters reason.
 | Authoritative state and tick | `mc-core` | decoded input → native validation → entity intents → deterministic merge → block work → one tick change set |
 | Parallel entity work | core worker pool | reads immutable state; writes disjoint entity next-state data, not shared regional state |
 | Disk/journal/checkpoint I/O | native journal worker | freezes immutable/owned checkpoint images; no synchronous fsync on a gameplay reply path |
-| Datapack reload and function-trace writes | short-lived `datapack-worker` thread in `mc-core` (`datapacks.rs:1322-1326`) | one thread per job, result over a bounded channel, outside the tick |
+| Datapack reload and function-trace writes | short-lived `datapack-worker` thread in `mc-core` (`datapacks.rs`) | one thread per job, result over a bounded channel, outside the tick |
 | Socket decode/write and sessions | `mc-edge` connection tasks | no independent inventory, world or entity authority |
 | Per-viewer packet planning | edge fanout workers/pump | own workers, bounded connection credit, retained projection revisions |
 | Component execution | `mc-plugin-host` worker | serial bounded guest callbacks outside the tick; `mc-script` owns DTO/admission |
@@ -96,6 +96,21 @@ tick markers of skipped outputs are lost. A skipped knockback impulse closes its
 recipient as above. A pump that stops for good still halts the core through
 the outbox stall watch. Policy and limits:
 [ADR 0013](../decisions/0013-core-model-v2.md#threads-and-backpressure).
+
+### Connection liveness
+
+Play keepalive follows vanilla and lives in the connection's writer task
+(`crates/mc-edge/src/server/connection.rs`, `write_play`). Every 15 s it sends a
+challenge unless one is still outstanding, so there is at most one, and a new
+period never replaces it. The connection closes with `keepalive-timeout` 30 s
+after the challenge unless its exact echo arrives; a wrong echo closes it with
+`keepalive-invalid-reply`. Other inbound traffic does not extend the deadline.
+The writer serves keepalive before reliable and world frames, and the reader
+forwards echoes to the writer directly, also while an administrative command
+holds the remaining input (`await_play_operation`), so a large outbound backlog
+or a slow owner reply does not starve the echo. Before Play, Configuration and
+Login use their own read deadlines; the Loader exchange sends its own
+Configuration keepalive every 10 s (`plugin_loader.rs`).
 
 ### Tick cost accounting
 
