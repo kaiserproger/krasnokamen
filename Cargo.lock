@@ -1807,6 +1807,7 @@ dependencies = [
  "mc-placement",
  "mc-plugin-host",
  "mc-script",
+ "mc-survival",
  "mc-world",
  "mc-worldgen",
  "parking_lot",
@@ -1873,6 +1874,7 @@ dependencies = [
  "mc-plugin-host",
  "mc-protocol",
  "mc-script",
+ "mc-survival",
  "mc-vanilla",
  "mc-world",
  "mc-world-conversion",
@@ -2021,6 +2023,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-survival"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-data",
+ "mc-inventory",
+ "serde",
+]
+
+[[package]]
 name = "mc-test-harness"
 version = "1.0.0-rc.5"
 dependencies = [
@@ -2095,6 +2106,7 @@ dependencies = [
  "mc-inventory",
  "mc-nbt",
  "mc-plugin-host",
+ "mc-survival",
  "mc-world",
  "rustix",
  "serde",
