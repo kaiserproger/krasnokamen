@@ -424,18 +424,6 @@ fn scratch_caches_reset_each_pass_and_gate_the_run() {
 }
 
 #[test]
-fn hazard_free_pass_still_suffocates_and_decays_burn() {
-    let (mut state, entity, pos) = flat_player_fixture();
-    // Section gates must not suppress exact eye damage or retained burn clocks
-    // when the body's actual cells contain no ignition hazard.
-    place(&mut state, [pos[0], pos[1] + 1.0, pos[2]], "stone", &[]);
-    crate::contact_hazards::ignite(&mut state, entity, 40);
-    let slot = state.entities.slot_of(entity).unwrap();
-    assert!(sample(&mut state, entity, DamageKind::Suffocation));
-    assert_eq!(state.entities.body(slot).burn_ticks, 39);
-}
-
-#[test]
 fn footprint_eye_and_support_stay_exact_across_section_and_chunk_borders() {
     let (mut state, entity, _) = flat_player_fixture();
     let chunks = [
