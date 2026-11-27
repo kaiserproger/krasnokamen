@@ -1,11 +1,9 @@
 # ADR 0024 - The core as an engine, our gameplay as packages
 
 **Date:** 2026-11-19  
-**Status:** Accepted 2026-11-19 by Main (owner D66) after three review rounds by
-committee-sol and committee-astra (`receipts/EngineADR/REVIEW-{sol,astra}{,-r2,-r3}.md`);
-their third-round findings are fixed in this text (owner rule: fixing review findings needs no
-second review); see [Review resolution](#review-resolution). The owner accepted
-both open proposals (D66 answers, 2026-11-19): the §3.4 slowdown verdict in its
+**Status:** Accepted 2026-11-19 (owner D66) after three review rounds by
+committee-sol and committee-astra; the text holds the final resolutions
+([reviews](#reviews)). The owner accepted the §3.4 slowdown verdict in its
 written order (Q1) and the one-off offline converter, reset only for a world he
 declared expendable (Q4).
 Nothing here is implemented. The D65 settlements unload (ADR 0021 Step 2,
@@ -889,81 +887,36 @@ go last.
   of gameplay, no delivery aggregation. New D62 settlement operations land after
   it, as `krasnokamen:settlements` 0.x bumps that rebuild their importers.
 
-## 5. Why settlements left the plugin in October, and what changed
+## 5. Why settlements are native today, and what must change first
 
-### 5.1 History
+Settlements began as a plugin (`solaris-settlements`, September 2026, Lua then
+Rust over the plugin API). On 2026-10-16 the owner moved them into the core
+(«merge settlements straight into the core … but keep the ability to
+customize»); committee decision 006 landed slices S1–S4 natively on
+2026-10-16/17, and v0.0.8 retired the package. Reasons beyond the owner's
+product call, from the October committee study of the Rust package (not a
+measured failure of the Lua package):
 
-- 2026-09-15: `solaris-settlements` replaced the prototype packages
-  (`solaris-default-plugins` b01342b): one package owning settlement content,
-  growth, economy, population, residents and squads, API 0.6.0, ~6k lines of
-  Lua with "versioned, sharded records written with their derived indexes in
-  one atomic `storage_batch_cas`". Its contract made the core a "generic engine
-  + reusable API only, zero gameplay plugins" (`SETTLEMENT_OVERHAUL_CONTRACT.md:29`
-  in that repository, edition 2026-10-01). By mid-October it was ~57k lines of
-  Rust over `solaris:plugin@0.7.0`
-  (`<work>/solaris/.analysis/committee/q006-settlements-into-core.md:6`).
-- 2026-10-16: owner directive, «Forget vanilla compatibility here. Merge
-  settlements straight into the core. We become a core WITH SETTLEMENTS,
-  better — but keep the ability to customize.» (`q006-settlements-into-core.md:3`).
-- Committee Decision 006: native modules in `mc-core`, cutover at S1 with no
-  hybrid, slices S1 registry and allocator → S2 households → S3 districts → S4
-  economy → S5 military (`.analysis/committee/decision-005-006-007.md:16-21`).
-  S1–S4 landed 2026-10-16/17 (`git show 1ada2ceb9:docs/decisions/0013-core-model-v2.md`
-  lines 101-338).
-- 2026-10-18: v0.0.8 with core v2 (core 1ada2ceb9); the plugins repository
-  retired the package as "now owned by core", noting that the committed
-  components "failed to instantiate on the v2 host" (`solaris-default-plugins`
-  7fe8efa; `7fe8efa:README.md:39-51`).
+1. Two controllers of one body: the guest ran housing and work while the engine
+   ran movement (`no_ai`), and the 50k-villager budget needed one allocator on
+   the tick owner.
+2. Split custody steps: a guest-persisted intent, a native transfer, then a
+   guest finalize, instead of one WAL batch.
+3. 4,096-byte storage values forced sharded records and two-bank publication.
+4. No housing API (occupancy, conditional home commit).
+5. Out-of-tick latency is fine for rare decisions, not per-resident work.
 
-### 5.2 The reasons
-
-1. **Owner product decision** (above). Not a technical failure.
-2. **Two controllers of one body.** Plugin adoption set `no_ai = true` and the
-   native brain then skipped those bodies, so housing and work ran in the guest
-   while movement ran in the engine; the 50k-villager budget (Q005) needed one
-   allocator on the tick owner sharing the brain's budget
-   (`.analysis/committee/q006/sol.md:31,82`; `decision-005-006-007.md:14,17`).
-3. **Split custody steps.** The guest persisted a fenced intent, then ran the
-   native transfer, then finalized after the receipt
-   (`solaris-default-plugins` 7fe8efa^ `solaris-settlements/README.md:66-68`);
-   native apply makes it one WAL batch (`.analysis/committee/q006/astra.md:85`).
-4. **Storage limits.** 4,096-byte values forced sharded records and two-bank
-   publication (`q006/astra.md:75`, citing the package's `registry_storage.rs`).
-5. **Missing housing API.** Family and district pipelines stopped for lack of
-   an occupancy or conditional-home commit (`q006/sol.md:58`).
-6. **Out-of-tick latency** (ADR 0013 Q8 at 1ada2ceb9, line 22): fine for
-   rare decisions, not for per-resident work.
-
-Reasons 2, 4 and 5 come from the October committee study of the Rust package,
-not from a measured failure of the September Lua package under load. The v2
-instantiation failure was the moment of deletion, not a reason.
-
-### 5.3 What changed
-
-- D66 reverses reason 1 for our gameplay, with the crate first (D66.3).
-- Reasons 2, 5 and 6 do not recur by construction: this split keeps bodies,
-  allocation and worker execution in native executors and moves rules, records,
-  decisions and presentation. The September package put housing, work policy
-  and body control in the guest.
-- Reason 3 is closed only by typed native operations with durable receipts
-  (§1.3): today's inventory-storage transaction covers one live session and the
-  package's own KV with no durable operation id, and membership changes are in
-  no transaction a package can request.
-- The D65 design, with C1 corrected, gives the settlement codec to the domain
-  and checks every image before fold (`DESIGN.md` §2.8 and lines 39-43): the
-  basis for package-owned rows with a declared schema.
-
-### 5.4 What still blocks the move back
-
-- Reason 4: no native package rows with a declared schema yet (§1.3).
-- One serial host thread with 256/1,024 bounds and a halt on unrefusable
-  backlog; the boundary cost is unmeasured (§3.1).
-- API gaps: dialog clicks, block use, war, army, steward, map, typed economy
-  operations, package-provided services (§2.1, §2.8).
-- The exact-version monolith rebuilds every package on any change (§2.1).
-
-Step 1 removes the last of these; steps 4 and 5 remove the rest before any
-settlement record leaves the engine.
+D66 reverses the product call for our gameplay. Reasons 1, 4 and 5 do not recur
+by construction (bodies, allocation and worker execution stay in native
+executors). Reason 2 closes only with typed native operations with durable
+receipts (§1.3). Still blocking the move back: native package rows with a
+declared schema (reason 3, §1.3); one serial host thread with 256/1,024 bounds
+and an unmeasured boundary cost (§3.1); API gaps (dialog clicks, block use, war,
+army, steward, map, typed economy operations, package-provided services; §2.1,
+§2.8); the exact-version monolith that rebuilds every package (§2.1). Step 1
+removes the last; steps 4 and 5 remove the rest before any settlement record
+leaves the engine. Sources: `git show 1ada2ceb9:docs/decisions/0013-core-model-v2.md`
+and `<work>/solaris/.analysis/committee/q006-settlements-into-core.md`.
 
 ## Consequences and risks
 
@@ -978,7 +931,8 @@ settlement record leaves the engine.
   question 2.
 - **Churn:** step 1 rebuilds every package once; afterwards a change rebuilds
   only a service's importers and exporters.
-- On acceptance, add the D66 row to [open transitions](../STATUS.md#open-transitions).
+- When the first package-owned service lands, add the D66 row to
+  [open transitions](../STATUS.md#open-transitions).
 
 ## Rejected alternatives
 
@@ -1019,72 +973,13 @@ decisions, not open questions:
    directory with custody/high-water checks. Reset only a world the owner
    explicitly declared disposable, never automatically.
 
-## Review resolution
+## Reviews
 
-This is the finding-to-contract index, not another copy of the contract.
-The operative sections above retain the final resolutions; later rounds
-qualify earlier wording. Review acceptance does not claim implementation.
-
-First round, base `779ef6888`: `receipts/EngineADR/REVIEW-sol.md` (S1–S7),
-`REVIEW-astra.md` (A1–A7) in that directory. M1 is Main's battle-rules note;
-D65-r2 is ADR-0024-6 in `receipts/CoreUnload/REVIEW-sol-r2.md`.
-All HIGH/MEDIUM findings and the historical notes:
-
-| Finding | Severity | Retained resolution |
-|---|---|---|
-| S1 admission ≠ atomic execution; pump phase | high | [§2.2](#22-request-path-admission-execution-result): bounded buffer, batch admission, native validation and explicit-operation atomicity |
-| S2 WAL frame ≠ transaction; correlation ≠ idempotence | high | [§1.3](#13-records-commit-and-recovery), §4.1: append ACK, distinct transaction/receipt contracts and real-host recovery gates |
-| S3 4 KiB KV ≠ 16 MiB envelope | high | §1.3: bounded native rows, owned WIT values, native membership/transit/reservations |
-| S4 opaque payload is not fail-closed schema validation | high | §1.3: declared owner/version/validator, every image checked before fold and serving |
-| S5 global sequence/coalescing would change visibility/refusal | high | [§2.3](#23-delivery-order), §3.3: final per-lane order, timer/refusal boundaries, persisted game-time deadlines |
-| S6 C1 alone would break the byte-exact D65 cut | high | §1.3, [§4](#4-migration-order): accepted C3 gates, then separate one-writer D66 cutover |
-| S7 versions and provider routing ambiguous | medium | [§2.6](#26-versions-and-breaking-changes), [§2.8](#28-services-provided-by-a-package): exact versions, unchanged DTOs, step-5 provider, attested parties/rights and ACK |
-| A1 one call per service would reorder delivery | high | §2.3: unchanged callbacks; rejection notice without commands import; batch-drop scope corrected in later rounds |
-| A2 services table is not rights/subscriptions/phases | high | [§2.5](#25-manifest-rights-and-the-component-world): separate declarations/checks, phase table and full towns example |
-| A3 required export breaks existing guests | high | §2.6: three versions, 0.x/1.x break rules, affected/transitive bundle and controls |
-| A4 storage fences and joint admission ≠ joint commit | high | §1.3, [§2.7](#27-what-the-cut-deletes), §2.8: apply/resubmission guards, typed receipt operations, routed authority |
-| A5 perf gate proved neither boundary nor A3 | high | [§3.2](#32-against-a3-peaks-not-means), [§3.4](#34-ab-rule-for-every-move), [§4.1](#41-first-move-the-service-cut): empty-engine and nonzero-traffic controls, roam-only A3, separate realms feature cost |
-| A6 mean ≠ peak; request count ≠ work | high | [§3.1](#31-cost-model-of-the-boundary)–§3.3, §4.1: fan-out, outstanding limits, handles/pages/due queue and full boundary bench |
-| A7 incomplete dependencies | medium | §1.2, §2.7, §4: computer UX-only, realms prerequisites, D65 gates/provider switch, sky-creeper consumer |
-| A-history line 6, not 5; October study provenance | — | [§5.1](#51-history), [§5.2](#52-the-reasons): corrected citation; reasons 2/4/5 are not measured September Lua failures |
-| M1 battle executors contain game rules | — | [§1.1](#11-mechanism-in-the-engine-game-rules-in-the-package), §1.2, §4: mechanism/rules split across domains; measured tactics/fatigue/lethality/casualty data |
-| D65-r2 ADR-0024-6 step 4 could start after C1 | high | §1.3, §4 step 0: all D65 C3 acceptance gates and separate D66 format cutover (`DESIGN.md:23-27`) |
-
-Second round, base `6fce5d95e`: `receipts/EngineADR/REVIEW-sol-r2.md`
-(S3/S4/S6 resolved; S1/S2/S5/S7 reopened; three new) and
-`REVIEW-astra-r2.md` there (A3/A5/A6/history resolved; A1/A2/A4/A7 reopened;
-three new). Every open item and new finding:
-
-| Finding | Severity | Retained resolution |
-|---|---|---|
-| S1-r2 “nothing published” exceeded the guarantee | medium | §2.2/§2.4: drop only buffered requests/staged timers; immediate host-local effects remain |
-| S2-r2 / A4-r2 two lost-answer contracts; “replay” ambiguity | high | §1.3/§2.7/§4.1: no-receipt CAS transaction vs durable-id operation; no blind retry or new receipt; guard compares resubmission, not WAL replay |
-| S5-r2 / A1-r2 cross-lane FIFO and timer refusal | medium | §2.3: existing arbitration, ordinary rejection notice vs retained timer schedule/retry/no notice; identical-per-tick-input determinism |
-| A1-r2 nonexistent `server.started` example | medium | §2.5: towns loads in `init`; no such contract event |
-| S7-r2 provider routing lacked record authority | high | §2.8: distinct consumer actor/provider rights, receipt parties, no identity substitution or rights delegation |
-| Sol-new-1 / A7-r2 premature tribute payment | high | §1.2/§4: step 3 treaty terms only; step 4 native obligation/payment/receipt, never transfer plus KV |
-| Sol-new-2 / A2-r2 impossible unlinked startup imports; missing `death_graves` | medium | §2.5: two stores/one linker, call-time phase enforcement, separate death-custody declaration |
-| Sol-new-3 / A3-r2 impossible unchanged old guest in first cut | medium | §2.6/§4.1: rebuild kept guests; old 0.9 negative control; unchanged-component positive only on later split-API changes |
-| Astra-new-1 battle parameters detached from saved state | high | §1.1/§1.2/§4: immutable admitted/persisted set, once-only derivation, pre-tick mismatch refusal, A11 continuation/control |
-| Astra-new-2 correlation overstated result guarantees | medium | §2.2: enqueue-local vs owner result ids; zone-keyed answers, fire-and-forget menus, commit ACK, no extra callback |
-| Astra-new-3 ambiguous 5% verdict | medium | §3.4, owner answer 1: full paired delta and ordered verdict; separate stricter overhead control |
-| A6-r2 “one tick's queue” | — | §3.2: 256 commands outstanding, not per-tick throughput |
-| D65 rev. 2 not accepted | — | §4 step 0: open `receipts/CoreUnload/REVIEW-sol-r2.md` findings remain C3 gates, not done |
-
-Third round, base `6dade3c21`: `receipts/EngineADR/REVIEW-sol-r3.md`
-(S2/S5/S7 and three round-2 new findings resolved; S1 open; three new) and
-`REVIEW-astra-r3.md` there (A1/A2/A4/A7/battle/correlation resolved;
-threshold open; one new). Every open item, new finding and note:
-
-| Finding | Severity | Retained resolution |
-|---|---|---|
-| R3-1 actor not attested provider → native | high | §2.8: host-issued runtime handle, host-attached consumer/actor/provider, stable player UUID and parties in receipt, fresh route after reopen, current rights for new mutations |
-| S1-r3 timer refusal still overstated “nothing” | medium | §2.3: drop request batch/staged schedule only; host-local effects remain |
-| R3-2 tribute lacked step-3 dependency | medium | §4: tribute payment/arrears require treaty step 3; other economy does not |
-| R3-3 omitted runtime initialization/shutdown; startup KDF misrepresented | medium | §2.5: full phase table; enqueue refused outside init/handlers; existing host-local rules, no startup KDF tightening |
-| A2-r3 `death_graves` single owner | — | §2.5: second declaring package refuses deployment before start (`plugin.rs:593-612`) |
-| Threshold-r3 overlapping verdicts; rejected overhead speedup | medium | §3.4, owner answer 1: ordered full-delta verdict, neutral/speedup allowed, no worsening in overhead control |
-| S2-r3 stale-CAS test after reopen | — | §1.3/§4.1: new live session of same player with spent KV version |
-| Astra-new-r3 treaty owner inconsistent with D65 | medium | §1.2/§4: `DESIGN.md` §2.7 rev. 4; realms owns terms/ransoms/chronicle, settlement owns native war/steward/outcome with treaty reference, step-4 native obligation changes only with payment |
+Three rounds by committee-sol and committee-astra (bases `779ef6888`,
+`6fce5d95e`, `6dade3c21`): `receipts/EngineADR/REVIEW-{sol,astra}{,-r2,-r3}.md`
+on the owner host, outside Git. Every high and medium finding is resolved in
+the sections above; the finding-to-section index is in Git history
+(`git show 973e6e60e:docs/decisions/0024-engine-and-gameplay-packages.md`,
+"Review resolution"). Review acceptance does not claim implementation.
 
 [Architecture overview](../ARCHITECTURE.md) · [Decisions index](README.md)

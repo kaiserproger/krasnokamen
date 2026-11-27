@@ -26,7 +26,7 @@ full log is private history.
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| C1 | Vanilla facts come from the operator's own local distribution through `content import`, which a first start with no cache also runs; an existing cache is only discovered and validated, never replaced. No Mojang bytes in Git, crates or bundles. | Licensing and correctness. [ADR 0001](docs/decisions/0001-vanilla-data-as-runtime-input.md). |
+| C1 | Vanilla facts come from Mojang's distribution on the operator's machine, never from Git: `content import` derives the cache from server jars the operator supplies or it downloads from Mojang, and a first start with no cache runs the same import. An existing cache is only discovered and validated, never replaced. No Mojang bytes in Git, crates or bundles. | Licensing and correctness. [ADR 0001](docs/decisions/0001-vanilla-data-as-runtime-input.md). |
 | C2 | `javap`-level metadata of the unobfuscated 26.1+ jars is a permitted reference; decompiled source and algorithms are never copied; Rust names are our own. | Since 26.1 the jar is public documentation of the same identifiers the wiki names. [ADR 0002](docs/decisions/0002-vanilla-protocol-metadata-as-reference.md). |
 | C3 | Protocol and Anvil layouts are taken from local wire-probe or `javap` evidence, never from memory. | One wrong packet id disconnects a real client. |
 | C4 | Older and newer clients go through a per-session adjacent translation chain in the edge (777 → 776 → 775); core authority never branches on protocol; each step owns name-paired mappings and fails closed on what it cannot map. | ViaVersion's proven shape; core stays version-free. [ADR 0015](docs/decisions/0015-multiversion-protocol-translation.md). |
