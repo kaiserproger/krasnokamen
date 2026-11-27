@@ -7,8 +7,9 @@
 use mc_data::Identifier;
 use mc_world::{BlockStateId, ScheduledBlockTick};
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Sniffer thirds of the unboosted 24000-tick clock (moss below halves it).
 const SNIFFER_FULL: u64 = 24_000;

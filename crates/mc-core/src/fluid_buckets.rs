@@ -1,9 +1,10 @@
 //! Clicked bucket/cauldron plans share one inventory debit with block custody.
 use super::{Flow, Fluid, contained, flow_into, offset, waterlogged};
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::{TickState, held_slot_index};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 
 /// Powder-snow bucket exchange with cauldrons: a snow bucket fills an empty
 /// cauldron; an empty bucket collects a full powder-snow cauldron.

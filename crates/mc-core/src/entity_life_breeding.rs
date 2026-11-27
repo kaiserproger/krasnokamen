@@ -1,9 +1,9 @@
 //! Pair compatibility is blueprint data; merge rechecks the same rule as AI.
 //! Egg-laying species stage a block or item birth instead of a live child.
-use crate::boundary::EntityId;
 use crate::entities::EntityKind;
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Vanilla egg-laying birth staged instead of an immediate live child.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

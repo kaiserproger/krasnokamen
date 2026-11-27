@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId};
 use crate::crafter::tests::{block, fixture};
+use mc_domain::EntityId;
 
 pub(crate) fn command(state: &mut TickState, actor: EntityId, text: &str) {
     let mut words = text.split_whitespace();

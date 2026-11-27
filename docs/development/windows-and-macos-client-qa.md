@@ -47,11 +47,14 @@ The published Windows zip is built by the client repository's release workflow
 on a `windows-latest` runner with the MSVC target (CRT linked statically, with
 its own CRT-dependency checks). That is the supported public path.
 
-For a QA build from Linux, cross-build in a client worktree with the GNU target:
+For a QA build from Linux, cross-build in a client worktree with the GNU target.
+On the owner host it runs through Main's `mem-run.sh` (which owns the compiler
+wrapper), whose release-build policy (`tools/dev/release-build-policy.sh`)
+admits it only with Main's `KRASNOKAMEN_RELEASE_BUILD_ALLOW=1`:
 
 ```sh
 rustup target add x86_64-pc-windows-gnu
-PATH=<mingw>/bin:$PATH RUSTC_WRAPPER= \
+PATH=<mingw>/bin:$PATH \
   CFLAGS_x86_64_pc_windows_gnu=-I<libz-sys src/zlib> \
   cargo build --release --locked --target x86_64-pc-windows-gnu --workspace
 ```
@@ -81,8 +84,7 @@ PATH=<mingw>/bin:$PATH RUSTC_WRAPPER= \
 Agents never open a headed browser or viewer on the owner's desktop.
 [`tools/dev/winqa/cs-daemon.js`](../../tools/dev/winqa/cs-daemon.js) is the one
 persistent headless-Firefox (Playwright) page; its protocol is in
-[`tools/dev/winqa/RECIPE.md`](../../tools/dev/winqa/RECIPE.md) and summarised in
-the QA protocol's "Windows-guest driver":
+[`tools/dev/winqa/RECIPE.md`](../../tools/dev/winqa/RECIPE.md):
 
 - Run it as a named service; send one JSON request line per `id`
   (`waitconn|shot|click|key|type|quit`) and match the reply by `id` in its

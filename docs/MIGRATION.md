@@ -5,7 +5,7 @@ replacement. This guide moves a stopped, ordinary Minecraft Java world (26.1.2,
 or a native 26.3 world) into Krasnokamen's native store and describes how to convert
 it back. Test on copies before changing the public endpoint. A successful
 conversion receipt proves conversion, not complete gameplay compatibility:
-consult [COMPATIBILITY.md](COMPATIBILITY.md). Everyday commands and
+consult [STATUS.md](STATUS.md#feature-areas). Everyday commands and
 configuration are in [OPERATING.md](OPERATING.md); this page owns the migration
 procedure and rollback.
 
@@ -293,7 +293,7 @@ lossless migration because an unknown field is kept in an opaque record.
 | Scheduled ticks | Native queues keep identity, priority and remaining delay; no-ops and duplicates are normalized and counted; delays outside the Anvil integer range fail export. |
 | POI, structure starts | POI files stay byte-exact opaque files, not native POI authority. Full-chunk structure metadata is retained. |
 | Other `data/*.dat` and auxiliary files | Explicit allowlist only: `icon.png`, `level.dat_old`, `resourcepacks/resources.zip`, `advancements/`, `stats/`, `data/`, `players/`, and dimension `poi/` and `data/`. Unknown active saved-data `.dat` semantics refuse import; opaque retained files share a 16 MiB aggregate record budget. Everything else in the source tree (including `datapacks/`) is **not carried**. |
-| Datapacks, custom dimensions | Not migrated. Copy directory datapacks to `<native-world>/datapacks/` yourself ([supported subset](OPERATING.md#datapacks-and-command-blocks)); ZIP packs, worldgen packs and custom dimensions are unsupported, so do not migrate a pack-dependent world unless losing that function is acceptable. |
+| Datapacks, custom dimensions | Not migrated. Copy directory or ZIP datapacks to `<native-world>/datapacks/` yourself ([supported subset](OPERATING.md#datapacks-and-command-blocks)); worldgen beyond the experimental jigsaw inputs and custom dimensions are refused, so do not migrate a pack-dependent world unless losing that function is acceptable. |
 | Resource packs | The world's `resourcepacks/resources.zip` is retained; server-offered packs are configured through `[resource_pack]`. |
 | Bukkit/Paper plugin data | Not interpreted. External SQL stores, plugin folders, claims, economy, permissions and custom items need a separately validated migration; keep the originals for rollback. |
 | Krasnokamen-native plugin, settlement and block-log state on export | Vanilla cannot run or interpret it, and Anvil is not a backup format for these domains. Keep a native backup. |
@@ -336,33 +336,13 @@ to exit and write its final checkpoint. Serving writes the native
 `native/state.redb` and tick WAL, **not** the old Anvil files; keep the same
 config, content and deployment with the native world.
 
-### Downgrading the Krasnokamen binary
+### Changing or downgrading the Krasnokamen binary
 
-Never open a world with an older binary than the one that last wrote it. Native
-manifests and WAL records are forward-only: a reader from another manifest
-format version refuses the checkpoint and an older reader refuses a WAL tail it
-does not decode; an unknown newer field is also defaulted away by
-`serde(default)`, and either way the world it opens is not the world that was
-saved.
-
-The native store also carries a store id and the world directory a
-`checkpoint.marker` (`(store id, branch, checkpoint tick)`; the branch is the
-root for a created or imported world and a fresh random id for each restored
-copy). There is no converter: a world written before those keys, backed up
-without them, or whose store rolled back behind the marker refuses startup
-instead of being rewritten, and a restore that pairs a marker with another store
-is refused before the target is kept. A copy restored by this build writes a
-marker that older builds refuse. Create the world with this build (`Core::open`
-on an empty directory, or `world import-anvil` from an export) and keep the whole
-world directory together in every copy and backup.
-
-Do not run an older Krasnokamen binary on a world that a build with cow, pig,
-chicken and zombie-nautilus variant persistence has served. The tick WAL refuses
-to recover (the older decoder does not know the variant records), and a
-checkpoint is rewritten without them: the older build ignores the `variant`
-field of a loaded entity and never writes it, so cow, pig and zombie-nautilus
-variants are lost silently when the older binary checkpoints a loaded chunk.
-Restore a backup instead.
+There is no downgrade: never open a world with an older binary than the one
+that last wrote it. Upgrades, the format fences and what each needs are in
+[changing the binary](OPERATING.md#changing-the-binary). Keep the whole world
+directory (`native/`, `journal/`, `checkpoint.marker`) together in every copy
+and backup.
 
 ### Rollback option A: restore the untouched original
 

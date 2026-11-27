@@ -4,8 +4,9 @@
 //! one item (or one banner layer) per use, preserving unrelated components.
 use mc_data::{Identifier, ItemStack};
 
-use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, Hand};
 use crate::tick::{TickState, spawn_item_entity};
+use mc_domain::EntityId;
 
 /// Dyed leather goods vanilla cauldrons can wash.
 fn dyeable(path: &str) -> bool {

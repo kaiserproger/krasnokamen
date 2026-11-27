@@ -5,7 +5,7 @@ that no longer describe the current system. Each entry: original path, date/era,
 what it said, why superseded, which doc replaced it. Full text lives in Git history.
 
 Current runtime: `solaris-v2` (`mc-edge` + `mc-core`, native tick/intent-merge/WAL)
-per [ADR 0013](../decisions/0013-core-model-v2.md) and [ADR 0014](../decisions/0014-v1-core-retirement.md).
+per [ADR 0013](../decisions/0013-core-model-v2.md) and [decision P8](../../DECISIONS.md#product).
 
 ## docs/articles/show-hn-solaris.md (2026-10, pre-cutover draft)
 

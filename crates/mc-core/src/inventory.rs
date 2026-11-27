@@ -253,7 +253,7 @@ pub enum MenuKind {
     Lectern,
     /// Mount screen: saddle, body equipment, then three rows of cargo.
     Mount {
-        entity: crate::boundary::EntityId,
+        entity: mc_domain::EntityId,
         columns: u8,
         saddle: bool,
         armor: MountArmor,
@@ -479,7 +479,7 @@ pub struct Menu {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MerchantMenu {
-    pub entity: crate::boundary::EntityId,
+    pub entity: mc_domain::EntityId,
     pub selected: usize,
     pub last_restock: i64,
     pub reputation: i32,

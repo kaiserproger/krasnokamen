@@ -14,9 +14,10 @@
 //! (never the tick), the result is the number of commands of the traced
 //! functions, and tracing from inside a trace refuses with `noRecursion`.
 use super::command_execution::CommandResult;
-use crate::boundary::{ChangeSet, ConnectionId, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId};
 use crate::command_feedback::text;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::time::Instant;
 
 #[derive(Default)]

@@ -7,9 +7,10 @@ use mc_melee_range::MeleeReach;
 use super::faction::{in_melee_range, melee_reach, reach_bound};
 use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
-use crate::boundary::{EntityEvent, EntityId, Hand};
+use crate::boundary::{EntityEvent, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
+use mc_domain::EntityId;
 
 // The 21..25-tick action cycle skips one 20-tick decision after each attack.
 // Count that recovery before deriving odds; do not shorten the action clocks.

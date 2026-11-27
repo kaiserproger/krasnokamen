@@ -103,7 +103,7 @@ pub(crate) fn equipment_attributes(
     }
 }
 
-fn sensitive(state: &crate::tick::TickState, target: crate::boundary::EntityId, tag: &str) -> bool {
+fn sensitive(state: &crate::tick::TickState, target: mc_domain::EntityId, tag: &str) -> bool {
     state.entities.slot_of(target).is_some_and(|slot| {
         let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
             return false;
@@ -117,7 +117,7 @@ fn sensitive(state: &crate::tick::TickState, target: crate::boundary::EntityId, 
 
 pub(crate) fn target_damage(
     state: &crate::tick::TickState,
-    target: crate::boundary::EntityId,
+    target: mc_domain::EntityId,
     stack: &ItemStack,
 ) -> f32 {
     [
@@ -136,7 +136,7 @@ pub(crate) fn target_damage(
 
 pub(crate) fn bane_level(
     state: &crate::tick::TickState,
-    target: crate::boundary::EntityId,
+    target: mc_domain::EntityId,
     stack: &ItemStack,
 ) -> u32 {
     if sensitive(state, target, "minecraft:sensitive_to_bane_of_arthropods") {

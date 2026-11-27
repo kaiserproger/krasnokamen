@@ -280,7 +280,7 @@ fn merge_amount(
     state: &TickState,
     receiver: EntitySlot,
     source: EntitySlot,
-) -> Option<(i32, u32, u32, crate::boundary::EntityId)> {
+) -> Option<(i32, u32, u32, mc_domain::EntityId)> {
     let receiver_body = state.entities.body(receiver);
     let source_body = state.entities.body(source);
     // Vanilla `ItemEntity.isMergable`: neither an infinite pickup delay nor an
@@ -318,8 +318,8 @@ fn merge_amount(
 
 pub(crate) fn throw_selected(
     state: &mut crate::tick::TickState,
-    actor: crate::boundary::EntityId,
-    drops: &[crate::boundary::EntityId],
+    actor: mc_domain::EntityId,
+    drops: &[mc_domain::EntityId],
 ) {
     let Some(actor_slot) = state.entities.slot_of(actor) else {
         return;

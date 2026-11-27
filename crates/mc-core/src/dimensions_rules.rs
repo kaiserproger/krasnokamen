@@ -1,8 +1,9 @@
 //! Dimension-owned bed/anchor interactions and safe charged-anchor respawns.
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::dimensions::Dimension;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub(crate) fn use_block(
     state: &mut TickState,

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 
 pub(crate) const MAX_RADIUS: u32 = 256;
 /// Population growth rule: a settlement is at least `GROWTH_PER_RESIDENT *

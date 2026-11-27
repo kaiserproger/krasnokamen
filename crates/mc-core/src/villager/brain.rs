@@ -1,7 +1,7 @@
 //! Villager schedules and owner-thread transactions. Constants follow the local
 //! 26.1.2 villager brain, population, gossip, and village-defense oracle modules.
 use super::{Activity, Gossip, VillagerProfession as Profession, VillagerState};
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityEvent, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityEvent};
 use crate::entities::{EntityKind, EntitySlot};
 #[cfg(test)]
 use crate::registry::CoreRegistry;
@@ -15,6 +15,7 @@ use crate::tick::{TickSampler, TickState};
 use crate::tick_budget::DECISIONS_PER_TICK;
 use crate::tick_budget::{Consumer, Kind};
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use mc_physics::mth;
 #[cfg(test)]
 use rustc_hash::FxHashSet;

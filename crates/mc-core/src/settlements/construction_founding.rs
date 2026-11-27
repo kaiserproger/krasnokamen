@@ -129,7 +129,7 @@ pub(in crate::settlements) fn validate_claims(state: &TickState) -> Result<(), &
 pub(crate) fn member_unreserved(
     state: &TickState,
     parent: SettlementId,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
 ) -> bool {
     let Some(slot) = state.entities.slot_of(entity) else {
         return false;

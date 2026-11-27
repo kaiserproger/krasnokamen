@@ -1,8 +1,8 @@
 //! Llama ranged retaliation and wandering-trader defense.
-use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 
 static TYPES: std::sync::LazyLock<[u32; 2]> = std::sync::LazyLock::new(|| {
     ["minecraft:llama", "minecraft:trader_llama"].map(|name| {

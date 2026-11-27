@@ -11,10 +11,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::blueprint::MovementClass;
-use crate::boundary::{ChunkPos, EntityAppearance, EntityId, EntityView};
+use crate::boundary::{ChunkPos, EntityAppearance, EntityView};
 pub(crate) use hot::HotRow;
 #[cfg(test)]
 pub(crate) use hot::take_cold_row_reads;
+use mc_domain::EntityId;
 
 mod hot;
 mod motion_gate;
@@ -173,7 +174,7 @@ pub struct EntityStore {
     cold: Vec<ColdRow>,
     next_wire_id: i32,
     /// Live id -> slot. Maintained on spawn/remove; swap-remove fixup included.
-    id_index: rustc_hash::FxHashMap<crate::boundary::EntityId, EntitySlot>,
+    id_index: rustc_hash::FxHashMap<mc_domain::EntityId, EntitySlot>,
     /// Durable UUID -> current dense slot; projectile owners survive wire-id
     /// reassignment on restart without scanning the whole entity population.
     uuid_index: std::collections::HashMap<Uuid, EntitySlot>,

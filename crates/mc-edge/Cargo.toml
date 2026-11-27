@@ -22,6 +22,7 @@ path = "src/bin/krasnokamen.rs"
 [dependencies]
 workspace-features.workspace = true
 mc-core = { path = "../mc-core" }
+mc-domain = { path = "../mc-domain" }
 mc-vanilla = { path = "../mc-vanilla" }
 mc-plugin-host = { path = "../mc-plugin-host" }
 mc-script = { path = "../mc-script" }

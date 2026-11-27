@@ -1,8 +1,9 @@
 //! Operator data access through native entity, block-entity and storage owners.
-use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId};
+use crate::boundary::{BlockPos, ChunkPos, ConnectionId};
 use crate::command_context::Context;
 use crate::command_nbt_path::{argument, get, number, result, snbt};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
 
 fn put(fields: &mut Vec<(String, Tag)>, key: &str, value: Tag) {

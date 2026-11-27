@@ -6,8 +6,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Deref;
 
-use crate::boundary::{ChunkPos, EntityId};
+use crate::boundary::ChunkPos;
 use crate::tick::BlockEntityState;
+use mc_domain::EntityId;
 
 type Cell = (i32, i32, i32);
 

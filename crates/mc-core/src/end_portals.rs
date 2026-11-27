@@ -1,8 +1,9 @@
 //! End frame, podium and gateway block authority. Gateway links use vanilla NBT.
-use crate::boundary::{BlockChange, BlockPos, ChangeSet, EntityId, Hand};
+use crate::boundary::{BlockChange, BlockPos, ChangeSet, Hand};
 use crate::dimensions::Dimension;
 use crate::portals::{named, state_id, write};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_physics::mth;
 

@@ -11,11 +11,7 @@ fn output(state: &TickState, changes: ChangeSet) -> TickOutput {
         times: Default::default(),
     }
 }
-fn checkpoint(
-    root: &std::path::Path,
-    state: &mut TickState,
-    spawned: Vec<crate::boundary::EntityId>,
-) {
+fn checkpoint(root: &std::path::Path, state: &mut TickState, spawned: Vec<mc_domain::EntityId>) {
     let config = CoreConfig::new(root.to_owned(), 42);
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     state.native_globals = store.read_checkpoint().unwrap().globals;

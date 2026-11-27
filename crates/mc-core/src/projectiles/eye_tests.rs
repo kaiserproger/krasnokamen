@@ -16,7 +16,7 @@ fn physics_eye_without_stronghold_is_handled_without_consumption() {
     assert!(state.projectiles.spawned.is_empty());
 }
 
-fn request(state: &crate::tick::TickState, actor: crate::boundary::EntityId) -> super::eye::EyeUse {
+fn request(state: &crate::tick::TickState, actor: mc_domain::EntityId) -> super::eye::EyeUse {
     let player = &state.players[&actor];
     let mut stack = player.inventory.slots[0].clone();
     stack.count = 1;

@@ -25,7 +25,7 @@ fn retired_connections_never_recreate_join_or_reliable_stashes() {
     let id = registry.joining_id();
     registry.remove(id);
     let joined = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(1),
+        entity: mc_domain::EntityId(1),
         position: [0.0; 3],
         rotation: [0.0, 0.0],
         game_mode: 0,
