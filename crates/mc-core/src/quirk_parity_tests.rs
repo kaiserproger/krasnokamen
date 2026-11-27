@@ -141,21 +141,31 @@ fn entity_snapshot(state: &TickState, box_: [i32; 6]) -> Vec<Value> {
             continue;
         }
         let row = state.entities.row(slot);
-        let type_name = match body.kind {
-            EntityKind::Player { .. } => "minecraft:player".to_owned(),
+        // Vanilla saves `Health` only for living entities; the snapshot does the same.
+        let (type_name, living) = match body.kind {
+            EntityKind::Player { .. } => ("minecraft:player".to_owned(), true),
             EntityKind::Mob { type_id }
             | EntityKind::Item { type_id }
             | EntityKind::ExperienceOrb { type_id } => {
                 mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-                    .map_or_else(|| format!("unknown:{type_id}"), |c| c.name.to_owned())
+                    .map_or_else(
+                        || (format!("unknown:{type_id}"), false),
+                        |c| {
+                            let living = c.behavior.archetype
+                                == mc_data::entity_types::EntityArchetype::Living;
+                            (c.name.to_owned(), living)
+                        },
+                    )
             }
         };
         let mut entry = json!({
             "type": type_name,
             "pos": pos,
             "motion": state.entities.vel(slot),
-            "health": row.health,
         });
+        if living {
+            entry["health"] = json!(row.health);
+        }
         if let Some(item) = &row.item {
             let name = state
                 .registry
@@ -167,9 +177,6 @@ fn entity_snapshot(state: &TickState, box_: [i32; 6]) -> Vec<Value> {
         }
         if let Some(tnt) = &row.tnt {
             entry["fuse"] = json!(tnt.fuse);
-        }
-        if let Some(falling) = &row.falling {
-            let _ = falling;
         }
         entry["age"] = json!(row.age);
         out.push(entry);

@@ -1,7 +1,7 @@
 {
  "id": "entity-basic",
  "family": "entities",
- "description": "Basic entity physics and state: AI-less pig and cow fall ten blocks (fall damage in health), dropped items fall, land and merge, a primed TNT counts its fuse down, and a minecart rolls along powered rails. Positions within 0.05 blocks, health and fuse within 0.01.",
+ "description": "Basic entity physics and state: an AI-less pig and cow summoned ten blocks up (vanilla 26.3 does not move a NoAI mob: both keep their height and full health), dropped items fall, land and merge, a primed TNT counts its fuse down, and a minecart rolls along powered rails. Positions within 0.05 blocks, health and fuse within 0.01.",
  "box": [
   0,
   60,

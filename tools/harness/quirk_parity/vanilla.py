@@ -1,10 +1,10 @@
 """Driver for one real vanilla server used as the parity oracle.
 
 The world is a void superflat world; every scenario force-loads its box, runs
-setup/phase commands through the server console, advances time with
-`tick sprint N` (completion is the server's own "Sprint completed" log line)
-and reads blocks/entities back from the saved Anvil files. No sleeps: every
-wait is on a specific server log line.
+setup/phase commands through the server console, advances a frozen world by
+exactly N ticks (`VanillaOracle.sprint`, checked against the game time) and
+reads blocks/entities back from the saved Anvil files. No sleeps: every wait is
+on a specific server log line.
 """
 from __future__ import annotations
 
@@ -238,12 +238,32 @@ class VanillaOracle:
                     problems.append(f"[chunk@{start}: {batch[0]} ..] {text}")
         return problems
 
+    def game_time(self) -> int:
+        for line in self.run("time query gametime"):
+            if line.startswith("The game time is "):
+                return int(line.removeprefix("The game time is ").split()[0])
+        raise VanillaError(f"`time query gametime` printed no game time; see {self.log_path}")
+
     def sprint(self, ticks: int) -> None:
+        """Advance the frozen world by exactly `ticks` game ticks.
+
+        From a frozen world `tick sprint N` runs N + 1 ticks: the sprint check reads the frozen
+        tick's stale `runGameElements`, so the first unfrozen tick is not counted
+        (ServerTickRateManager.checkShouldSprintThisTick, 26.3). One tick is `tick step 1`,
+        whose tick runs before the next console command. The game time proves the count.
+        """
         if ticks <= 0:
             return
-        # Drain stale lines so "Sprint completed" is this sprint's own report.
-        self.send(f"tick sprint {ticks}")
-        self.expect("Sprint completed")
+        before = self.game_time()
+        if ticks == 1:
+            self.send("tick step 1")
+            self.expect("Stepping 1 tick")
+        else:
+            self.send(f"tick sprint {ticks - 1}")
+            self.expect("Sprint completed")
+        ran = self.game_time() - before
+        if ran != ticks:
+            raise VanillaError(f"the world advanced {ran} game ticks instead of {ticks}; see {self.log_path}")
         self.game_ticks += ticks
 
     def freeze(self) -> None:

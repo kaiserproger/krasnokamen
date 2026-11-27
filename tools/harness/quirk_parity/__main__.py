@@ -434,8 +434,12 @@ def record(args, rerecord: bool = False) -> int:
                 if locked is None:
                     row.update(status="fail", reason="not recorded yet: use record")
                     continue
+                try:
+                    doc = _record_case(case, locked["version"] + 1, out, env, args.reason)
+                except VanillaError as error:
+                    row.update(status="fail", reason=str(error))
+                    continue
                 kept = corpus.keep_manifest(f"before-v{locked['version'] + 1}-{case['id'].replace('#', '@')}")
-                doc = _record_case(case, locked["version"] + 1, out, env, args.reason)
                 doc["supersedes"] = {"version": locked["version"], "sha256": locked["sha256"]}
                 entry = corpus.append(doc, op="re-record", reason=args.reason)
                 row.update(status="re-recorded", version=entry["version"], sha256=entry["sha256"],

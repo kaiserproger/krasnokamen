@@ -25,9 +25,7 @@
   "setblock 3 66 5 minecraft:sand",
   "setblock 5 64 5 minecraft:stone",
   "setblock 5 65 5 minecraft:redstone_wire",
-  "setblock 7 64 5 minecraft:chest[facing=north,type=single,waterlogged=false]",
-  "item replace block 7 64 5 container.0 with minecraft:diamond 3",
-  "item replace block 7 64 5 container.5 with minecraft:cobblestone 20",
+  "setblock 7 64 5 minecraft:chest[facing=north,type=single,waterlogged=false]{Items:[{Slot:0b,id:\"minecraft:diamond\",count:3},{Slot:5b,id:\"minecraft:cobblestone\",count:20}]}",
   "setblock 9 64 5 minecraft:oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]",
   "setblock 9 65 5 minecraft:oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
  ],
