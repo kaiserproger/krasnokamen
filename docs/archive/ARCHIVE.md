@@ -1,11 +1,12 @@
-# Solaris docs archive
+# Docs archive
 
 Superseded designs, old release-era notes, finished research and one-off prompts/articles
 that no longer describe the current system. Each entry: original path, date/era,
 what it said, why superseded, which doc replaced it. Full text lives in Git history.
 
-Current runtime: `solaris-v2` (`mc-edge` + `mc-core`, native tick/intent-merge/WAL)
-per [ADR 0013](../decisions/0013-core-model-v2.md) and [decision P8](../../DECISIONS.md#product).
+Current runtime: `mc-edge`'s `krasnokamen` over native `mc-core` (tick,
+intent merge, WAL) per [ADR 0013](../decisions/0013-core-model-v2.md) and
+[decision P8](../../DECISIONS.md#product).
 
 ## docs/articles/show-hn-solaris.md (2026-10, pre-cutover draft)
 

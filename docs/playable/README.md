@@ -3,9 +3,9 @@
 Run the playable gate through the canonical harness (`python3 -m tools.harness`
 profiles; see [agent tooling](../AGENT_TOOLING.md#harness-entrypoint)).
 Protocol harnesses, wire probes and prepared artifacts are not passing evidence:
-a real vanilla 26.1.2 client must
-connect through the repo-native Gradle `runClient` adapter and record the
-required artifacts (`manifest.json`, `client.log`, `server.log`,
+a real Java client (vanilla 26.3 with the Loader's Fabric agent, Gradle
+`:fabric-agent:runClientAgent` from `../solaris-loader`) must connect and record
+the required artifacts (`manifest.json`, `client.log`, `server.log`,
 `observations.json`, screenshots where required, plus run metadata).
 
 ## Current inputs
