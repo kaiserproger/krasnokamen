@@ -74,11 +74,22 @@ fn wait_for<T>(
     mut found: impl FnMut(&TickObservation) -> Option<T>,
 ) -> T {
     let deadline = Instant::now() + Duration::from_secs(90);
+    // Counted so a stall names whether the tick owner kept publishing at all;
+    // `halt_reason() == None` alone cannot tell a quiet owner from a lost change.
+    let mut observed = 0u64;
+    let mut last_tick = None;
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
-        assert!(!left.is_zero(), "timed out waiting for {what}");
+        assert!(
+            !left.is_zero(),
+            "timed out waiting for {what} after {observed} ticks (last tick {last_tick:?}): the \
+             tick owner's halt reason is {:?}",
+            core.halt_reason()
+        );
         match events.recv_timeout(left) {
             Ok(Event::Tick(output)) => {
+                observed += 1;
+                last_tick = Some(output.snapshot.tick);
                 // This child has no edge pump. The join tick queues a reliable
                 // `PlayerJoined` batch, and the tick owner halts fail-closed once a
                 // queued batch goes unconsumed for OUTBOX_STALL_LIMIT. Drain exactly
@@ -91,13 +102,15 @@ fn wait_for<T>(
                 }
             }
             Ok(Event::TickStreamClosed) => panic!(
-                "tick stream closed while waiting for {what}: the tick owner halted with {:?} \
-                 (None means it ended without a fail-closed reason)",
+                "tick stream closed while waiting for {what} after {observed} ticks (last tick \
+                 {last_tick:?}): the tick owner halted with {:?} (None means it ended without a \
+                 fail-closed reason)",
                 core.halt_reason()
             ),
             Ok(Event::DropReturned) => panic!("drop returned while waiting for {what}"),
             Err(RecvTimeoutError::Timeout) => panic!(
-                "timed out waiting for {what}: the tick owner's halt reason is {:?}",
+                "timed out waiting for {what} after {observed} ticks (last tick {last_tick:?}): \
+                 the tick owner's halt reason is {:?}",
                 core.halt_reason()
             ),
             Err(RecvTimeoutError::Disconnected) => {
