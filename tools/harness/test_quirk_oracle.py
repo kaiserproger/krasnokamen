@@ -9,6 +9,7 @@ Run with: python3 -m unittest tools.harness.test_quirk_oracle
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from . import ledger, profiles
 from .quirk_parity import __main__ as oracle
 from .quirk_parity import compare, guard
 from .quirk_parity.corpus import Corpus, CorpusError, read_lock, scenario_sha256, trusted_lock
@@ -350,70 +352,126 @@ def git(root: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
 
 
+LIB = "#[cfg(test)]\nmod a_tests;\n#[cfg(test)]\nmod b_tests;\n"
+A_TESTS = "#[test]\nfn one() {\n    assert_eq!(1, 1);\n    assert_eq!(2, 2);\n}\n\n#[test]\nfn two() {}\n"
+B_TESTS = "#[test]\nfn three() {}\n"
+LOCK_A = '{"case":"a","mc":"26.3","scenario_sha256":"s","sha256":"h1","version":1}'
+
+
 class PromotionGuardTests(unittest.TestCase):
-    BASE = "#[test]\nfn a() {\n    assert_eq!(1, 1);\n    assert!(true);\n}\n"
+    """The guard on a tiny Cargo workspace: tests by identity (real `cargo nextest list`), corpus lock lines.
+
+    Every refusal here is that guard path's negative control; the passing cases show a fix that keeps
+    every test is not refused for merging assertions or adding tests."""
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root.parent / f"{self.root.name}-artifacts", True)
+        self.addCleanup(shutil.rmtree, self.root.parent / f"{self.root.name}-fix", True)
+        self.addCleanup(shutil.rmtree, self.root, True)
         git(self.root, "init", "-q")
         git(self.root, "config", "user.email", "t@example.invalid")
         git(self.root, "config", "user.name", "t")
-        self.src = self.root / "crates/mc-core/src/lib_tests.rs"
-        self.src.parent.mkdir(parents=True)
-        self.lock = self.root / guard.LOCK_REL
-        self.lock.parent.mkdir(parents=True)
-        self.lock.write_text('{"case":"a"}\n')
-        self.commit(self.BASE, "base")
+        self.write({"Cargo.toml": '[workspace]\nmembers = ["crates/demo"]\nresolver = "2"\n',
+                    "crates/demo/Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\nedition = "2021"\n',
+                    "crates/demo/src/lib.rs": LIB, "crates/demo/src/a_tests.rs": A_TESTS,
+                    "crates/demo/src/b_tests.rs": B_TESTS, ".gitignore": "target/\n", guard.LOCK_REL: LOCK_A + "\n"})
+        self.base = self.commit("base")
+        artifacts = self.root.parent / f"{self.root.name}-artifacts"
+        artifacts.mkdir()
+        self.ctx = profiles.ProfileContext(artifacts)
 
-    def commit(self, text: str, message: str) -> str:
-        self.src.write_text(text)
+    def write(self, files: dict[str, str]) -> None:
+        for rel, text in files.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+
+    def commit(self, message: str) -> str:
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", message)
         return git(self.root, "rev-parse", "HEAD")
 
-    def test_fix_that_adds_a_test_passes_and_records_the_baseline(self):
-        fix = self.commit(self.BASE + "#[test]\nfn b() {\n    assert!(true);\n}\n", "fix")
-        record = guard.promotion_guard(self.root, fix, None)
-        self.assertEqual(record["verdict"], "pass")
-        self.assertEqual((record["baseline"]["tests"], record["after"]["tests"]), (1, 2))
-        self.assertEqual(record["delta"]["total"], {"tests": 1, "asserts": 1, "ignores": 0})
-        self.assertEqual(record["delta"]["crates"]["mc-core"]["tests"], 1)
+    def fix(self, files: dict[str, str]) -> str:
+        """Commit `files` as the fix and return its diff (the candidate is the repository itself)."""
+        self.write(files)
+        fix = self.commit("fix")
+        return git(self.root, "diff", "--binary", f"{fix}^1", fix) + "\n"
 
-    def test_fix_that_drops_a_test_is_refused(self):
-        fix = self.commit("fn a() {\n    assert_eq!(1, 1);\n    assert!(true);\n}\n", "fix")
-        with self.assertRaisesRegex(guard.GuardRefused, "removes 1 test"):
-            guard.promotion_guard(self.root, fix, None)
+    def real(self, tree: Path, packages: list[str]) -> dict[str, bool]:
+        return ledger._test_listing(self.ctx, tree, packages)
 
-    def test_fix_that_drops_an_assertion_is_refused(self):
-        fix = self.commit("#[test]\nfn a() {\n    assert_eq!(1, 1);\n}\n", "fix")
-        with self.assertRaisesRegex(guard.GuardRefused, "removes 1 assertion"):
-            guard.promotion_guard(self.root, fix, None)
+    def test_a_dropped_mod_declaration_is_refused(self):
+        diff = self.fix({"crates/demo/src/lib.rs": "#[cfg(test)]\nmod a_tests;\n"})  # b_tests.rs stays
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::b_tests::three"):
+            guard.promotion_guard(self.root, diff, self.real, patch=False)
 
-    def test_fix_that_ignores_a_test_is_refused(self):
-        fix = self.commit(self.BASE.replace("#[test]\n", "#[test]\n#[ignore = \"flaky\"]\n"), "fix")
-        with self.assertRaisesRegex(guard.GuardRefused, r"adds 1 #\[ignore\]"):
-            guard.promotion_guard(self.root, fix, None)
+    def test_a_deleted_test_replaced_by_another_is_refused(self):
+        diff = self.fix({"crates/demo/src/a_tests.rs": A_TESTS.replace("fn two()", "fn four()")})
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::a_tests::two"):
+            guard.promotion_guard(self.root, diff, self.real, patch=False)
 
-    def test_fix_that_removes_a_corpus_lock_line_is_refused(self):
-        self.lock.write_text("")
-        fix = self.commit(self.BASE, "fix")
-        with self.assertRaisesRegex(guard.GuardRefused, "corpus lock line"):
-            guard.promotion_guard(self.root, fix, None)
+    def test_a_new_ignore_is_refused(self):
+        diff = self.fix({"crates/demo/src/b_tests.rs": "#[test]\n#[ignore]\nfn three() {}\n"})
+        with self.assertRaisesRegex(guard.GuardRefused, r"ignores 1 test.*demo::b_tests::three"):
+            guard.promotion_guard(self.root, diff, self.real, patch=False)
 
-    def test_patch_fix_that_drops_a_test_is_refused(self):
-        patch = ("diff --git a/crates/mc-core/src/lib_tests.rs b/crates/mc-core/src/lib_tests.rs\n"
-                 "--- a/crates/mc-core/src/lib_tests.rs\n+++ b/crates/mc-core/src/lib_tests.rs\n"
-                 "@@ -1,2 +1,1 @@\n-#[test]\n fn a() {\n")
-        with self.assertRaisesRegex(guard.GuardRefused, "removes 1 test"):
-            guard.promotion_guard(self.root, "patch:x", patch)
+    def test_merged_assertions_and_an_added_test_pass(self):
+        merged = A_TESTS.replace("    assert_eq!(1, 1);\n    assert_eq!(2, 2);\n", "    assert_eq!((1, 2), (1, 2));\n")
+        diff = self.fix({"crates/demo/src/a_tests.rs": merged + "\n#[test]\nfn five() {}\n"})
+        record = guard.promotion_guard(self.root, diff, self.real, patch=False)
+        self.assertEqual((record["verdict"], record["measured_on"], record["packages"]), ("pass", "candidate", ["demo"]))
+        self.assertEqual((record["tests"]["baseline"], record["tests"]["after"], record["tests"]["added"]),
+                         (3, 4, ["demo::a_tests::five"]))
 
-    def test_moved_tests_and_commented_asserts_do_not_count(self):
-        moved = self.root / "crates/mc-new/src/lib_tests.rs"
-        moved.parent.mkdir(parents=True)
-        moved.write_text(self.BASE)
-        fix = self.commit("// assert!(old);\n", "move")
-        record = guard.promotion_guard(self.root, fix, None)
-        self.assertEqual(record["delta"]["total"], {"tests": 0, "asserts": 0, "ignores": 0})
+    @staticmethod
+    def fake(tree: Path, packages: list[str]) -> dict[str, bool]:
+        """Names of the `fn` items in the package's test files: enough to see which tree was measured."""
+        names = {}
+        for path in sorted((tree / "crates/demo/src").glob("*_tests.rs")):
+            for line in path.read_text().splitlines():
+                if line.startswith("fn "):
+                    names[f"demo::{path.stem}::{line[3:].split('(')[0]}"] = False
+        return names
+
+    def test_a_removed_lock_line_is_refused(self):
+        diff = self.fix({guard.LOCK_REL: ""})
+        with self.assertRaisesRegex(guard.GuardRefused, "removes 1 recorded-corpus lock line"):
+            guard.promotion_guard(self.root, diff, self.fake, patch=False)
+
+    def test_a_new_version_of_a_recorded_case_is_refused_and_a_new_case_is_not(self):
+        v2 = LOCK_A.replace('"h1","version":1', '"h2","version":2')
+        diff = self.fix({guard.LOCK_REL: f"{LOCK_A}\n{v2}\n"})
+        with self.assertRaisesRegex(guard.GuardRefused, r"replayed version of recorded case\(s\) \['a v2'\]"):
+            guard.promotion_guard(self.root, diff, self.fake, patch=False)
+        git(self.root, "checkout", "-q", "--", ".")
+        git(self.root, "reset", "-q", "--hard", self.base)
+        other = LOCK_A.replace('"case":"a"', '"case":"b"')
+        diff = self.fix({guard.LOCK_REL: f"{LOCK_A}\n{other}\n"})
+        record = guard.promotion_guard(self.root, diff, self.fake, patch=False)
+        self.assertEqual(record["lock"]["added_cases"], ["b"])
+
+    def test_a_patch_whose_test_hunks_are_not_in_the_tree_is_refused(self):
+        self.write({"crates/demo/src/b_tests.rs": ""})  # the uncommitted fix deletes `three`
+        patch = git(self.root, "diff", "--binary") + "\n"
+        claimed = patch + ("diff --git a/crates/demo/src/c_tests.rs b/crates/demo/src/c_tests.rs\nnew file mode 100644\n"
+                           "--- /dev/null\n+++ b/crates/demo/src/c_tests.rs\n@@ -0,0 +1 @@\n+fn ghost() {}\n")
+        with self.assertRaisesRegex(guard.GuardRefused, "does not reverse as a whole"):
+            guard.promotion_guard(self.root, claimed, self.fake, patch=True)
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::b_tests::three"):
+            guard.promotion_guard(self.root, patch, self.fake, patch=True)
+
+    def test_a_fix_that_no_longer_reverses_on_the_tree_is_measured_at_its_commit(self):
+        diff = self.fix({"crates/demo/src/b_tests.rs": ""})
+        fix = git(self.root, "rev-parse", "HEAD")
+        self.write({"crates/demo/src/b_tests.rs": "fn later() {}\n"})
+        self.commit("later")
+        tree = self.root.parent / f"{self.root.name}-fix"
+        git(self.root, "worktree", "add", "-q", "--detach", str(tree), fix)
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::b_tests::three"):
+            guard.promotion_guard(self.root, diff, self.fake, patch=False, fix_tree=lambda: tree)
+        with self.assertRaisesRegex(guard.GuardRefused, "does not reverse as a whole"):
+            guard.promotion_guard(self.root, diff, self.fake, patch=False)
 
 
 if __name__ == "__main__":

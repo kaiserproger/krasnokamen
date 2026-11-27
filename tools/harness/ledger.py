@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 import contextlib
+import functools
 import datetime
 import errno
 import fcntl
@@ -420,6 +421,23 @@ def _python_assertion(text):
         return None
     file, line = frames[-1]
     return {'file': file, 'line': int(line), 'error': 'AssertionError'}
+
+
+def _test_listing(ctx, tree, packages):
+    """{"<binary-id>::<test>": not run} for every test nextest compiles for `packages` in `tree` (D128 guard).
+
+    A test is "not run" when nextest lists it as ignored or its default filter leaves it out."""
+    package_args = [arg for name in packages for arg in ('-p', name)]
+    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'list', *package_args, '--message-format', 'json'])
+    ok, text = _exec(ctx, argv, 'guard-list', tree, env)
+    try:
+        listing = regressions._nextest_listing(text)
+    except ValueError:
+        raise oracle_guard.GuardRefused(f"cannot list the tests of {', '.join(packages)} in {tree} "
+                                        f"({'build error?' if not ok else 'no listing'}); see {ctx.artifact_dir}") from None
+    return {f"{suite['binary-id']}::{name}": bool(case.get('ignored', False))
+            or case.get('filter-match', {}).get('status') != 'matches'
+            for suite in listing['rust-suites'].values() for name, case in suite.get('testcases', {}).items()}
 
 
 def _run_cargo(ctx, tests, tree):
@@ -2823,7 +2841,7 @@ def _loader_ref_states(results, runner='python'):
 
 
 def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receipt=None, fix_patch=None,
-            dry_run=False, ctx, runner=run_refs, client_runner=None, loader_runner=None):
+            dry_run=False, ctx, runner=run_refs, client_runner=None, loader_runner=None, test_lister=None):
     """Run every promotion check for `ident`; on success (and not dry_run) flip it to fixed. Refused on any failure.
 
     The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside).
@@ -2906,10 +2924,6 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         fix_patch_text = Path(fix_patch).read_text(errors='surrogateescape')
     elif fix_patch:
         raise Refused(f'{ident}: --fix-patch is only for a fix_commit of the form patch:<sha256>')
-    try:  # D128: a fix may not pass by deleting or ignoring tests, or by editing the recorded corpus
-        test_guard = oracle_guard.promotion_guard(root, full, fix_patch_text)
-    except oracle_guard.GuardRefused as error:
-        raise Refused(f'{ident}: {error}')
     if not patch_mode:
         if test_only:
             _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
@@ -2984,6 +2998,23 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                           'control A cannot run against current code (control_tree must be head)')
         else:
             control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix', control_set))
+        # D128 guard, on the tree being promoted: its compiled tests and corpus lock against the same
+        # tree with the whole fix reversed (test hunks included); a committed fix that no longer
+        # reverses there is measured at its own commit. The candidate is restored afterwards.
+        if patch_mode:
+            fix_diff = fix_patch_text
+        else:
+            parent = f'{full}^1' if _git(root, 'rev-parse', '--verify', '--quiet', f'{full}^1', check=False)[0] == 0 \
+                else oracle_guard.EMPTY_TREE
+            _, fix_diff = _git(root, 'diff', '--binary', '--no-renames', '--no-color', parent, full,
+                               '--', '.', ':!docs/bugs', ':!.analysis')
+        try:
+            test_guard = oracle_guard.promotion_guard(
+                candidate, fix_diff, test_lister or functools.partial(_test_listing, ctx), patch=patch_mode,
+                fix_tree=lambda: stack.enter_context(_worktree(root, full, 'guard', control_set)))
+        except oracle_guard.GuardRefused as error:
+            raise Refused(f'{ident}: {error}')
+        _materialize(root, candidate, tree_now)
         # Stage the candidate content first: a dirty tree's unstaged diff would otherwise mix with
         # the reversal, and control B's changed-line ranges are read from that diff (review N-b).
         _git(control_dir, 'add', '-A')

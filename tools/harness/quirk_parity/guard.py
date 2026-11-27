@@ -1,148 +1,164 @@
-"""Promotion guard of the vanilla differential oracle (owner D128).
+"""Promotion guard of the vanilla differential oracle (owner D128, review D131).
 
-A fix must not make itself pass by deleting or ignoring tests, and must not edit the
-recorded corpus. `ledger promote` calls `promotion_guard` for every core fix (a commit or
-a `patch:` fix) before it runs any control:
+A fix must not make itself pass by deleting, disabling or ignoring tests, and must not
+change what the recorded corpus replays. `ledger promote` calls `promotion_guard` for
+every core fix (a commit or a `patch:` fix) on the exact tree it promotes (HEAD plus the
+uncommitted state), before any control runs:
 
-- `#[test]`-family attributes, `assert!`-family macros and `#[ignore]` attributes are
-  counted in the fix's own diff of Rust sources under `crates/` (comments excluded); fewer
-  tests or assertions, or more `#[ignore]`s, than before the fix refuses the promotion.
-  Counts span every crate, so tests a crate split moves between crates count once.
-- a line removed from `corpus-lock.jsonl` refuses it: recorded cases are append-only and
-  change only through a versioned re-record, never inside a fix.
+- the baseline is that same tree with the whole fix reversed, test hunks included (for a
+  patch every hunk has to reverse there, so hunks outside the hashed identity cannot
+  offset anything; a committed fix whose diff no longer reverses on the tree is measured
+  at its own commit instead, and the receipt says so);
+- tests are compared by identity: `cargo nextest list` of every package the fix touches,
+  on both trees. A test the baseline compiles and runs that the promoted tree no longer
+  lists, or lists as ignored, refuses the promotion, so a dropped `mod` declaration, a
+  deleted test replaced by another one or a new `#[ignore]` are all caught; assertion
+  counts are not compared (two asserts merged into one comparison lose nothing);
+- `corpus-lock.jsonl`: a removed line, or a new line for a case the baseline already has
+  (a new active version), refuses it; new cases may be added. A re-record is its own
+  commit with a reason, never part of a fix.
 
-The baseline is the tree before the fix (its parent commit, or the candidate with the
-patch reversed: the tree whose control goes red). Its census, the fixed tree's census and
-the fix's delta are returned for promote.json, so no Git-tracked count needs editing by
-every commit. Test-prune commits are separate reviewed commits, never a row's fix, so they
-are not checked here.
+Changes outside the fix (later commits, uncommitted edits the fix does not contain) are
+in both trees and are not the fix's doing; test-prune commits are separate, listed and
+reviewed commits.
 """
 from __future__ import annotations
 
-import re
+import json
 import subprocess
+import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
-TEST_ATTR = re.compile(r"#\[\s*(?:tokio::)?test\b|#\[\s*rstest\b|#\[\s*test_case\b")
-IGNORE_ATTR = re.compile(r"#\[\s*ignore\b")
-ASSERT_MACRO = re.compile(r"\b(?:debug_)?(?:prop_)?assert(?:_eq|_ne|_matches)?!")
-GREP = r"#\[[[:space:]]*(tokio::)?test|#\[[[:space:]]*rstest|#\[[[:space:]]*test_case|#\[[[:space:]]*ignore|assert(_eq|_ne|_matches)?!"
 LOCK_REL = "tools/harness/quirk_parity/corpus-lock.jsonl"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-METRICS = ("tests", "asserts", "ignores")
+
+# (tree, packages) -> {"<binary-id>::<test name>": ignored}
+Lister = Callable[[Path, list[str]], dict[str, bool]]
 
 
 class GuardRefused(RuntimeError):
     pass
 
 
-def _code(line: str) -> str:
-    """The line without its `//` comment (string literals kept intact)."""
-    quoted = escaped = False
-    for index, char in enumerate(line):
-        if escaped:
-            escaped = False
-        elif char == "\\" and quoted:
-            escaped = True
-        elif char == '"':
-            quoted = not quoted
-        elif char == "/" and not quoted and line.startswith("//", index):
-            return line[:index]
-    return line
+def _git(tree: Path, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=tree, input=stdin, capture_output=True, text=True,
+                          check=False, errors="surrogateescape")
 
 
-def count(line: str) -> dict[str, int]:
-    code = _code(line)
-    return {"tests": len(TEST_ATTR.findall(code)), "asserts": len(ASSERT_MACRO.findall(code)),
-            "ignores": len(IGNORE_ATTR.findall(code))}
-
-
-def _add(total: dict[str, int], part: dict[str, int], sign: int = 1) -> None:
-    for key in METRICS:
-        total[key] = total.get(key, 0) + sign * part[key]
-
-
-def diff_delta(diff: str) -> dict:
-    """Counts added minus counts removed per crate in a unified diff, plus removed lock lines."""
-    crates: dict[str, dict[str, int]] = {}
-    lock_removed = 0
-    path = None
+def changed_paths(diff: str) -> list[str]:
+    """Every path a unified diff touches (old and new names)."""
+    paths = set()
     for line in diff.splitlines():
-        if line.startswith("--- "):
-            old = line[4:].split("\t")[0]
-            path = old[2:] if old.startswith("a/") else None
-            continue
-        if line.startswith("+++ "):
-            new = line[4:].split("\t")[0]
-            if new.startswith("b/"):
-                path = new[2:]
-            continue
-        if line.startswith(("diff ", "index ", "@@", "new file", "deleted file", "similarity", "rename ")):
-            if line.startswith("diff "):
-                path = None
-            continue
-        if path is None or line[:1] not in ("+", "-"):
-            continue
-        if path == LOCK_REL and line.startswith("-"):
-            lock_removed += 1
-        parts = path.split("/")
-        if len(parts) < 3 or parts[0] != "crates" or not path.endswith(".rs"):
-            continue
-        _add(crates.setdefault(parts[1], dict.fromkeys(METRICS, 0)), count(line[1:]),
-             1 if line.startswith("+") else -1)
-    total = dict.fromkeys(METRICS, 0)
-    for part in crates.values():
-        _add(total, part)
-    return {"total": total, "crates": {name: part for name, part in sorted(crates.items()) if any(part.values())},
-            "lock_lines_removed": lock_removed}
+        if line.startswith(("--- a/", "+++ b/")):
+            paths.add(line[6:].split("\t")[0])
+    return sorted(paths)
 
 
-def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=check,
-                          errors="surrogateescape")
+def package_of(tree: Path, path: str) -> str | None:
+    """The Cargo package owning `path` in `tree`: the nearest Cargo.toml with a [package] under crates/."""
+    parts = path.split("/")
+    if parts[0] != "crates":
+        return None
+    for depth in range(len(parts) - 1, 1, -1):
+        manifest = tree.joinpath(*parts[:depth], "Cargo.toml")
+        if manifest.is_file():
+            package = tomllib.loads(manifest.read_text()).get("package")
+            return package.get("name") if package else None
+    return None
 
 
-def census(root: Path, rev: str | None = None) -> dict:
-    """Absolute counts over `crates/**/*.rs` at `rev`, or in the working tree (untracked included)."""
-    args = ["grep", "-h", "-E", "-e", GREP]
-    args += [rev] if rev else ["--untracked"]
-    args += ["--", "crates/*.rs"]
-    proc = _git(root, *args, check=False)
-    if proc.returncode not in (0, 1):
-        raise GuardRefused(f"test census failed at {rev or 'the working tree'}: {proc.stderr.strip()}")
-    total = dict.fromkeys(METRICS, 0)
-    for line in proc.stdout.splitlines():
-        _add(total, count(line))
-    return {"rev": rev or "working-tree", **total}
+def _lock_rows(tree: Path) -> list[str]:
+    path = tree / LOCK_REL
+    return [line for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
 
 
-def promotion_guard(root: Path, fix_full: str, fix_patch_text: str | None) -> dict:
-    """Refuse a core fix that drops tests or assertions, adds `#[ignore]`, or edits the corpus lock."""
-    if fix_patch_text is not None:
-        delta = diff_delta(fix_patch_text)
-        after = census(root)
-        baseline = {"rev": "working-tree minus fix patch",
-                    **{key: after[key] - delta["total"][key] for key in METRICS}}
-    else:
-        parent = f"{fix_full}^1"
-        if _git(root, "rev-parse", "--verify", "--quiet", parent, check=False).returncode:
-            parent = EMPTY_TREE
-        delta = diff_delta(_git(root, "diff", "--no-renames", "--no-color", parent, fix_full,
-                                "--", "crates", LOCK_REL).stdout)
-        baseline, after = census(root, parent), census(root, fix_full)
+def _packages(tree: Path, diff: str) -> set[str]:
+    return {name for path in changed_paths(diff) if (name := package_of(tree, path))}
+
+
+def _package_exists(tree: Path, name: str) -> bool:
+    for manifest in (tree / "crates").glob("**/Cargo.toml"):
+        package = tomllib.loads(manifest.read_text()).get("package")
+        if package and package.get("name") == name:
+            return True
+    return False
+
+
+def _listing(tree: Path, packages: set[str], lister: Lister) -> dict[str, bool]:
+    present = sorted(name for name in packages if _package_exists(tree, name))
+    return lister(tree, present) if present else {}
+
+
+def _measure_pair(tree: Path, diff: str, lister: Lister) -> tuple[dict, dict] | None:
+    """(baseline, after): `tree` with `diff` reversed, and `tree`; None when the diff does not reverse.
+
+    Both list the packages the diff touches in either tree, so a package the fix deletes loses
+    its tests and one it adds only adds tests.
+    """
+    if _git(tree, "apply", "-R", "--check", "--whitespace=nowarn", "-", stdin=diff).returncode:
+        return None
+    touched = _packages(tree, diff)
+    after = {"tests": _listing(tree, touched, lister), "lock": _lock_rows(tree)}
+    reversed_ = _git(tree, "apply", "-R", "--whitespace=nowarn", "-", stdin=diff)
+    if reversed_.returncode:
+        raise GuardRefused(f"reversing the fix on {tree} failed: {reversed_.stderr.strip()}")
+    touched |= _packages(tree, diff)
+    baseline = {"tests": _listing(tree, touched, lister), "lock": _lock_rows(tree)}
+    return baseline, dict(after, packages=sorted(touched))
+
+
+def _lock_problems(baseline: list[str], after: list[str]) -> tuple[list[str], dict]:
+    kept, before = set(after), set(baseline)
+    removed = [line for line in baseline if line not in kept]
+    known = {(row["mc"], row["case"]) for row in map(json.loads, baseline)}
+    added = [json.loads(line) for line in after if line not in before]
+    rerecorded = [f"{row['case']} v{row['version']}" for row in added if (row["mc"], row["case"]) in known]
     problems = []
-    if delta["total"]["tests"] < 0:
-        problems.append(f"removes {-delta['total']['tests']} test(s)")
-    if delta["total"]["asserts"] < 0:
-        problems.append(f"removes {-delta['total']['asserts']} assertion(s)")
-    if delta["total"]["ignores"] > 0:
-        problems.append(f"adds {delta['total']['ignores']} #[ignore]")
-    if delta["lock_lines_removed"]:
-        problems.append(f"removes {delta['lock_lines_removed']} recorded-corpus lock line(s) ({LOCK_REL})")
-    record = {"baseline": baseline, "after": after, "delta": delta,
-              "verdict": "refused" if problems else "pass", "problems": problems}
+    if removed:
+        problems.append(f"removes {len(removed)} recorded-corpus lock line(s) ({LOCK_REL})")
+    if rerecorded:
+        problems.append(f"changes the replayed version of recorded case(s) {rerecorded}: a re-record is its own "
+                        "commit with `re-record --reason`, never part of a fix")
+    return problems, {"removed": removed, "rerecorded": rerecorded,
+                      "added_cases": sorted({row["case"] for row in added} - {case for _, case in known})}
+
+
+def promotion_guard(tree: Path, fix_diff: str, lister: Lister, *, patch: bool,
+                    fix_tree: Callable[[], Path] | None = None) -> dict:
+    """Compare `tree` (the promoted tree) with itself minus the whole fix; refuse lost tests or corpus edits.
+
+    `tree` is left with the fix reversed: the caller restores it. `fix_tree` opens a clean tree at
+    the fix commit, used only when a committed fix no longer reverses on `tree`.
+    """
+    measured_on = "candidate"
+    pair = _measure_pair(tree, fix_diff, lister)
+    if pair is None:
+        if patch or fix_tree is None:
+            raise GuardRefused("the fix does not reverse as a whole on the tree being promoted: every hunk of the "
+                               "patch, test hunks included, must be what that tree holds")
+        measured_on = "fix_commit"
+        pair = _measure_pair(fix_tree(), fix_diff, lister)
+        if pair is None:
+            raise GuardRefused("the fix commit's own diff does not reverse on the fix commit")
+    baseline, after = pair
+    lost = sorted(name for name, ignored in baseline["tests"].items() if not ignored and name not in after["tests"])
+    ignored = sorted(name for name, was in baseline["tests"].items()
+                     if not was and after["tests"].get(name) is True)
+    problems = []
+    if lost:
+        problems.append(f"drops {len(lost)} test(s) the tree before it runs: {lost[:10]}")
+    if ignored:
+        problems.append(f"ignores {len(ignored)} test(s) the tree before it runs: {ignored[:10]}")
+    lock_problems, lock = _lock_problems(baseline["lock"], after["lock"])
+    problems += lock_problems
+    record = {"measured_on": measured_on, "packages": after["packages"],
+              "tests": {"baseline": len(baseline["tests"]), "after": len(after["tests"]), "lost": lost,
+                        "newly_ignored": ignored,
+                        "added": sorted(set(after["tests"]) - set(baseline["tests"]))},
+              "lock": lock, "verdict": "refused" if problems else "pass", "problems": problems}
     if problems:
-        raise GuardRefused("the fix " + "; ".join(problems) + f" (per crate: {delta['crates']}): a fix may not "
-                           "pass by deleting or ignoring tests or by editing the recorded corpus; test removals "
-                           "belong in a separate, listed test-prune commit")
+        raise GuardRefused("the fix " + "; ".join(problems) + ": a fix may not pass by deleting, disabling or "
+                           "ignoring tests or by changing the recorded corpus; test removals belong in a separate, "
+                           "listed test-prune commit")
     return record
