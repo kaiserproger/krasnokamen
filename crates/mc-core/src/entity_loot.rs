@@ -5,7 +5,6 @@ use crate::inventory::ItemRules;
 use crate::survival::{DamageKind, Difficulty};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_data::entity_data_value::EntityDataValue;
 use mc_data::loot::entity_26_1_2::{
     EntityDeathCause, EntityLootAttack, EntityLootEntity, EntityLootPlayerAttribution,
 };

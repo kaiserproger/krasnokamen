@@ -6,7 +6,6 @@ use crate::command_args::CommandError;
 use crate::journal::EntityStateImage;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_data::entity_data_value::EntityDataValue;
 use mc_data::entity_nbt::VanillaEntity;
 use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
