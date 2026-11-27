@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 MAX_DIFFS = 40
@@ -46,16 +47,35 @@ def _none_last(values: tuple) -> tuple:
 
 
 def _close(a: Any, b: Any, epsilon: float) -> bool:
+    """Equal, numbers within `epsilon`; lists and tuples (JSON keeps no tuples) element-wise."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a == b
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
         return abs(a - b) <= epsilon
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(_close(x, y, epsilon) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_close(a[key], b[key], epsilon) for key in a)
     return a == b
 
 
 Row = tuple[str, Any, Any]  # (observable path, vanilla value, Krasnokamen value)
+# Observable path -> the values the two vanilla recordings showed there, for the paths where they differ.
+Wildcards = Mapping[str, list]
+NO_WILDCARDS: Wildcards = {}
+
+
+def recorded(wildcards: Wildcards, path: str, value: Any, epsilon: float = 0.0) -> bool:
+    """True when one of the vanilla recordings showed `value` at `path`, a path where they disagree.
+
+    Vanilla not determining a path does not make every value right: only a value vanilla itself
+    produced there passes.
+    """
+    return any(_close(seen, value, epsilon) for seen in wildcards.get(path, ()))
 
 
 def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
-                     prefix: str = "", wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
+                     prefix: str = "", wildcards: Wildcards = NO_WILDCARDS) -> dict[str, Any]:
     """Compare one snapshot; multi-cell snapshots are compared cell by cell.
 
     A cell list present on only one side, or with a different length, is itself a
@@ -63,7 +83,7 @@ def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Ro
     and pass a truncated or padded receipt as a match.
 
     `rows` (when given) receives every difference as an observable path with both values;
-    a path listed in `wildcards` (differs between two vanilla recordings) is no difference.
+    at a path in `wildcards` a value one of the vanilla recordings showed is no difference.
     """
     rows = [] if rows is None else rows
     va_cells = vanilla.get("cells")
@@ -86,13 +106,34 @@ def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Ro
     return compare_cell(spec, vanilla, krasnokamen, rows, prefix, wildcards)
 
 
+def _list_rows(path: str, va: list, so: list, epsilon: float, wildcards: Wildcards,
+               names: list[str] | None = None) -> list[Row]:
+    """Difference rows of two sorted per-entity lists, one row per element (per field with `names`).
+
+    Lists of unequal length differ as a whole, and only a whole list one recording showed passes.
+    """
+    if len(va) != len(so):
+        return [] if recorded(wildcards, path, so, epsilon) else [(path, va, so)]
+    rows = []
+    for index, (u, v) in enumerate(zip(va, so)):
+        if names is None:
+            if not _close(u, v, epsilon) and not recorded(wildcards, f"{path}/{index}", v, epsilon):
+                rows.append((f"{path}/{index}", u, v))
+            continue
+        for name, x, y in zip(names, u, v):
+            field = f"{path}/{index}/{name}"
+            if not _close(x, y, epsilon) and not recorded(wildcards, field, y, epsilon):
+                rows.append((field, x, y))
+    return rows
+
+
 def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
-                 prefix: str = "", wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
+                 prefix: str = "", wildcards: Wildcards = NO_WILDCARDS) -> dict[str, Any]:
     rows = [] if rows is None else rows
     out: dict[str, Any] = {}
     if spec.get("blocks", "exact") == "exact":
         diffs = [d for d in block_diff(vanilla["blocks"], krasnokamen["blocks"], spec.get("ignore_blocks", []))
-                 if f"{prefix}blocks/{d['pos']}" not in wildcards]
+                 if not recorded(wildcards, f"{prefix}blocks/{d['pos']}", d["krasnokamen"])]
         rows += [(f"{prefix}blocks/{d['pos']}", d["vanilla"], d["krasnokamen"]) for d in diffs]
         if diffs:
             out["blocks"] = {"count": len(diffs), "first": diffs[:MAX_DIFFS]}
@@ -100,7 +141,7 @@ def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] |
         a, b = vanilla.get("containers", {}), krasnokamen.get("containers", {})
         found = {pos: {"vanilla": a.get(pos), "krasnokamen": b.get(pos)}
                  for pos in sorted(set(a) | set(b))
-                 if a.get(pos) != b.get(pos) and f"{prefix}containers/{pos}" not in wildcards}
+                 if a.get(pos) != b.get(pos) and not recorded(wildcards, f"{prefix}containers/{pos}", b.get(pos))}
         rows += [(f"{prefix}containers/{pos}", row["vanilla"], row["krasnokamen"]) for pos, row in found.items()]
         if found:
             out["containers"] = found
@@ -110,39 +151,38 @@ def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] |
         tolerance = spec.get("entity_tolerance", 0)
         found = {}
         for key in sorted(set(a) | set(b)):
-            if abs(a[key] - b[key]) > tolerance and f"{prefix}entities/{key}" not in wildcards:
+            path = f"{prefix}entities/{key}"
+            if abs(a[key] - b[key]) > tolerance and not recorded(wildcards, path, b[key], tolerance):
                 found[key] = {"vanilla": a[key], "krasnokamen": b[key]}
-                rows.append((f"{prefix}entities/{key}", a[key], b[key]))
+                rows.append((path, a[key], b[key]))
         if found:
             out["entities"] = found
     positions = spec.get("entity_positions")
-    if positions and f"{prefix}entity_positions" not in wildcards:
+    if positions:
         epsilon = positions.get("epsilon", 0.01)
         want = set(positions["types"])
-        pa = sorted(tuple(round(c, 6) for c in e["pos"]) for e in vanilla["entities"] if e["type"] in want)
-        pb = sorted(tuple(round(c, 6) for c in e["pos"]) for e in krasnokamen["entities"] if e["type"] in want)
-        if len(pa) != len(pb) or any(
-                any(abs(x - y) > epsilon for x, y in zip(u, v)) for u, v in zip(pa, pb)):
+        pa, pb = (sorted(tuple(round(c, 6) for c in e["pos"]) for e in side["entities"] if e["type"] in want)
+                  for side in (vanilla, krasnokamen))
+        found_rows = _list_rows(f"{prefix}entity_positions", pa, pb, epsilon, wildcards)
+        if found_rows:
             out["entity_positions"] = {"vanilla": pa[:MAX_DIFFS], "krasnokamen": pb[:MAX_DIFFS]}
-            rows.append((f"{prefix}entity_positions", pa[:MAX_DIFFS], pb[:MAX_DIFFS]))
+            rows += found_rows
     fields = spec.get("entity_fields")
     if fields:
         epsilon = fields.get("epsilon", 0.01)
         for kind in fields["types"]:
-            path = f"{prefix}entity_fields/{kind}"
-            if path in wildcards:
-                continue
             va, so = (sorted((tuple(e.get(name) for name in fields["fields"])
                               for e in side["entities"] if e["type"] == kind), key=_none_last)
                       for side in (vanilla, krasnokamen))
-            if len(va) != len(so) or not all(_close(x, y, epsilon) for u, v in zip(va, so) for x, y in zip(u, v)):
+            found_rows = _list_rows(f"{prefix}entity_fields/{kind}", va, so, epsilon, wildcards, fields["fields"])
+            if found_rows:
                 out.setdefault("entity_fields", {})[kind] = {"vanilla": va[:MAX_DIFFS], "krasnokamen": so[:MAX_DIFFS]}
-                rows.append((path, va[:MAX_DIFFS], so[:MAX_DIFFS]))
+                rows += found_rows
     return out
 
 
 def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
-                     wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
+                     wildcards: Wildcards = NO_WILDCARDS) -> dict[str, Any]:
     """Return {"phases": {name: diff}, "match": bool}.
 
     Traces are compared only when the scenario root enables ``trace`` — the same

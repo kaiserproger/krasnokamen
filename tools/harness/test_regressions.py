@@ -1590,6 +1590,62 @@ class LedgerToolTests(unittest.TestCase):
             self.promote(root, runner)
         self.assertEqual(runner.seen, [])
 
+    def test_the_guard_lists_the_candidate_and_the_candidate_without_the_whole_fix(self):
+        """D131 P1-1: measured on the tree being promoted (untracked file included) and on that tree with
+        the fix reversed, test hunks too; the variant whose fix also deletes a test is refused before any
+        control runs (its negative control)."""
+        for drop in (False, True):
+            directory = tempfile.TemporaryDirectory()
+            self.addCleanup(directory.cleanup)
+            root = Path(directory.name) / 'repo'
+            src = root / 'crates/demo/src'
+            src.mkdir(parents=True)
+            (root / 'docs/bugs').mkdir(parents=True)
+            self.git(root, 'init', '-q')
+            (root / 'crates/demo/Cargo.toml').write_text('[package]\nname = "demo"\n')
+            (src / 'lib.rs').write_text('value = buggy\n')
+            (src / 'old_tests.rs').write_text('fn kept() {}\nfn dropped() {}\n')
+            self.git(root, 'add', '-A')
+            self.git(root, 'commit', '-qm', 'base')
+            (src / 'lib.rs').write_text('value = fixed\n')
+            (src / 'new_tests.rs').write_text('fn added() {}\n')
+            if drop:
+                (src / 'old_tests.rs').write_text('fn kept() {}\n')
+            self.git(root, 'add', '-A')
+            self.git(root, 'commit', '-qm', 'fix')
+            fix = self.git(root, 'rev-parse', 'HEAD')
+            ledger.write_rows(root, ROW.format(area='gameplay', ref='cargo:demo:t', extra=f'fix_commit = "{fix}"\n'))
+            self.git(root, 'add', '-A')
+            self.git(root, 'commit', '-qm', 'ledger')
+            (src / 'extra.rs').write_text('untracked, part of the candidate\n')
+            self.artifacts = Path(directory.name) / 'artifacts'
+            self.artifacts.mkdir()
+            seen, ran = [], []
+
+            def lister(tree, packages):
+                here = tree / 'crates/demo/src'
+                seen.append(((here / 'lib.rs').read_text(), (here / 'new_tests.rs').exists(),
+                             (here / 'extra.rs').exists(), packages))
+                return {f'demo::{line[3:].split("(")[0]}': False for path in sorted(here.glob('*_tests.rs'))
+                        for line in path.read_text().splitlines()}
+
+            def runner(ctx, refs, tree, client):
+                ran.append(tree)
+                buggy = 'buggy' in (tree / 'crates/demo/src/lib.rs').read_text()
+                assertion = {'file': 'crates/demo/src/lib.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}
+                return {ref: ({'state': ledger.RED, 'detail': '', 'assertion': assertion} if buggy
+                              else {'state': ledger.GREEN, 'detail': ''}) for ref in refs}
+
+            if drop:
+                with self.assertRaisesRegex(ledger.Refused, r"drops 1 test.*demo::dropped"):
+                    self.promote(root, runner, test_lister=lister, dry_run=True)
+                self.assertEqual(ran, [])
+            else:
+                receipt = self.promote(root, runner, test_lister=lister, dry_run=True)
+                self.assertEqual(receipt['test_guard']['measured_on'], 'candidate')
+                self.assertEqual(receipt['test_guard']['tests']['added'], ['demo::added'])
+            self.assertEqual(seen, [('value = fixed\n', True, True, ['demo']), ('value = buggy\n', False, True, ['demo'])])
+
     def test_client_row_needs_a_real_client_receipt_of_the_tree_being_promoted(self):
         root = self.scratch(area='client', ref='harness:entities:native-v2-craft-drag')
         runner = self.runner()
