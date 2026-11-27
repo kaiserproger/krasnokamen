@@ -362,16 +362,25 @@ worker, runs the negative control.
    (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
    20-blueprint default run has one 600 s deadline and cannot pass.
    Control worktrees
-   are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
-   one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
-   `ledger-control-fix`). Every cargo build or test for such a tree runs through
-   `mem-run.sh` with `cwd=<tree>` and without the caller's `CARGO_TARGET_DIR`, so
-   the runner gives the tree its own slot (marks it, touches on a switch) and
-   the fixed path reuses it instead of growing the target dir; the release
-   server build checks the slot marker against the tree actually built. No
-   incremental cache.
+   are temporary `git worktree`s beside the other worktrees (`<work>/wt/`), in
+   one of three independent promotion sets (`ledger-control-pool-<k>.lock`,
+   k = 1..3). A promote takes the first free set and, when all three are held,
+   blocks on every set at once and takes whichever frees first, so three
+   promotions run concurrently instead of queueing on one host-wide lock. Each
+   set has its own fixed paths (`ledger-control-p<k>-candidate`,
+   `ledger-control-p<k>-fix`). Every cargo build or test for such a tree runs
+   through `mem-run.sh` with `cwd=<tree>` and without the caller's
+   `CARGO_TARGET_DIR`, so the runner gives the tree its own slot (marks it,
+   touches on a switch) and the fixed path reuses it instead of growing the
+   target dir; the release server build checks the slot marker against the tree
+   actually built. No incremental cache.
    Each has its own copy of `data/vanilla` (never links into the source tree)
-   and is removed afterwards. A real-client run in such a tree first copies its
+   and is removed afterwards. Old-version leftovers from before the pool
+   (`wt/ledger-control.lock` and the `ledger-control-{candidate,fix}`,
+   `ledger-client-control`, `ledger-loader-control` trees) and a set 2/3 tree
+   left by a killed promotion are not removed by the pool (a lone promote
+   always takes set 1): delete them by hand once no old-version lane runs.
+   A real-client run in such a tree first copies its
    evidence (reports, logs, `result.json`, screenshots; no worlds or binaries)
    to `client-artifacts/<run>/` in the promote artifact dir, and the per-ref
    `receipt` in `promote.json` points there, for red and unrunnable runs too.
