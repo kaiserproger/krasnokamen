@@ -8,9 +8,10 @@
     (all take [--mc-version 26.3] [--corpus DIR])
 
 `record` runs every not yet recorded case twice on real vanilla and appends it to the
-append-only corpus (`corpus.py`); paths that differ between the two recordings become
-wildcards. `replay` (the gate) checks corpus integrity, runs only Krasnokamen, compares
-observable state and groups mismatches by first differing path under stable ids. A
+append-only corpus (`corpus.py`); a path where the two recordings differ becomes a
+wildcard that accepts only the values they showed. `replay` (the gate) checks corpus
+integrity, runs only Krasnokamen, compares observable state and groups mismatches by
+first differing path under stable ids. A
 mismatch listed in `known-diffs.json` is reported as `known-divergence`; a listed mismatch
 that no longer occurs fails the gate, as does any other mismatch, a Krasnokamen command
 rejection, an unrecorded or changed scenario, or a corpus integrity problem.
@@ -230,7 +231,7 @@ def apply_known(entry: dict, groups: list[dict], known: dict | None, reasons: li
 
 
 def verdict(scenario: dict, vanilla: dict, krasnokamen: dict | None, *,
-            wildcards: frozenset[str] = frozenset(), known: dict | None = None) -> dict:
+            wildcards: compare.Wildcards = compare.NO_WILDCARDS, known: dict | None = None) -> dict:
     """Replay verdict of one exact-state case against its first vanilla recording."""
     entry: dict = {"id": scenario["id"], "family": scenario.get("family"), "status": "pass"}
     reasons: list[str] = []
@@ -307,7 +308,7 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict[str, list
 
 
 def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, reasons: list,
-                 wildcards: frozenset[str] = frozenset(), rows: list | None = None) -> dict:
+                 wildcards: compare.Wildcards = compare.NO_WILDCARDS, rows: list | None = None) -> dict:
     """Fuzz gate: every vanilla duplication cell must match; other cell diffs are findings."""
     rows = [] if rows is None else rows
     diff = compare.compare_scenario(scenario, vanilla, krasnokamen, rows, wildcards)
@@ -361,8 +362,12 @@ def _is_shape(path: str) -> bool:
     return "/" not in path or path.rsplit("/", 1)[-1] in ("cells", "trace")
 
 
-def recording_problems(case: dict, recordings: list[dict]) -> tuple[list[str], list[str]]:
-    """(problems that refuse the recording, wildcard paths between the two recordings)."""
+def recording_problems(case: dict, recordings: list[dict]) -> tuple[list[str], dict[str, list]]:
+    """(problems that refuse the recording, {path: [value in recording 1, value in recording 2]}).
+
+    The wildcards are the element paths (a block, a container, one entity's position or field)
+    where the two recordings differ, with the values each showed: replay accepts only those.
+    """
     problems = []
     for index, run in enumerate(recordings, 1):
         if run["command_log"]:
@@ -371,13 +376,24 @@ def recording_problems(case: dict, recordings: list[dict]) -> tuple[list[str], l
         if failures:
             problems.append(f"recording {index}: vanilla does not show what the scenario encodes: {failures[:5]}")
     if case.get("rate"):  # seed variants compare production distributions, not paths
-        return problems, []
+        return problems, {}
     rows: list = []
     compare.compare_scenario(case, recordings[0], recordings[1], rows)
     shape = [path for path, _, _ in rows if _is_shape(path)]
     if shape:
         problems.append(f"the two vanilla recordings differ in shape, not values: {shape[:5]}")
-    return problems, sorted({path for path, _, _ in rows})
+    return problems, {path: [first, second] for path, first, second in sorted(rows, key=lambda row: row[0])}
+
+
+def recorded_wildcards(doc: dict) -> dict[str, list]:
+    """A corpus case's wildcards; a legacy path list without the recorded values cannot be checked."""
+    wildcards = doc["wildcards"]
+    if isinstance(wildcards, dict):
+        return wildcards
+    if wildcards:
+        raise CorpusError(f"{doc['case']} v{doc['version']} keeps wildcard paths without the values vanilla "
+                          "showed there: re-record it")
+    return {}
 
 
 def _environment(args) -> dict:
@@ -520,7 +536,7 @@ def replay(args) -> int:
                 continue
             receipt["scenarios"].append(verdict(
                 doc["scenario"], doc["recordings"][0], krasnokamen.get(case),
-                wildcards=frozenset(doc["wildcards"]), known=known.get(case)))
+                wildcards=recorded_wildcards(doc), known=known.get(case)))
             receipt["scenarios"][-1]["recorded_version"] = doc["version"]
         for group, members in groups.items():
             receipt["scenarios"].append(rate_group_verdict(

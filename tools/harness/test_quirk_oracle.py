@@ -217,14 +217,46 @@ class ReplayTests(unittest.TestCase):
 
 
 class WildcardAndKnownDiffTests(unittest.TestCase):
-    def test_paths_differing_between_recordings_become_wildcards(self):
+    def test_wildcards_accept_only_values_a_recording_showed(self):
         a = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:gravel"})
         b = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:flint_block"})
         problems, wildcards = oracle.recording_problems(SCENARIO, [a, b])
-        self.assertEqual((problems, wildcards), ([], ["p/blocks/1,0,0", "setup/blocks/1,0,0"]))
-        krasnokamen = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:sand"})
-        self.assertEqual(oracle.verdict(SCENARIO, a, krasnokamen, wildcards=frozenset(wildcards))["status"], "pass")
-        self.assertEqual(oracle.verdict(SCENARIO, a, krasnokamen)["status"], "fail")
+        self.assertEqual(problems, [])
+        self.assertEqual(wildcards, {path: ["minecraft:gravel", "minecraft:flint_block"]
+                                     for path in ("p/blocks/1,0,0", "setup/blocks/1,0,0")})
+        for value, status in (("minecraft:gravel", "pass"), ("minecraft:flint_block", "pass"),
+                              ("minecraft:sand", "fail")):
+            krasnokamen = run({"0,0,0": "minecraft:stone", "1,0,0": value})
+            self.assertEqual(oracle.verdict(SCENARIO, a, krasnokamen, wildcards=wildcards)["status"], status, value)
+        flint = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:flint_block"})
+        self.assertEqual(oracle.verdict(SCENARIO, a, flint)["status"], "fail")
+
+    def test_entity_wildcards_mask_one_entity_and_one_field(self):
+        spec = {"blocks": "exact", "entities": "counts",
+                "entity_positions": {"types": ["minecraft:pig"], "epsilon": 0.05},
+                "entity_fields": {"types": ["minecraft:pig"], "fields": ["health", "fuse"], "epsilon": 0.01}}
+        scenario = dict(SCENARIO, compare=spec)
+
+        def pigs(second_x: float, second_health: float, first_x: float = 0.5, first_health: float = 10.0):
+            return run({}, [{"type": "minecraft:pig", "pos": [first_x, 1.0, 0.5], "health": first_health},
+                            {"type": "minecraft:pig", "pos": [second_x, 1.0, 0.5], "health": second_health}])
+
+        problems, wildcards = oracle.recording_problems(scenario, [pigs(3.0, 6.0), pigs(4.0, 8.0)])
+        self.assertEqual(problems, [])
+        # positions sort by x (the moving pig is second), fields by health (the hurt pig is first)
+        self.assertEqual(sorted(wildcards), ["p/entity_fields/minecraft:pig/0/health", "p/entity_positions/1",
+                                             "setup/entity_fields/minecraft:pig/0/health", "setup/entity_positions/1"])
+        self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), pigs(4.0, 8.0), wildcards=wildcards)["status"], "pass")
+        for label, krasnokamen in (("unrecorded position", pigs(5.0, 8.0)), ("unrecorded health", pigs(4.0, 7.0)),
+                                   ("other pig moved", pigs(4.0, 8.0, first_x=1.5)),
+                                   ("other pig hurt", pigs(4.0, 8.0, first_health=9.0))):
+            self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), krasnokamen, wildcards=wildcards)["status"],
+                             "fail", label)
+
+    def test_legacy_wildcard_paths_without_values_need_a_rerecord(self):
+        self.assertEqual(oracle.recorded_wildcards(doc()), {})
+        with self.assertRaises(CorpusError):
+            oracle.recorded_wildcards(doc(wildcards=["p/blocks/1,0,0"]))
 
     def test_recordings_differing_in_shape_are_refused(self):
         a = run({})
