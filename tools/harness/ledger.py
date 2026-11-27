@@ -1547,17 +1547,17 @@ def _worktree_parent(root):
 def _control_lock(root):
     """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
     artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
-    Lock order is a build token, then this lock: the promote runs under mem-run (the owner host's
-    memory cap and token), and every build stage's own mem-run reuses that ancestor token. A promote
-    that took this lock without a token deadlocked with promotes holding tokens while they waited
-    here, because its next stage needed one of their tokens (2026-11-12, 1 h host-wide stall)."""
+    The promote runs under mem-run (the owner host's memory cap and the boss's one-scope policy);
+    mem-run exports KRASNOKAMEN_HARNESS_CPU_SCOPE=1 for every command, and each build stage's own
+    mem-run reuses that scope. Build tokens were removed by owner D127 (2026-11-27), so this lock
+    no longer orders behind a token; it still serializes promotions whose control trees are shared."""
     parent = _worktree_parent(root)
     if parent is None:
         yield
         return
-    if not os.environ.get('KRASNOKAMEN_BUILD_TOKEN'):
-        raise Refused('ledger promote must run under mem-run (no build token held): it takes a build '
-                      'token first, then wt/ledger-control.lock, and its build stages reuse that token; '
+    if not os.environ.get('KRASNOKAMEN_HARNESS_CPU_SCOPE'):
+        raise Refused('ledger promote must run under mem-run (KRASNOKAMEN_HARNESS_CPU_SCOPE is not set): '
+                      'it takes wt/ledger-control.lock and its build stages reuse that scope; '
                       'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
     with (parent / 'ledger-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

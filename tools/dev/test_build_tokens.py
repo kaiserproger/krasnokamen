@@ -1,87 +1,39 @@
-"""Build tokens in mem-run.sh: python3 tools/dev/test_build_tokens.py
+"""No build-token admission in mem-run.sh: python3 tools/dev/test_build_tokens.py
 
-Isolated like test_mem_run_build_env: a copy of the runner with a private state dir (so private
-token locks), slice and watchdog. No Cargo runs: `cargo` is a stub on PATH that prints its token and
-then blocks on stdin, so the test decides when each "build" ends. No sleeps: every wait is on a pipe
-(a stub's line, slot-lock.py's queued byte) or a process exit; the 60 s bounds only catch a failure.
-MEMRUN_TEST_SCRIPT selects another runner copy (the negative control removes the token exec)."""
+Owner D127 (2026-11-27) removed build tokens: a compile, gate or run no longer waits
+for another command, and no priority lane or disk floor queues one. What remains is
+the shared CPU jobserver (shares cores, never queues), each scope's MemoryMax, the
+OOM watchdog and the scene slots.
+
+The file name and `BuildTokenTests.setUp` stay because `test_scene_slot.py` imports
+them for its isolated runner sandbox. The tests prove the removal: the runner text
+has no token assignment, no token lock directory appears, and several concurrent
+compile commands all start at once.
+"""
+
 from __future__ import annotations
 
-import fcntl
 import os
-import re
 import select
 import shutil
-import signal
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BOUND = 60  # seconds; only a failure ever waits this long
-# The token count is the runner's own `build_tokens=N` (owner D27 trial, 2026-11-18: 4).
-TOKENS = [str(n) for n in range(1, int(re.search(r'^build_tokens=(\d+)$', (HERE / 'mem-run.sh').read_text(),
-                                                 re.M).group(1)) + 1)]
 STUB = '''#!/usr/bin/env python3
-import os, subprocess, sys
-print(f"run {os.environ.get('KRASNOKAMEN_BUILD_TOKEN', '-')} {os.getpid()}", flush=True)
-for line in sys.stdin:
-    if line.strip() == "nest":  # a nested compile through the runner, like the ledger's cargo nextest
-        out = subprocess.run([os.environ["TEST_RUNNER"], "-m", "1G", "cargo", "build"],
-                             stdin=subprocess.DEVNULL, capture_output=True, text=True)
-        print(f"nested {out.returncode} {out.stdout.strip()}", flush=True)
+import os, sys
+print(f"run {os.getpid()}", flush=True)
+for _ in sys.stdin:
+    pass
 '''
-# Loaded by every Python process of one runner through PYTHONPATH (the runner itself is
-# unchanged): reports slot-lock.py's gate calls on a pipe and pauses after its first test
-# that found the gate free, until the test writes to the go pipe.
-GATE_HOOK = '''import fcntl, os
-_fds = os.environ.get("TOKEN_TEST_GATE_HOOK")
-if _fds:
-    _sig, _go = (int(fd) for fd in _fds.split(","))
-    _flock, _close, _free, _paused = fcntl.flock, os.close, set(), []
-
-    def _gate(fd):
-        try:
-            return os.readlink(f"/proc/self/fd/{fd}").endswith("priority.gate")
-        except OSError:
-            return False
-
-    def flock(fd, op):
-        if op == fcntl.LOCK_EX and _gate(fd):
-            os.write(_sig, b"y")  # yielding: about to sleep until no priority waiter is left
-        _flock(fd, op)
-        if op == fcntl.LOCK_EX | fcntl.LOCK_NB and _gate(fd):
-            _free.add(fd)  # the test found no priority waiter
-
-    def close(fd):
-        tested = fd in _free
-        _free.discard(fd)
-        _close(fd)
-        if tested and not _paused:
-            _paused.append(fd)
-            os.write(_sig, b"p")
-            os.read(_go, 1)
-
-    fcntl.flock, os.close = flock, close
-'''
-
-
-class Command:
-    def __init__(self, proc: subprocess.Popen, ready: int, log: Path):
-        self.proc, self.ready, self.log = proc, ready, log
-        self.state: str | None = None  # 'run' or 'queued'
-        self.token: str | None = None
-
-    def read_run_line(self, test: unittest.TestCase) -> None:
-        line = self.proc.stdout.readline().split()
-        test.assertTrue(line, f'runner exited without starting its command: {self.log.read_text()}')
-        test.assertEqual(line[0], 'run', line)
-        self.state, self.token = 'run', line[1]
 
 
 class BuildTokenTests(unittest.TestCase):
+    """An isolated runner copy with its own state dir, slice and watchdog."""
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -92,331 +44,68 @@ class BuildTokenTests(unittest.TestCase):
         self.addCleanup(subprocess.run, ['systemctl', '--user', 'stop', slice_name], check=False)
         self.addCleanup(subprocess.run, ['systemctl', '--user', 'stop', watchdog + '.service'], check=False)
         source = Path(os.environ.get('MEMRUN_TEST_SCRIPT', str(HERE / 'mem-run.sh'))).read_text()
-        self.state_dir = self.root / 'state'
-        for old, new in (('dir=/tmp/solaris-mem-slots', f'dir={self.state_dir}'),
-                         ('slice=solaris-heavy.slice', f'slice={slice_name}')):
-            self.assertIn(old, source)
-            source = source.replace(old, new, 1)
+        self.assertIn('dir=/tmp/solaris-mem-slots', source)
+        self.assertIn('slice=solaris-heavy.slice', source)
+        self.source = source
+        source = source.replace('dir=/tmp/solaris-mem-slots', f'dir={self.root / "state"}', 1)
+        source = source.replace('slice=solaris-heavy.slice', f'slice={slice_name}', 1)
         source = source.replace('solaris-heavy-watchdog', watchdog)
         self.runner = self.root / 'mem-run.sh'
         self.runner.write_text(source)
         self.runner.chmod(0o755)
-        for name in ('slot-select.sh', 'heavy-watchdog.py', 'mem-run-guard.py', 'slot-lock.py', 'sccache.sh',
-                     'release-build-policy.sh', 'measurement-window.py', 'measurement-windows'):
-            shutil.copy(HERE / name, self.root)
+        for name in ('slot-select.sh', 'slot-gc', 'heavy-watchdog.py', 'mem-run-guard.py', 'slot-lock.py',
+                     'sccache.sh', 'release-build-policy.sh', 'measurement-window.py', 'measurement-windows',
+                     'reserved_cpus.py'):
+            if (HERE / name).exists():
+                shutil.copy(HERE / name, self.root)
         bin_dir = self.root / 'bin'
         bin_dir.mkdir()
-        (bin_dir / 'cargo').write_text(STUB.replace('/usr/bin/env python3', sys.executable, 1))
+        (bin_dir / 'cargo').write_text(STUB.replace('/usr/bin/env python3', os.sys.executable, 1))
         (bin_dir / 'cargo').chmod(0o755)
         self.tree = self.root / 'wt'
         self.tree.mkdir()
+        self.state_dir = self.root / 'state'
         self.env = {key: value for key, value in os.environ.items()
-                    if key not in ('KRASNOKAMEN_BUILD_TOKEN', 'KRASNOKAMEN_BUILD_TOKEN_PID', 'KRASNOKAMEN_SCENE_SLOT')}
-        self.env.update(PATH=f'{bin_dir}:{os.environ["PATH"]}', CARGO_TARGET_DIR=str(self.root / 'target'),
-                        KRASNOKAMEN_SLOT_TARGETS=str(self.root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0',
-                        TEST_RUNNER=str(self.runner),
-                        # Token admission is the subject; the measurement-window schedule and the
-                        # release-pin policy are not, so this test opts into both.
+                    if not key.startswith('KRASNOKAMEN_')}
+        self.env.update(PATH=f'{bin_dir}:{os.environ["PATH"]}',
+                        CARGO_TARGET_DIR=str(self.root / 'targets' / 'slot-a'),
+                        KRASNOKAMEN_SLOT_TARGETS=str(self.root / 'targets'),
+                        KRASNOKAMEN_DISK_GC_BELOW_GB='0', KRASNOKAMEN_DISK_REFUSE_BELOW_GB='0',
                         KRASNOKAMEN_WINDOW_OVERRIDE='1', KRASNOKAMEN_RELEASE_BUILD_ALLOW='1')
+        (self.root / 'targets' / 'slot-a').mkdir(parents=True)
         self.count = 0
 
-    def start(self, *command: str, pass_fds: tuple[int, ...] = ()) -> Command:
-        """Start `mem-run.sh -m 1G <command>`; slot-lock.py writes b'w' to its ready pipe once queued."""
+    def start(self, *command: str) -> subprocess.Popen:
         self.count += 1
-        ready_r, ready_w = os.pipe()
         log = self.root / f'runner-{self.count}.log'
         with open(log, 'w') as stderr:
-            proc = subprocess.Popen([str(self.runner), '-m', '1G', *command], cwd=self.tree,
-                                    env=self.env | {'KRASNOKAMEN_BUILD_TOKEN_READY_FD': str(ready_w)},
-                                    pass_fds=(ready_w, *pass_fds),
+            return subprocess.Popen([str(self.runner), '-m', '1G', *command], cwd=self.tree, env=self.env,
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr, text=True)
-        os.close(ready_w)
-        cmd = Command(proc, ready_r, log)
-        self.addCleanup(self.stop, cmd)
-        return cmd
 
-    def stop(self, cmd: Command) -> None:
-        if cmd.proc.poll() is None:
-            cmd.proc.kill()  # the scope guardian kills the command's scope
-            cmd.proc.wait(timeout=BOUND)
-        for stream in (cmd.proc.stdin, cmd.proc.stdout):
-            try:
-                stream.close()
-            except BrokenPipeError:
-                pass
-        if cmd.ready is not None:
-            os.close(cmd.ready)
-            cmd.ready = None
+    def stop(self, proc: subprocess.Popen) -> None:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=BOUND)
 
-    def settle(self, cmds: list[Command]) -> None:
-        """Wait until every command has started (its stub printed `run`) or reported itself queued."""
-        while any(cmd.state is None for cmd in cmds):
-            watched = {}
-            for cmd in cmds:
-                if cmd.state is None:
-                    watched[cmd.proc.stdout] = cmd
-                    if cmd.ready is not None:
-                        watched[cmd.ready] = cmd
-            readable, _, _ = select.select(list(watched), [], [], BOUND)
-            self.assertTrue(readable, f'no runner started or queued within {BOUND} s')
-            for stream in readable:
-                cmd = watched[stream]
-                if cmd.state is not None:
-                    continue
-                if stream is cmd.proc.stdout:
-                    cmd.read_run_line(self)
-                else:
-                    byte = os.read(cmd.ready, 1)  # b'' = slot-lock.py won at once and closed it
-                    os.close(cmd.ready)
-                    cmd.ready = None
-                    if byte == b'w':
-                        cmd.state = 'queued'
+    def test_the_runner_has_no_token_admission(self) -> None:
+        self.assertNotRegex(self.source, r'^build_tokens=')
+        self.assertNotIn('KRASNOKAMEN_BUILD_TOKEN', self.source)
+        self.assertNotIn('slot-lock.py', self.source, 'the runner no longer takes a token lock')
 
-    def wait_run(self, cmd: Command) -> None:
-        readable, _, _ = select.select([cmd.proc.stdout], [], [], BOUND)
-        self.assertTrue(readable, f'queued runner did not start within {BOUND} s')
-        cmd.read_run_line(self)
-
-    def finish(self, cmd: Command) -> None:
-        cmd.proc.stdin.close()
-        self.assertEqual(cmd.proc.wait(timeout=BOUND), 0, cmd.log.read_text())
-
-    def held_tokens(self) -> list[str]:
-        held = []
-        for token in TOKENS:
-            fd = os.open(self.state_dir / 'tokens' / f'token-{token}.lock', os.O_RDONLY)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except BlockingIOError:
-                held.append(token)
-            finally:
-                os.close(fd)
-        return held
-
-    def wait_tokens_free(self) -> None:
-        """The scope guardian returns a token when the scope empties, just after the runner exits:
-        block on each token lock (an alarm bounds a failure) instead of sampling it."""
-        def expired(*_):
-            raise AssertionError(f'a build token stayed held {BOUND} s after its runner exited')
-        previous = signal.signal(signal.SIGALRM, expired)
-        signal.alarm(BOUND)
-        try:
-            for token in TOKENS:
-                fd = os.open(self.state_dir / 'tokens' / f'token-{token}.lock', os.O_RDONLY)
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_EX)
-                finally:
-                    os.close(fd)
-        finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, previous)
-
-    def hold_all(self, extra: int = 0) -> tuple[list[Command], list[Command]]:
-        cmds = [self.start('cargo', 'test', '-p', f'crate{n}') for n in range(len(TOKENS) + extra)]
-        self.settle(cmds)
-        running = [cmd for cmd in cmds if cmd.state == 'run']
-        queued = [cmd for cmd in cmds if cmd.state == 'queued']
-        self.assertEqual(len(running), len(TOKENS), f'exactly {len(TOKENS)} compile commands run, got {len(running)}')
-        self.assertEqual(sorted(cmd.token for cmd in running), TOKENS)
-        self.assertEqual(self.held_tokens(), TOKENS)
-        return running, queued
-
-    def test_fourth_compile_waits_for_a_freed_token_and_a_kill_frees_one(self):
-        running, queued = self.hold_all(extra=1)
-        self.assertEqual(len(queued), 1)
-        fourth = queued[0]
-        self.assertIsNone(fourth.proc.poll())
-        status = subprocess.run([str(HERE / 'fleet-status'), '--mem-dir', str(self.state_dir)], env=self.env,
-                                capture_output=True, text=True, timeout=BOUND, check=True).stdout
-        self.assertIn(f'BUILD TOKENS ({len(TOKENS)}/{len(TOKENS)} in use, 1 waiting)', status)
-        self.assertEqual(status.count('cargo test -p crate'), len(TOKENS) + 1, status)
-        self.assertIn(f'waiting pid {fourth.proc.pid}', status)
-        self.assertEqual(status.count(f'in {self.tree}'), len(TOKENS) + 1, status)
-        # A normal exit hands its token to the waiter.
-        first = running.pop(0)
-        self.finish(first)
-        self.wait_run(fourth)
-        self.assertEqual(fourth.token, first.token)
-        running.append(fourth)
-        # So does killing a holder (the runner pid: wrapper and scope go with it).
-        fifth = self.start('cargo', 'build')
-        self.settle([fifth])
-        self.assertEqual(fifth.state, 'queued')
-        victim = running.pop(0)
-        victim.proc.send_signal(signal.SIGKILL)
-        victim.proc.wait(timeout=BOUND)
-        self.wait_run(fifth)
-        self.assertEqual(fifth.token, victim.token)
-        for cmd in running + [fifth]:
-            self.finish(cmd)
-        self.wait_tokens_free()
-
-    def test_killing_a_runner_parked_behind_a_window_frees_its_token(self):
-        # 2026-11-15: a compile killed while it waited for a -x window left its `flock -s 3`
-        # child orphaned with a copy of the token fd, so the token stayed held until the window ended.
-        self.state_dir.mkdir()
-        window = os.open(self.state_dir / 'exclusive.lock', os.O_WRONLY | os.O_CREAT, 0o644)
-        self.addCleanup(os.close, window)  # releasing it lets the parked flock finish and exit
-        fcntl.flock(window, fcntl.LOCK_EX)
-        # A `flock` stub on PATH reports the shared wait on a pipe, then becomes the real flock.
-        parked_r, parked_w = os.pipe()
-        self.addCleanup(os.close, parked_r)
-        (self.root / 'bin' / 'flock').write_text(
-            f'#!{sys.executable}\nimport os, sys\n'
-            'if sys.argv[1:] == ["-s", "3"]:\n'
-            '    os.write(int(os.environ["TEST_FLOCK_PARKED_FD"]), b"p")\n'
-            f'os.execv({shutil.which("flock")!r}, ["flock", *sys.argv[1:]])\n')
-        (self.root / 'bin' / 'flock').chmod(0o755)
-        saved, self.env = self.env, self.env | {'TEST_FLOCK_PARKED_FD': str(parked_w)}
-        try:
-            parked = self.start('cargo', 'build', pass_fds=(parked_w,))
-        finally:
-            self.env = saved
-            os.close(parked_w)
-        readable, _, _ = select.select([parked_r], [], [], BOUND)
-        self.assertTrue(readable, f'the runner did not park behind the window within {BOUND} s')
-        self.assertEqual(os.read(parked_r, 1), b'p')
-        self.assertEqual(len(self.held_tokens()), 1)
-        parked.proc.send_signal(signal.SIGKILL)
-        parked.proc.wait(timeout=BOUND)
-        self.wait_tokens_free()  # while the window still holds exclusive.lock
-
-    def test_nested_compile_and_gate_run_while_all_tokens_are_held(self):
-        running, _ = self.hold_all()
-        # A gate on a pinned binary takes no token.
-        gate = subprocess.run([str(self.runner), '-m', '1G', 'sh', '-c', 'echo "gate ${KRASNOKAMEN_BUILD_TOKEN:-none}"'],
-                              cwd=self.tree, env=self.env, capture_output=True, text=True, timeout=BOUND)
-        self.assertEqual(gate.returncode, 0, gate.stderr)
-        self.assertEqual(gate.stdout.strip(), 'gate none')
-        # A compile nested under a holder reuses the holder's token instead of waiting for a fourth.
-        outer = running[1]
-        outer.proc.stdin.write('nest\n')
-        outer.proc.stdin.flush()
-        readable, _, _ = select.select([outer.proc.stdout], [], [], BOUND)
-        self.assertTrue(readable, 'nested compile blocked on a second token')
-        nested = outer.proc.stdout.readline().split()
-        self.assertEqual(nested[:3], ['nested', '0', 'run'], nested)
-        self.assertEqual(nested[3], outer.token)
-        self.assertEqual(self.held_tokens(), TOKENS)
-        for cmd in running:
-            self.finish(cmd)
-
-    def test_a_waiting_priority_compile_gets_the_next_freed_token_before_background(self):
-        running, _ = self.hold_all()
-        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
-        saved, self.env = self.env, background
-        try:
-            waiter = self.start('cargo', 'build', '-p', 'bg')
-        finally:
-            self.env = saved
-        self.settle([waiter])
-        self.assertEqual(waiter.state, 'queued')
-        # Queued after the background compile, the priority compile still wins the
-        # next token the background lane could take.
-        priority = self.start('cargo', 'build', '-p', 'd8')
-        self.settle([priority])
-        self.assertEqual(priority.state, 'queued')
-        freed = next(cmd for cmd in running if cmd.token in ('1', '2'))
-        self.finish(freed)
-        self.wait_run(priority)
-        self.assertEqual(priority.token, freed.token)
-        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
-        self.assertFalse(readable, 'the background compile started while a priority compile waited')
-        # With no priority compile waiting, the background compile takes the next one.
-        running.remove(freed)
-        other = next(cmd for cmd in running if cmd.token in ('1', '2'))
-        self.finish(other)
-        self.wait_run(waiter)
-        self.assertEqual(waiter.token, other.token)
-        for cmd in [*running, priority, waiter]:
-            if cmd is not other:
-                self.finish(cmd)
-        self.wait_tokens_free()
-
-    def test_two_waiting_priority_compiles_both_win_before_background(self):
-        running, _ = self.hold_all()
-        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
-        saved, self.env = self.env, background
-        try:
-            waiter = self.start('cargo', 'build', '-p', 'bg')
-        finally:
-            self.env = saved
-        self.settle([waiter])
-        first = self.start('cargo', 'build', '-p', 's2')
-        self.settle([first])
-        second = self.start('cargo', 'build', '-p', 's4')
-        self.settle([second])
-        self.assertEqual((waiter.state, first.state, second.state), ('queued', 'queued', 'queued'))
-        # Token 3 goes to one priority compile; the next token the background lane
-        # could take still goes to the other one.
-        by_token = {cmd.token: cmd for cmd in running}
-        self.finish(by_token['3'])
-        readable, _, _ = select.select([first.proc.stdout, second.proc.stdout], [], [], BOUND)
-        self.assertTrue(readable, 'no priority compile took token 3')
-        winner = first if first.proc.stdout in readable else second
-        other = second if winner is first else first
-        self.wait_run(winner)
-        self.finish(by_token['1'])
-        self.wait_run(other)
-        self.assertEqual(other.token, '1')
-        readable, _, _ = select.select([waiter.proc.stdout], [], [], 0)
-        self.assertFalse(readable, 'the background compile started while a priority compile waited')
-        self.finish(by_token['2'])
-        self.wait_run(waiter)
-        self.assertEqual(waiter.token, '2')
-        rest = [cmd for token, cmd in by_token.items() if token not in ('1', '2', '3')]
-        for cmd in (winner, other, waiter, *rest):
-            self.finish(cmd)
-        self.wait_tokens_free()
-
-    def test_a_background_compile_that_found_the_gate_free_yields_to_a_priority_compile_queued_after(self):
-        """Advisor: the at-once take tested the gate before taking a token, so a priority compile
-        could queue in between and lose the next freed token to the background compile."""
-        running, _ = self.hold_all()
-        hook_dir = self.root / 'hook'
-        hook_dir.mkdir()
-        (hook_dir / 'sitecustomize.py').write_text(GATE_HOOK)
-        sig_r, sig_w = os.pipe()
-        go_r, go_w = os.pipe()
-        for fd in (sig_r, go_w):
-            self.addCleanup(os.close, fd)
-        saved = self.env
-        self.env = saved | {'KRASNOKAMEN_BUILD_LANE': 'background', 'PYTHONPATH': str(hook_dir),
-                            'TOKEN_TEST_GATE_HOOK': f'{sig_w},{go_r}'}
-        try:
-            background = self.start('cargo', 'build', '-p', 'bg', pass_fds=(sig_w, go_r))
-        finally:
-            self.env = saved
-        os.close(sig_w)
-        os.close(go_r)
-        # The background runner either queued (all tokens busy) or found the gate free and
-        # paused before it takes a token; either way no priority compile is waiting yet.
-        readable, _, _ = select.select([background.ready, sig_r], [], [], BOUND)
-        self.assertTrue(readable, 'the background runner neither queued nor tested the gate')
-        if sig_r in readable:
-            self.assertEqual(os.read(sig_r, 1), b'p')
-        # Now a priority compile registers (a shared hold, as a waiting normal-lane runner
-        # takes it) and a token the background lane can take frees.
-        gate = os.open(self.state_dir / 'tokens' / 'priority.gate', os.O_WRONLY | os.O_CREAT, 0o666)
-        fcntl.flock(gate, fcntl.LOCK_SH)
-        freed = next(cmd for cmd in running if cmd.token == '1')
-        self.finish(freed)
-        os.write(go_w, b'g')
-        # The background compile either starts (stdout) or yields (the hook's `y`), never both.
-        readable, _, _ = select.select([background.proc.stdout, sig_r], [], [], BOUND)
-        self.assertTrue(readable, 'the background runner neither started nor yielded')
-        self.assertNotIn(background.proc.stdout, readable,
-                         'the background compile took a token while a priority compile waited')
-        self.assertEqual(os.read(sig_r, 1), b'y')
-        # The priority waiter wins and lets go: the background compile takes the token.
-        os.close(gate)
-        self.wait_run(background)
-        self.assertEqual(background.token, '1')
-        for cmd in running:
-            if cmd is not freed:
-                self.finish(cmd)
-        self.finish(background)
-        self.wait_tokens_free()
+    def test_concurrent_compile_commands_all_start_at_once(self) -> None:
+        procs = [self.start('cargo', 'build', '-p', f'crate{n}') for n in range(4)]
+        for proc in procs:
+            self.addCleanup(self.stop, proc)
+        for proc in procs:
+            readable, _, _ = select.select([proc.stdout], [], [], BOUND)
+            self.assertTrue(readable, 'a compile waited instead of starting at once')
+            line = proc.stdout.readline().split()
+            self.assertEqual(line[0], 'run', line)
+        self.assertFalse((self.state_dir / 'tokens').exists(), 'no token lock dir may appear')
+        for proc in procs:
+            proc.stdin.close()
+        for proc in procs:
+            self.assertEqual(proc.wait(timeout=BOUND), 0)
 
 
 if __name__ == '__main__':
