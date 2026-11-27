@@ -69,7 +69,7 @@ pub(in crate::tick) fn early_entity_rest(
             && crate::goat::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::turtle::is_turtle(type_id))
             && crate::turtle::drive(view.entities.row(slot)).is_some()
-        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::blueprint::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::cat::is_cat(type_id))
             && crate::cat::drive(

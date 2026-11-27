@@ -774,6 +774,25 @@ pub(crate) fn variant_data(
     })
 }
 
+/// The frog protocol type id, resolved once from the immutable entity contract.
+static FROG_TYPE: std::sync::LazyLock<u32> = std::sync::LazyLock::new(|| {
+    (0..mc_data::entity_types::ENTITY_TYPE_COUNT as u32)
+        .find(|&id| {
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(id)
+                .is_some_and(|contract| contract.name == "minecraft:frog")
+        })
+        .expect("frog type")
+});
+
+pub fn is_frog(type_id: u32) -> bool {
+    type_id == *FROG_TYPE
+}
+
+/// The frog protocol type id, for the core's retained frog pass.
+pub fn frog_type() -> u32 {
+    *FROG_TYPE
+}
+
 /// Dye colors by id, as the loot tables name them (`minecraft:sheep/color`).
 pub const DYE_COLORS: [&str; 16] = [
     "white",
