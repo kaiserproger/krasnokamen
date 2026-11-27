@@ -105,7 +105,7 @@ fn apply_fault(fault: Option<&str>, world_dir: &std::path::Path) {
         Some("delete-store") => std::fs::remove_file(&store).expect("delete native store"),
         Some("garble-store") => {
             let mut bytes = std::fs::read(&store).expect("read native store");
-            for byte in &mut bytes[..4096.min(bytes.len())] {
+            for byte in bytes.iter_mut().take(4096) {
                 *byte ^= 0x5a;
             }
             std::fs::write(&store, bytes).expect("garble native store");
