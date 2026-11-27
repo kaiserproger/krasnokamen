@@ -919,8 +919,10 @@ const IDLE_GOALS: &[Goal] = &[Goal {
     kind: GoalKind::Idle,
 }];
 
-/// Vanilla blueprints the core simulates. No type-name branches in the tick:
-/// the entity phase only reads these fields.
+/// Vanilla blueprints the core simulates, before the domain extensions and the
+/// shared capability pass (the host registry runs both, see
+/// [`finish_blueprints`]). No type-name branches in the tick: the entity phase
+/// only reads these fields.
 pub fn vanilla_blueprints(
     entity_types: &mc_data::entity_types::EntityTypeRegistry,
     items: &mc_data::items::ItemRegistry,
@@ -1326,13 +1328,17 @@ pub fn vanilla_blueprints(
             _ => 1,
         };
     }
-    crate::special_mobs::extend_blueprints(entity_types, entity_loot, &mut out);
-    crate::copper_golem::extend_blueprints(entity_types, &mut out);
-    crate::end_fight::extend_blueprints(entity_types, &mut out);
-    crate::species::extend_blueprints(entity_types, items, entity_loot, &mut out);
-    crate::projectiles::extend_blueprints(entity_types, &mut out);
-    crate::vehicles::extend_blueprints(entity_types, &mut out);
-    for (_, blueprint) in &mut out {
+    out
+}
+
+/// Shared per-type capabilities and crossbreeding, applied after the host
+/// appended every domain extension: the extenders read the base table, so the
+/// registry runs them between [`vanilla_blueprints`] and this pass.
+pub fn finish_blueprints(
+    entity_types: &mc_data::entity_types::EntityTypeRegistry,
+    out: &mut [(u32, MobBlueprint)],
+) {
+    for (_, blueprint) in out.iter_mut() {
         vanilla_capabilities(blueprint);
     }
     let id = |name: &str| {
@@ -1343,7 +1349,7 @@ pub fn vanilla_blueprints(
         id("minecraft:donkey"),
         id("minecraft:mule"),
     ) {
-        for (key, blueprint) in &mut out {
+        for (key, blueprint) in out.iter_mut() {
             let partner = if *key == horse {
                 Some(donkey)
             } else if *key == donkey {
@@ -1360,7 +1366,7 @@ pub fn vanilla_blueprints(
     // Vanilla breeds trader llamas with hay like ordinary llamas; a mixed
     // pair produces an ordinary llama.
     if let (Some(llama), Some(trader)) = (id("minecraft:llama"), id("minecraft:trader_llama")) {
-        for (key, blueprint) in &mut out {
+        for (key, blueprint) in out.iter_mut() {
             if *key == trader {
                 blueprint.capabilities.crossbreed = Some(Crossbreed {
                     partner: llama,
@@ -1374,7 +1380,6 @@ pub fn vanilla_blueprints(
             }
         }
     }
-    out
 }
 
 /// `#minecraft:fall_damage_immune` of the 26.1.2 data pack.
