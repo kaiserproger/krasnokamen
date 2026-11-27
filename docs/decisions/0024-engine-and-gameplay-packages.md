@@ -8,12 +8,13 @@ second review); see [Review resolution](#review-resolution). The owner accepted
 both open proposals (D66 answers, 2026-11-19): the §3.4 slowdown verdict in its
 written order (Q1) and the one-off offline converter, reset only for a world he
 declared expendable (Q4).
-Nothing here is implemented. The D65 settlements crate (ADR 0021 Step 2, design
-`receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md` and `REVIEW-sol-r2.md` in that directory,
-both outside Git) is already running and is this ADR's first step; this ADR
-builds on that design and does not repeat it.  
-**Related:** [0009](0009-regional-plugin-boundary.md) (isolation and admission
-principles), [0013](0013-core-model-v2.md) (native authority, plugin admission,
+Nothing here is implemented. The D65 settlements unload (ADR 0021 Step 2,
+design `receipts/CoreUnload/DESIGN.md`, revised after its reviews `REVIEW-sol.md`
+and `REVIEW-sol-r2.md` in that directory, both outside Git) is this ADR's first
+step; its in-crate persistence cut S3 is merged (`96ddfde87`), the settlements
+crate itself does not exist yet (`crates/` at `973e6e60e`). This ADR builds on
+that design and does not repeat it.  
+**Related:** [0013](0013-core-model-v2.md) (native authority, plugin admission,
 hot set), [0016](0016-mob-capabilities.md) (mob blueprints as data),
 [0017](0017-tick-system-graph.md) (declared systems),
 [0018](0018-in-game-computer.md) (computer), [0021](0021-build-time-and-crate-split.md)

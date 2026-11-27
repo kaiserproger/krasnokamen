@@ -132,15 +132,16 @@ Synthetic routing tests additionally exercise both sides of canonical and
 reverse serverbound order. No unmeasured release above 777 is advertised.
 Adding an up step changes edge codecs/profiles, not core authority.
 
-### Data ownership and automatic installation
+### Data ownership and installation
 
-`mc_data::protocol_versions::SUPPORTED` owns the release window. `content import
---download` and a fresh first start install every endpoint using the existing
-verified Mojang download, datagen and vanilla RegistryData capture path. This
-does **not** depend on the proposed native importer in
-[ADR 0022](0022-content-without-java.md), whose owner questions remain open.
-Only canonical content needs the gameplay extractors; other endpoints need
-reports, their own definitions/tags and exact captured registry payloads.
+`mc_data::protocol_versions::SUPPORTED` owns the release window. `content import`
+installs every endpoint using the existing verified Mojang download, datagen and
+vanilla RegistryData capture path; startup only discovers and validates and
+never downloads ([ADR 0001](0001-vanilla-data-as-runtime-input.md),
+`crates/mc-edge/src/server.rs:1906`). This does **not** depend on the proposed
+native importer in [ADR 0022](0022-content-without-java.md). Only canonical
+content needs the gameplay extractors; other endpoints need reports, their own
+definitions/tags and exact captured registry payloads.
 
 For a canonical cache `content/26.3`, version caches are `content/26.1.2` and
 `content/26.2`. Each adjacent step separately owns mapping-only snapshots in
