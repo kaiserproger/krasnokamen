@@ -2043,19 +2043,50 @@ class LedgerToolTests(unittest.TestCase):
         root = self.scratch()
         inline = root / 'src/util.rs'
         inline.write_text('#[cfg(test)]\nmod tests {\n    #[test]\n    fn kept() {}\n}\n')
+        platform = root / 'src/platform.rs'
+        platform.write_text('#[cfg(all(\n    test, target_os = "linux"\n))]\nmod persistence_crash_tests;\n')
         tracked = root / 'src/other_tests.rs'
         tracked.write_text('#[test]\nfn other() {}\n')
         (root / 'tests/unrelated.rs').write_text('another check\n')
         self.git(root, 'add', '-A')
         self.git(root, 'commit', '-qm', 'tests unrelated to the fix')
         inline.write_text(inline.read_text().replace('    #[test]', '    #[test]\n    #[ignore]'))
+        platform.write_text('')
         (root / 'tests/unrelated.rs').unlink()
         tracked.write_text('#[test]\n#[ignore]\nfn other() {}\n')
         self.git(root, 'add', str(tracked))
         (root / 'tests/untracked.rs').write_text('#[test]\nfn new_test() {}\n')
         runner = self.runner()
-        with self.assertRaisesRegex(ledger.Refused, 'uncommitted test changes before promotion: '
-                                    'src/other_tests.rs, src/util.rs, tests/unrelated.rs, tests/untracked.rs'):
+        with self.assertRaisesRegex(ledger.Refused, 'uncommitted test changes before promotion .*: '
+                                    'src/other_tests.rs, src/platform.rs, src/util.rs, tests/unrelated.rs, tests/untracked.rs'):
+            self.promote(root, runner, dry_run=True)
+        self.assertEqual(runner.seen, [])
+
+    def test_dirty_build_inputs_refuse_promotion_even_without_test_source_edits(self):
+        root = self.scratch()
+        manifest = root / 'Cargo.toml'
+        manifest.write_text('[package]\nname = "demo"\nversion = "0.1.0"\n')
+        self.git(root, 'add', str(manifest))
+        self.git(root, 'commit', '-qm', 'manifest')
+        manifest.write_text(manifest.read_text() + '\n[lib]\ntest = false\n')
+        (root / 'build.rs').write_text('fn main() {}\n')
+        (root / '.cargo').mkdir()
+        (root / '.cargo/config.toml').write_text('[build]\nrustflags = []\n')
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, r'including build inputs\): \.cargo/config\.toml, Cargo\.toml, build\.rs'):
+            self.promote(root, runner, dry_run=True)
+        self.assertEqual(runner.seen, [])
+
+    def test_index_only_test_edits_refuse_promotion(self):
+        root = self.scratch()
+        test_file = root / 'tests/new_case.rs'
+        original = test_file.read_text()
+        test_file.write_text('#[ignore]\n' + original)
+        self.git(root, 'add', str(test_file))
+        test_file.write_text(original)
+        self.assertFalse(ledger.tree_fingerprint(root)['dirty'])
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, r'uncommitted test changes.*tests/new_case\.rs'):
             self.promote(root, runner, dry_run=True)
         self.assertEqual(runner.seen, [])
 

@@ -216,9 +216,10 @@ worker, runs the negative control.
    use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint. No commit is needed for
-   the production patch, but test files, inline Rust tests, and nextest config
-   must be clean; `promote` names any dirty ones it refuses. The control and
-   the restore worktrees reproduce the candidate, verified by that fingerprint.
+   the production patch. Test files, inline and conditionally compiled Rust
+   tests, and Cargo/build/toolchain/nextest inputs must be clean in both the
+   index and working tree; `promote` names any it refuses. The control and
+   restore worktrees reproduce the candidate, verified by that fingerprint.
 
    Patch mode is also the only route for a committed fix whose hunks no longer
    reverse-apply on the candidate: such a commit is refused ("fix no longer

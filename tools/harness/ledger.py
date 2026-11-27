@@ -1019,7 +1019,7 @@ def _skipped_doc(path):
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
 _RUST_TEST_ITEM = re.compile(
     r'^[ \t]*(?:#\[[^\n]*\][ \t]*\n[ \t]*)*'
-    r'#\[\s*(?:cfg\s*\(\s*test\s*\)|test)\s*\]\s*'
+    r'#\[\s*(?:cfg\s*\([^\]]*\btest\b[^\]]*\)|test)\s*\]\s*'
     r'(?:#\[[^\n]*\][ \t]*\n[ \t]*)*[^;{]*[;{]', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 _RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')
@@ -1768,10 +1768,12 @@ def _dirty_parts(root):
     return diff, sorted(others.splitlines())
 
 
-def _dirty_test_paths(tree):
-    """Dirty test files and changes to inline test items, including deletions."""
-    _, names = _git(tree, 'diff', 'HEAD', '--name-only', '--no-renames', '-z')
-    _, untracked = _git(tree, 'ls-files', '--others', '--exclude-standard', '-z')
+def _dirty_test_paths(tree, *, cached=False):
+    """Test and build inputs changed from HEAD in the index or the worktree."""
+    paths = ('--', '.', ':!docs/bugs', ':!.analysis')
+    base = ('--cached', 'HEAD') if cached else ('HEAD',)
+    _, names = _git(tree, 'diff', *base, '--name-only', '--no-renames', '-z', *paths)
+    untracked = '' if cached else _git(tree, 'ls-files', '--others', '--exclude-standard', '-z', *paths)[1]
 
     def test_items(text):
         lines = text.splitlines(keepends=True)
@@ -1779,14 +1781,16 @@ def _dirty_test_paths(tree):
 
     dirty = []
     for name in sorted(set(names.split('\0') + untracked.split('\0')) - {''}):
-        if name.startswith(('docs/bugs/', '.analysis/')):
-            continue
-        if _TEST_PATH.search(name) or name == '.config/nextest.toml':
+        path = Path(name)
+        build_input = (path.name in {'Cargo.toml', 'Cargo.lock', 'build.rs', 'rust-toolchain', 'rust-toolchain.toml'}
+                       or '.cargo' in path.parts or name == '.config/nextest.toml')
+        if _TEST_PATH.search(name) or build_input:
             dirty.append(name)
-        elif name.endswith('.rs'):
+        elif path.suffix == '.rs':
             _, before = _git(tree, 'show', f'HEAD:{name}', check=False)
-            path = tree / name
-            after = path.read_text(errors='surrogateescape') if path.is_file() else ''
+            source = tree / path
+            after = (_git(tree, 'show', f':{name}', check=False)[1] if cached
+                     else source.read_text(errors='surrogateescape') if source.is_file() else '')
             if test_items(before) != test_items(after):
                 dirty.append(name)
     return dirty
@@ -3007,8 +3011,12 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         # untracked files (verified against the fingerprint), never on fix_commit.
         candidate = stack.enter_context(_worktree(root, head, 'candidate', control_set))
         _materialize(root, candidate, tree_now)
-        if tree_now['dirty'] and (dirty_tests := _dirty_test_paths(candidate)):
-            raise Refused(f"{ident}: commit or remove uncommitted test changes before promotion: {', '.join(dirty_tests)}")
+        dirty_tests = set(_dirty_test_paths(root, cached=True))
+        if tree_now['dirty']:
+            dirty_tests.update(_dirty_test_paths(candidate))
+        if dirty_tests:
+            raise Refused(f"{ident}: commit or remove uncommitted test changes before promotion "
+                          f"(including build inputs): {', '.join(sorted(dirty_tests))}")
         if test_only:
             missing = _uncovered_test_files(candidate, reversed_files, refs)
             if missing:
