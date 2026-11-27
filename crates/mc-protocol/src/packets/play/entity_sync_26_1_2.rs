@@ -187,7 +187,7 @@ pub struct ClientboundUpdateEntityAttributes {
 }
 
 impl Packet for ClientboundUpdateEntityAttributes {
-    // `.analysis/protocol-dump.txt`: CLIENTBOUND_UPDATE_ATTRIBUTES is game-CB
+    // `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_UPDATE_ATTRIBUTES is game-CB
     // index 134 = wire id 0x86. Both collections use VarInt counts.
     const ID: i32 = 0x86;
 
@@ -285,7 +285,7 @@ pub struct ClientboundSetEntityEquipment {
 }
 
 impl Packet for ClientboundSetEntityEquipment {
-    // `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_EQUIPMENT is game-CB
+    // `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_EQUIPMENT is game-CB
     // index 104 = wire id 0x68. Bit 7 means another entry follows.
     const ID: i32 = 0x68;
 
@@ -375,7 +375,7 @@ pub struct ClientboundUpdateEntityEffect {
 }
 
 impl Packet for ClientboundUpdateEntityEffect {
-    // `.analysis/protocol-dump.txt`: CLIENTBOUND_UPDATE_MOB_EFFECT is game-CB
+    // `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_UPDATE_MOB_EFFECT is game-CB
     // index 135 = wire id 0x87.
     const ID: i32 = 0x87;
 
@@ -406,7 +406,7 @@ pub struct ClientboundRemoveEntityEffect {
 }
 
 impl Packet for ClientboundRemoveEntityEffect {
-    // `.analysis/protocol-dump.txt`: CLIENTBOUND_REMOVE_MOB_EFFECT is game-CB
+    // `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_REMOVE_MOB_EFFECT is game-CB
     // index 79 = wire id 0x4F.
     const ID: i32 = 0x4F;
 
@@ -432,7 +432,7 @@ pub struct ClientboundSetEntityLeash {
 }
 
 impl Packet for ClientboundSetEntityLeash {
-    // `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_ENTITY_LINK is game-CB
+    // `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_ENTITY_LINK is game-CB
     // index 102 = wire id 0x66. Both ids are fixed-width big-endian ints.
     const ID: i32 = 0x66;
 

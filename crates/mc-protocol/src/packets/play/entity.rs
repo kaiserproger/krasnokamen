@@ -66,8 +66,8 @@ pub struct PlayerInfoUpdate {
 }
 
 impl Packet for PlayerInfoUpdate {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_INFO_UPDATE
-    // sits at game-CB index 71 = wire id 0x47. `javap` shows an 8-bit fixed
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_PLAYER_INFO_UPDATE
+    // sits at game-CB index 71 = wire id 0x47. 26.1.2 `javap` shows an 8-bit fixed
     // EnumSet, then a VarInt-counted entry list keyed by profile UUID.
     const ID: i32 = 0x47;
 
@@ -198,7 +198,7 @@ pub struct PlayerInfoRemove {
 }
 
 impl Packet for PlayerInfoRemove {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_INFO_REMOVE
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_PLAYER_INFO_REMOVE
     // sits at game-CB index 70 = wire id 0x46. Body is a VarInt-counted UUID list.
     const ID: i32 = 0x46;
 
@@ -232,8 +232,8 @@ pub struct AddEntity {
 }
 
 impl Packet for AddEntity {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_ADD_ENTITY is
-    // game-CB index 1 = wire id 0x01. `javap` shows VarInt id, UUID,
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_ADD_ENTITY is
+    // game-CB index 1 = wire id 0x01. 26.1.2 `javap` shows VarInt id, UUID,
     // registry entity type id, xyz doubles, `Vec3.LP_STREAM_CODEC`, packed
     // x/y/head rotations, then VarInt data.
     const ID: i32 = 0x01;
@@ -420,7 +420,7 @@ pub struct EntityEvent {
 }
 
 impl Packet for EntityEvent {
-    // Verified via inner `.analysis/server.jar` 26.1.2 server jar:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from the 26.1.2 server jar:
     // CLIENTBOUND_ENTITY_EVENT is game-CB index 34 = wire id 0x22.
     // `javap -p -c ClientboundEntityEventPacket` shows i32 entity id
     // followed by one signed byte event id.
@@ -616,7 +616,7 @@ pub struct SetEntityMotion {
 }
 
 impl Packet for SetEntityMotion {
-    // Verified via inner `.analysis/server.jar` 26.1.2 server jar:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from the 26.1.2 server jar:
     // CLIENTBOUND_SET_ENTITY_MOTION is game-CB index 103 = wire id 0x67.
     // `javap -p -c ClientboundSetEntityMotionPacket` shows VarInt id plus
     // `Vec3.LP_STREAM_CODEC` movement.
@@ -1475,8 +1475,8 @@ pub struct ClientboundSetEntityData {
 }
 
 impl Packet for ClientboundSetEntityData {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_ENTITY_DATA is
-    // game-CB index 101 = wire id 0x65. `javap -p -c` shows VarInt entity id,
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_ENTITY_DATA is
+    // game-CB index 101 = wire id 0x65. 26.1.2 `javap -p -c` shows VarInt entity id,
     // repeated DataValue entries, then EOF marker byte 255. DataValue writes one
     // unsigned-byte metadata index, VarInt serializer id, then serializer payload.
     const ID: i32 = 0x65;
@@ -1552,8 +1552,8 @@ pub struct ClientboundTakeItemEntity {
 }
 
 impl Packet for ClientboundTakeItemEntity {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_TAKE_ITEM_ENTITY is
-    // game-CB index 127 = wire id 0x7F. `javap -p -c` shows three VarInts:
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_TAKE_ITEM_ENTITY is
+    // game-CB index 127 = wire id 0x7F. 26.1.2 `javap -p -c` shows three VarInts:
     // item entity id, player entity id, and picked-up amount.
     const ID: i32 = 0x7F;
 
@@ -1579,7 +1579,7 @@ pub struct RemoveEntities {
 }
 
 impl Packet for RemoveEntities {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_REMOVE_ENTITIES
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_REMOVE_ENTITIES
     // is game-CB index 78 = wire id 0x4E. Body is FriendlyByteBuf.writeIntIdList.
     const ID: i32 = 0x4E;
 
@@ -1606,7 +1606,7 @@ pub struct ClientboundSetPassengers {
 }
 
 impl Packet for ClientboundSetPassengers {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_PASSENGERS
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_PASSENGERS
     // is game-CB index 109 = wire id 0x6D. Body is a vehicle VarInt followed
     // by a VarInt-length-prefixed array of passenger entity VarInts.
     const ID: i32 = 0x6D;
@@ -1637,7 +1637,7 @@ pub struct RotateHead {
 }
 
 impl Packet for RotateHead {
-    // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_ROTATE_HEAD is
+    // Verified via `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_ROTATE_HEAD is
     // game-CB index 85 = wire id 0x55. Body is VarInt entity id and packed yaw.
     const ID: i32 = 0x55;
 
