@@ -22,3 +22,6 @@
 {"case":"container-hopper-moves","mc":"26.3","scenario_sha256":"21d74a5f8a948ab14ff54aa7fcd1ce1ee0097970dd9e93a4bec93e024056a087","sha256":"ba96c02dacea3bbbf1a0c4eae606a2aceebe660248b8f32c2056a1470f68db7c","version":2}
 {"case":"save-restart","mc":"26.3","scenario_sha256":"0bcf1fe5820abeaca1b44129a43ed5cf8e5b4ab41f2428632742e1d8f9b37252","sha256":"1041c5066bbf250ac4ab9c4b56273f63061f9e29b9045dbd511f14bd436e6c43","version":2}
 {"case":"smelting-furnaces","mc":"26.3","scenario_sha256":"0941462b8ccc77372de6253094b35164c1a1184f807700d33388693ef71edc81","sha256":"6752e4f57f2fc119f59e7ef242e45926e0025cd25c9945d522251a644c599602","version":2}
+{"case":"block-shape-updates","mc":"26.3","scenario_sha256":"367d0ec47dcd4a952e16b249a3ce963244768af965abc126a9104c2eaa0036a3","sha256":"eb9a7e31bcf8c9b005c118991df5cdd71b2554f0e2c8f28c4479b6ca38621ffb","version":2}
+{"case":"block-break-drops","mc":"26.3","scenario_sha256":"daada816cc4d4759a701a251238d32a3128fd0ecbc9b237a069bbe87add83d60","sha256":"1fb0c17eb51fea2a6a2fbbc24014f2ec888249bad1e2ca44911bb03165698ac6","version":2}
+{"case":"redstone-update-order","mc":"26.3","scenario_sha256":"b905622df1bb3f54e70203f8cdf0f1eb85169f8bfdf2226be8858e24cfbca23d","sha256":"f18cdd3d1d044314cbbdfeb46294ebfd69e18d3503277dc7d0d7c2c7fe4e0800","version":2}
