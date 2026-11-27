@@ -1019,25 +1019,32 @@ impl EdgeServer {
             self.admin_op_batch(id, command, root, target).await?;
             return Ok(true);
         }
-        let source = self
-            .connections
-            .inner
-            .lock()
-            .names
-            .get(&id)
-            .cloned()
-            .unwrap_or_else(|| "Server".into());
+        let source = self.session_source(id);
         if matches!(root, "kick" | "ban" | "pardon") {
-            self.admin_kick_ban_pardon(id, command, root, target, &live, &reason, duration, &source)
-                .await?;
+            self.admin_kick_ban_pardon(
+                id, command, root, target, &live, &reason, duration, &source,
+            )
+            .await?;
             return Ok(true);
         }
         if matches!(root, "ban-ip" | "pardon-ip") {
             self.admin_ip_ban(id, root, target, &live, &reason, &source)?;
             return Ok(true);
         }
-        self.admin_player_flag(id, root, target, &live, &reason, duration, &source)?;
+        self.admin_player_flag(id, root, target, &live, &reason, duration)?;
         Ok(true)
+    }
+
+    /// The issuer's name for moderation records, or `Server` for the console
+    /// and a connection the registry no longer names.
+    fn session_source(&self, id: ConnectionId) -> String {
+        self.connections
+            .inner
+            .lock()
+            .names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| "Server".into())
     }
 
     fn tps_feedback(
@@ -1411,7 +1418,6 @@ impl EdgeServer {
         live: &Option<LiveSession>,
         reason: &str,
         duration: Option<std::time::Duration>,
-        source: &str,
     ) -> anyhow::Result<()> {
         // A locked session never reaches here: the entry fence returns
         // `Ok(false)`. Username targeting stays as-is so unlocked operators and
@@ -1432,7 +1438,7 @@ impl EdgeServer {
                 let result = self.admin.mute_player(
                     uuid,
                     &name,
-                    source,
+                    &self.session_source(id),
                     if reason.is_empty() {
                         "Muted by an operator."
                     } else {
