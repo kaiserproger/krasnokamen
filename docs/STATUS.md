@@ -67,7 +67,7 @@ What each client can be asked for today. `yes`: works; `part`: works with the
 restriction named in the cell; `no`: refused or absent, and the cell names what
 to use instead. Java columns are unmodded clients; mods go in the Fabric/NeoForge
 column. Horizon is the pinned Horizon 26.3 client the harness drives
-([Horizon gates](development/real-client-gates.md#battle-crash-recovery-with-real-horizon-clients)).
+([real-client gates](development/real-client-gates.md)).
 Evidence for each cell is in [Feature areas](#feature-areas).
 
 | Feature | Java 26.3 | Java 26.2 | Java 26.1.2 | Fabric/NeoForge with mods | Native client | Horizon client |
