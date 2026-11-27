@@ -56,7 +56,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // tree merged with cut 3: 182 modules, 196 top-level modules, 245,946
     // production lines.
     // D124 inventory combined with the sealed batch 2 cuts: 178 modules.
-    cycle_modules: 178,
+    // D124 survival and combat split on that combined tree: 176 modules.
+    cycle_modules: 176,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
