@@ -63,7 +63,7 @@ async fn join_waiter_observes_join_stashed_between_check_and_registration() {
     let id = registry.joining_id();
     assert!(registry.take_join(id).is_none());
     let joined = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(7),
+        entity: mc_domain::EntityId(7),
         position: [1.0, 2.0, 3.0],
         rotation: [0.0, 0.0],
         game_mode: 0,

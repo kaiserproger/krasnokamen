@@ -225,7 +225,7 @@ fn job_survives_site_unload_reload_but_not_destruction() {
     state.world.fold_overlay();
     let mut cache = crate::settlements::allocator::PoiCache::default();
     cache.refresh(&state);
-    let owner = crate::boundary::EntityId(-1);
+    let owner = mc_domain::EntityId(-1);
     let mut v = VillagerState {
         home: Some(home),
         meeting_point: Some(meeting),

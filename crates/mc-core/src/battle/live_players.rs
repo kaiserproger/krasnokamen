@@ -36,12 +36,13 @@ use crate::battle::formation::{
     FormationRuntime, Order, Regiment, file_interval, position, slot_position,
 };
 use crate::battle::ground::{self, Placement};
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::commands::{Command, GameMode, Target};
 use crate::entities::{EntitySlot, EntityStore};
 use crate::intent::{DamageSource, Footprint, IntentKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 
 const MAX_WATCHED: usize = 8;
 /// Player body for grounding a placement.

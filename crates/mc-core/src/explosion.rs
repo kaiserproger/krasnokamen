@@ -14,13 +14,14 @@ use rustc_hash::FxHashMap;
 use mc_physics::BlockMaterial;
 use mc_world::BlockStateId;
 
-use crate::boundary::{BlockPos, EntityId, ExplosionEvent};
+use crate::boundary::{BlockPos, ExplosionEvent};
 use crate::entities::EntityKind;
 use crate::hostile::{Special, sight_clear, special_of};
 use crate::natural_spawn::Rng;
 use crate::registry::CoreRegistry;
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Blast resistance of unbreakable blocks (bedrock).
 const IMMUNE: f32 = 3_600_000.0;

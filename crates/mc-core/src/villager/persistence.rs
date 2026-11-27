@@ -7,12 +7,13 @@ use super::{
     Activity, Gossip, VillagerData, VillagerKind, VillagerProfession, VillagerState,
     VillagerTradeOffer,
 };
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use mc_data::{
     ItemStack,
     item_nbt::{stack_from_fields, stack_to_fields},
     items::ItemRegistry,
 };
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
 
 #[derive(Debug)]
@@ -298,7 +299,7 @@ pub(crate) fn deserialize_optional_state<'de, D: serde::Deserializer<'de>>(
 }
 
 pub(crate) mod entity_id_option {
-    use crate::boundary::EntityId;
+    use mc_domain::EntityId;
     use serde::{Deserialize, Serialize};
     pub fn serialize<S: serde::Serializer>(
         value: &Option<EntityId>,

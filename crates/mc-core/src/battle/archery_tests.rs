@@ -242,9 +242,7 @@ fn twenty_registered_archer_regiments_do_not_launch_in_one_kernel_tick() {
 #[test]
 fn about_one_arrow_in_seventy_kills_through_iron_on_easy() {
     let lethal = (0..20_000_u64)
-        .filter(|&tick| {
-            arrow_damage(crate::boundary::EntityId(7), tick) == LETHAL_ARROW_BASE_DAMAGE
-        })
+        .filter(|&tick| arrow_damage(mc_domain::EntityId(7), tick) == LETHAL_ARROW_BASE_DAMAGE)
         .count();
     assert!((200..=400).contains(&lethal), "lethal={lethal}");
     // Slowest aimed impact (90-tick flight) through 8 armour points on Easy.

@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
+use mc_domain::EntityId;
 
 fn npc() -> (TickState, crate::entities::EntitySlot, String) {
     let (mut state, _, position) = crate::hostile_tests::setup(8.0);

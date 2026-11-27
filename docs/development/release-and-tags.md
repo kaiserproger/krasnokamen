@@ -1,6 +1,6 @@
 # Releases and tags
 
-[AGENTS](../../AGENTS.md) grants Main small commits/pushes to `main`; workers
+The [owner rules](../RULES.md#commits-reviews-and-publication) grant Main small commits/pushes to `main`; workers
 stay on their own worktree branches and do not push.
 Tags/releases/other publication need explicit owner authorization. Before every
 tag: [two independent reviewers](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)
@@ -11,7 +11,6 @@ Repositories: `kaiserproger/krasnokamen`, `krasnokamen-client`,
 `krasnokamen-loader`, `krasnokamen-default-plugins`.
 `run …` below means `python3 -m tools.harness run …` under the
 [owner-host runner](heavy-commands-and-memory.md).
-[Historical wording](README.md) retains original examples.
 
 ## Core release cut
 
@@ -35,15 +34,14 @@ Repositories: `kaiserproger/krasnokamen`, `krasnokamen-client`,
 **Release text:** `docs/releases/<tag>.md` becomes archive `CHANGELOG.md` and
 GitHub body. Include upgrades, first-start `content import ... --download` and
 validation boundaries. Before review write `.analysis/releases/<tag>/claims.md`:
-every note claim → receipt path and run count. Read **each actual receipt**, not
-agent summary (RC4 Windows: only 2/3 runs used fresh profiles). Say “3 of 3”, not
-“always”; uninstrumented causes stay “likely”; another version's equivalence
-needs that same scenario there; unrun platforms say not run (three of four RC5
-review rejections were claim errors).
+every note claim → receipt path and run count, read from **each actual receipt**,
+not an agent summary. Say “3 of 3”, not “always”; uninstrumented causes stay
+“likely”; another version's equivalence needs that same scenario there; unrun
+platforms say not run ([pitfall](../PITFALLS.md#claims-commits-and-pipelines)).
 
 **Authorized publication, only after reviews:** no local-only `.analysis/`,
 `data/vanilla/`, `versions/`, `libraries/`, `perf.data` or stray targets in staging.
-One Conventional Commit with owner identity from AGENTS;
+One Conventional Commit with the owner identity (`kaiserproger <kaisergrobe@gmail.com>`);
 `git merge-base --is-ancestor origin/main HEAD`; annotated `git tag -a <tag>`;
 push main and tag as separate commands with separate statuses. CI prereleases
 `v0.*` and tags containing `-` (including `-rc.N`). Watch asynchronously:
@@ -98,7 +96,7 @@ server/multiplayer tests.
    twice (creation does not start) → Play Selected World → overworld
    `minecraft_wait_for_play` → screenshot → disconnect to Title. Verify installed
    language file and `installed.json` new name/SHA.
-5. Owner 2026-10-24: no client release/demo with known bugs. Failed minimum gate
+5. No client release or demo with known bugs (owner rule). A failed minimum gate
    leaves release draft; live chest/inventory smoke precedes tag. QA crash:
    cancel run and delete **unpublished** tag. Core notes name matching client tag.
 

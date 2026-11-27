@@ -11,9 +11,8 @@
 //! [`PlayerInput::Command`] with the leading `/` stripped; a `/…` line sent
 //! as plain chat stays `Chat`.
 
-use mc_core::boundary::{
-    BlockPos, ClickMode, ConnectionId, DigAction, EntityId, Hand, PlayerInput,
-};
+use mc_core::boundary::{BlockPos, ClickMode, ConnectionId, DigAction, Hand, PlayerInput};
+use mc_domain::EntityId;
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{
     ClientCommandAction, ConfirmTeleportation, ContainerInput, InteractionHand, PlayerActionKind,

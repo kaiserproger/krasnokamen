@@ -1,7 +1,7 @@
 //! Four-block, faction-partitioned broad phase. Rebuilt from frozen rows once
 //! per tick by count/prefix/scatter; queries never mutate shared state.
 
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 

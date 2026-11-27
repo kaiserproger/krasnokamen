@@ -1,6 +1,7 @@
 //! One-shot knockback survives exhausted world credit and a refused world send.
 use super::*;
-use mc_core::boundary::{ChangeSet, EntityId, ExplosionEvent, TickOutput, WorldSnapshot};
+use mc_core::boundary::{ChangeSet, ExplosionEvent, TickOutput, WorldSnapshot};
+use mc_domain::EntityId;
 
 #[tokio::test]
 async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {

@@ -7,10 +7,11 @@ mod pillars;
 #[cfg(test)]
 mod tests;
 
-use crate::boundary::{ChangeSet, EntityDataValue, EntityId};
+use crate::boundary::{ChangeSet, EntityDataValue};
 use crate::entities::EntitySlot;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

@@ -1,8 +1,8 @@
 //! Statistic awards at authoritative gameplay outcomes, never client predictions.
-use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::tick::TickState;
 use mc_data::statistics::{CustomStat, StatType};
+use mc_domain::EntityId;
 use mc_physics::mth;
 
 static CLIMBABLE_TAG: std::sync::LazyLock<(mc_data::Identifier, mc_data::Identifier)> =

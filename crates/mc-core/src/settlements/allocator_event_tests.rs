@@ -3,9 +3,10 @@
 //! events; both paths consume the same row/world pushes before validation.
 use super::tests::{bed, block, test_state, villager};
 use super::{Poi, PoiKind};
-use crate::boundary::{BlockPos, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::tick::TickState;
 use crate::villager::{VillagerProfession as Profession, VillagerState};
+use mc_domain::EntityId;
 
 const OVERWORLD: &str = "minecraft:overworld";
 const NETHER: &str = "minecraft:the_nether";

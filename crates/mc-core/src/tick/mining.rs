@@ -1,6 +1,7 @@
 //! Connection-local digging admission shared by native input and build hooks.
 use super::{TickState, within_block_reach};
-use crate::boundary::{BlockPos, DigAction, EntityId};
+use crate::boundary::{BlockPos, DigAction};
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct DigProgress {

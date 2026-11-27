@@ -1,12 +1,12 @@
 //! Enderman stare anger and safe, dry-ground teleportation. Anger is retained
 //! by the existing special-mob NBT/checkpoint image; every mutation is journaled.
-use crate::boundary::EntityId;
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::intent::DamageSource;
 use crate::natural_spawn::Rng;
 use crate::special_mobs::Retained;
 use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
+use mc_domain::EntityId;
 use mc_physics::BlockMaterial;
 use mc_physics::mth::{self, floor_i32};
 

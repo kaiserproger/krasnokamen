@@ -1,8 +1,9 @@
 //! ArmorStandItem placement and the stand's player equipment/break loop.
-use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, Hand};
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use std::sync::Arc;
 

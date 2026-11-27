@@ -35,9 +35,9 @@
 //! of the whole roster or of all grudges per hand-off.
 use super::faction::{in_melee_range, live_unit};
 use super::{BattleState, EnemyTarget, Frame, MELEE_ENGAGEMENT_REACH, Unit};
-use crate::boundary::EntityId;
 use crate::entities::{EntitySlot, EntityStore};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use rustc_hash::FxHashMap;
 
 /// How long a blow is remembered: 3 s.

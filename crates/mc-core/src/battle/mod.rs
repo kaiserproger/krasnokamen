@@ -41,12 +41,13 @@ pub use targeting::{
     Work, engagement_reach, retarget_due,
 };
 
-use crate::boundary::{EntityEvent, EntityId};
+use crate::boundary::EntityEvent;
 use crate::entities::EntityStore;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 /// Frozen input shared by every sub-step. `tick` is battle-local and advances
 /// only while running, so pause never skips windups, volleys or morale clocks.

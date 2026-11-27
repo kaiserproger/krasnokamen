@@ -62,7 +62,7 @@ pub(super) fn plan_move<R: BlockPlanningRead + ?Sized>(
 pub(super) fn apply_edits(
     state: &mut crate::tick::TickState,
     writes: &mut Vec<(BlockPos, u32)>,
-    spawned: &mut Vec<crate::boundary::EntityId>,
+    spawned: &mut Vec<mc_domain::EntityId>,
     edits: Vec<super::planning::BlockEdit>,
     motion: Option<super::piston_motion::Motion>,
 ) {

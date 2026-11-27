@@ -7,11 +7,11 @@ use std::sync::Arc;
 use mc_data::{Identifier, ItemStack};
 
 use super::{item_cell, merge_amount, merge_boxes_overlap, merge_neighbours};
-use crate::boundary::EntityId;
 use crate::entities::{EntitySlot, StackRow};
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 /// Merge before the cursor runs, verbatim: two binary searches over the
 /// sorted items per neighbour cell, each probe re-reading a position.

@@ -2,9 +2,10 @@
 //! (WeatheringCopper NEXT/PREVIOUS BiMaps). State changes retain each
 //! block's inventory and all properties; paired copper chests always
 //! share one weathering image.
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_world::{BlockRegistry, BlockStateId};
 
 pub(crate) const AGES: [&str; 4] = ["unaffected", "exposed", "weathered", "oxidized"];

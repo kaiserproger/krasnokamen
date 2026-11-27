@@ -1,6 +1,7 @@
 //! Vanilla Overworld spawn protection; the edge supplies the persisted op list.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub(crate) fn protected(state: &TickState, actor: EntityId, pos: BlockPos) -> bool {
     if state.dimension != crate::dimensions::Dimension::Overworld

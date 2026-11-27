@@ -1,10 +1,9 @@
 """Integration: mem-run must retain its scope until a killed harness's tree is gone.
 
-The harness command is started through `sh -c` so the runner does not classify it as
-a compile and the test never queues behind the host's three build tokens: its subject
-is scope lifetime, not token admission. `token=none` in the runner's scope line is
-asserted, so a future change that reintroduces a token wait fails here instead of
-hanging until the bound.
+The harness command is started through `sh -c`; the runner no longer classifies or
+queues commands at all (owner D127 removed build tokens), and the scope line has no
+token field. The test runs the installed host runner on purpose: it proves scope
+lifetime, not admission.
 """
 import json
 import os
@@ -17,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = Path(os.environ.get('MEMRUN_TEST_SCRIPT', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
-# Hidden from the runner's token classification on purpose (see the module docstring).
+# The harness argv the scope must keep alive (see the module docstring).
 HARNESS = 'exec python3 -m tools.harness run test -p mc-core --lib'
 # The stage-writes-the-FIFO event, not a timeout: generous enough for a loaded host.
 START_BOUND = 120
@@ -58,8 +57,8 @@ else:
                     self.assertTrue(select.select([ready], [], [], START_BOUND)[0],
                                     f'stage did not start: {stderr.read_text(errors="replace")[-2000:]}')
                     grandchild, stage, _ = map(int, os.read(ready, 128).split())
-                    self.assertIn('token=none', stderr.read_text(errors='replace'),
-                                  'the subject is scope lifetime: this command must take no build token')
+                    self.assertNotIn('token=', stderr.read_text(errors='replace'),
+                                     'owner D127 removed build tokens: the scope line must have no token field')
                     with open(f'/proc/{stage}/stat') as f:
                         harness = int(f.read().split(') ', 1)[1].split()[1])
                     cgroup = Path('/sys/fs/cgroup' + Path(f'/proc/{stage}/cgroup').read_text().strip().split('::', 1)[1])

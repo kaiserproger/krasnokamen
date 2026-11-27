@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{EntityId, Hand, PlayerChange};
+use crate::boundary::{Hand, PlayerChange};
 use mc_data::statistics::{CustomStat, StatType};
+use mc_domain::EntityId;
 
 #[test]
 fn pickup_publishes_only_changed_slots_for_active_menu() {

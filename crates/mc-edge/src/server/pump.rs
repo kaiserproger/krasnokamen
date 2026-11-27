@@ -1,7 +1,7 @@
 //! Tick output pump: outbox routing, publication and join waiting.
 
 use super::*;
-use mc_core::boundary::EntityId;
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
@@ -365,7 +365,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
 pub(super) fn configured_viewer(
     server: &EdgeServer,
     connection: ConnectionId,
-    entity: mc_core::boundary::EntityId,
+    entity: mc_domain::EntityId,
     position: [f64; 3],
     dimension: mc_core::dimensions::Dimension,
 ) -> crate::plan::ViewerState {
@@ -459,7 +459,7 @@ pub(super) fn route_outbox_batches(
                 .take_join(id)
                 .map(|joined| (joined.entity, joined.position, joined.dimension))
                 .unwrap_or((
-                    mc_core::boundary::EntityId(id.0 as i32),
+                    mc_domain::EntityId(id.0 as i32),
                     [0.5, 64.0, 0.5],
                     Default::default(),
                 ));
@@ -531,7 +531,7 @@ pub(super) fn route_outbox_batches(
                 .take_join(connection)
                 .map(|joined| (joined.entity, joined.position, joined.dimension))
                 .unwrap_or((
-                    mc_core::boundary::EntityId(connection.0 as i32),
+                    mc_domain::EntityId(connection.0 as i32),
                     [0.5, 64.0, 0.5],
                     Default::default(),
                 ));

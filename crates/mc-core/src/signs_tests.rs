@@ -25,11 +25,7 @@ fn field<'a>(nbt: &'a Tag, key: &str) -> &'a Tag {
     &fields.iter().find(|(name, _)| name == key).unwrap().1
 }
 
-fn use_item(
-    state: &mut TickState,
-    player: crate::boundary::EntityId,
-    item: &str,
-) -> Vec<PlayerChange> {
+fn use_item(state: &mut TickState, player: mc_domain::EntityId, item: &str) -> Vec<PlayerChange> {
     give(state, player, item, 3);
     let (_, drains, _) = run_tick(
         state,

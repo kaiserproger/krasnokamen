@@ -1,6 +1,6 @@
 # ADR 0018: opt-in in-game computer
 
-Status: accepted design; draft implementation, real-client QA pending.
+Status: accepted design; draft implementation. Screen sharing passed the real-client gate `screens-voice-qa` on 2026-11-26; the text terminal has no real-client gate.
 
 ## Decision and alternatives
 
@@ -82,8 +82,11 @@ not part of the text-terminal implementation.
 
 Server codec/security/lifecycle tests; Fabric compilation and unit tests; Linux
 capture-to-OpenGL-texture smoke on an isolated display, not the owner's desktop.
-No real-client MCP run in this work item; Muse owns subsequent block/use/session
-QA. Unit/smoke receipts do not prove in-world rendering or other operating systems.
+The text terminal has no real-client run; unit and smoke receipts do not prove
+in-world rendering or other operating systems. Screen sharing's real-client
+evidence: `screens-voice-qa` (2026-11-26) passed consent, deny, app audio,
+viewer respawn and the Fabric Loader screen-audio verdicts with native and
+Fabric clients.
 
 ## Screen sharing (`krasnokamen:screen`, protocol 1)
 

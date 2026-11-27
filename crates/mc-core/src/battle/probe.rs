@@ -13,9 +13,9 @@
 use super::BattleState;
 use super::Frame;
 use super::combat::Action;
-use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
 use crate::entity_motion::Facing;
+use mc_domain::EntityId;
 use mc_physics::mth;
 use rustc_hash::FxHashMap;
 use std::fmt;

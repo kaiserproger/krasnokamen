@@ -1,6 +1,6 @@
 //! In-process end to end: the SVC handshake over plugin channels, an encrypted
 //! UDP client (as the mod writes it), and bridging to a native listener.
-use mc_core::boundary::EntityId;
+use mc_domain::EntityId;
 use tokio::{net::UdpSocket, sync::mpsc};
 
 use super::*;

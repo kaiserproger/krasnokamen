@@ -320,7 +320,7 @@ pub struct WireRegistries {
 /// private to this module.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct JoinedSpawn {
-    entity: mc_core::boundary::EntityId,
+    entity: mc_domain::EntityId,
     position: [f64; 3],
     /// Vanilla `Rotation`: the yaw and pitch the restored player last had, so
     /// a reopen keeps the camera the player quit with (a new player gets the

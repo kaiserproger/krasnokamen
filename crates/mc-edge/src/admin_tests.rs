@@ -726,7 +726,7 @@ async fn operator_changes_reach_own_entity_permission_consumer() {
     let mut viewer = configured_viewer(
         &server,
         alex,
-        mc_core::boundary::EntityId(-1),
+        mc_domain::EntityId(-1),
         [0.0; 3],
         Default::default(),
     );

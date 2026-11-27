@@ -253,7 +253,7 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
 fn native_mounts_fixture(
     config: &CoreConfig,
     uuid: uuid::Uuid,
-) -> (TickState, crate::boundary::EntityId, [f64; 3]) {
+) -> (TickState, mc_domain::EntityId, [f64; 3]) {
     use crate::dimensions::Dimension;
     let mut state = recover_dimension_state(config, Dimension::Overworld).unwrap();
     for dimension in [Dimension::Nether, Dimension::End] {
@@ -527,7 +527,7 @@ fn mounts_clean_core_shutdown_and_reopen_keep_the_pending_rider() {
 /// Every probe below runs before anybody issues a new Ride.
 fn reopen_mount_without_passenger(
     config: &CoreConfig,
-) -> (TickState, crate::boundary::EntityId, uuid::Uuid) {
+) -> (TickState, mc_domain::EntityId, uuid::Uuid) {
     use crate::boundary::{ConnectionId, PlayerInput};
     let uuid = uuid::Uuid::from_u128(0x3333);
     let (mut state, actor, pos) = native_mounts_fixture(config, uuid);
@@ -598,7 +598,7 @@ fn reopen_mount_without_passenger(
 
 fn reconnect_pending_mount_rider(
     state: &mut TickState,
-    horse: crate::boundary::EntityId,
+    horse: mc_domain::EntityId,
     uuid: uuid::Uuid,
 ) {
     let connection = crate::boundary::ConnectionId(20);

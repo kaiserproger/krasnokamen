@@ -1,8 +1,9 @@
 //! Cartographer offers resolve through the same bounded locate worker as loot.
-use crate::boundary::{ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{ConnectionId, Hand, PlayerInput};
 use crate::tick::TickState;
 use crate::villager::{VillagerData, VillagerProfession, VillagerTradeOffer};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, Copy)]
 struct Spec {

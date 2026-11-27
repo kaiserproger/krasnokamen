@@ -23,7 +23,8 @@ fn incomplete_registry_never_falls_back_to_another_dimension() {
     );
 }
 
-use mc_core::boundary::{ConnectionId, EntityId, PlayerChange};
+use mc_core::boundary::{ConnectionId, PlayerChange};
+use mc_domain::EntityId;
 use mc_protocol::packets::Packet;
 use std::sync::Arc;
 

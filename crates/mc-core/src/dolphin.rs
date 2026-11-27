@@ -1,9 +1,10 @@
 //! Air-breathing swimming companions, Grace and exact-stack fish feeding.
-use crate::boundary::{EntityId, Hand};
+use crate::boundary::Hand;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntitySlot;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_physics::mth::floor_i32;
 use serde::{Deserialize, Serialize};

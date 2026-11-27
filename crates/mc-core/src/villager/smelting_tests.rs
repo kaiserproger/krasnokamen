@@ -1,9 +1,9 @@
 //! Furnace tending must use the native furnace tick and conserve physical stock.
 use super::{VillagerProfession, mining, mining_tests};
-use crate::boundary::EntityId;
 use crate::settlements::buildings::BuildingKind;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 
 const CHEST: (i32, i32, i32) = (4, 201, 3);

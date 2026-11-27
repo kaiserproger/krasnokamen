@@ -7,8 +7,9 @@ use mc_world::BlockStateId;
 use mc_world::plant_rules_26_1_2::{self as rules, PlantBlockEdit, PlantBlockRead};
 use rustc_hash::FxHashMap;
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[path = "plants_growth.rs"]
 mod growth;
