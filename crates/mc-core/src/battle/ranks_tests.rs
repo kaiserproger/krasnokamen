@@ -302,6 +302,45 @@ fn a_dense_heap_reports_dropped_separation_candidates() {
     );
 }
 
+#[test]
+fn the_production_tick_reports_the_separation_grids_dropped_candidates() {
+    // HANDOFF-5 H4: `a_dense_heap_reports_dropped_separation_candidates` calls
+    // `steering::step` itself, so a removed mirror call left it green. This one
+    // moves the soldiers in the world and runs only `run_tick`: the production
+    // battle tick must keep the grid's dropped-candidate count in `Work`.
+    let mut state = started(60);
+    crate::tick::run_tick(&mut state, &[]);
+    let heap = [8.0, 64.0, 8.0];
+    let slots: Vec<_> = state
+        .hostile
+        .battle
+        .columns
+        .slots
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+    assert!(
+        slots.len() > 64,
+        "the staged battle must present its soldiers to the columns, got {}",
+        slots.len()
+    );
+    for slot in slots {
+        state.entities.set_pos(slot, heap);
+    }
+    crate::tick::run_tick(&mut state, &[]);
+    let battle = &state.hostile.battle;
+    assert!(
+        battle.formation.neighbours.overflow > 0,
+        "one sub-cell heap must drop candidates past the cap, dropped={}",
+        battle.formation.neighbours.overflow
+    );
+    assert_eq!(
+        battle.formation.work.separation_overflow, battle.formation.neighbours.overflow,
+        "the production tick must mirror the dropped-candidate count into the battle work counters"
+    );
+}
+
 /// Heaps through the first clash and the pursuit that follows. Run explicitly.
 #[test]
 #[ignore = "1000 a side through contact and pursuit, at most 6000 ticks; run explicitly"]

@@ -60,6 +60,7 @@ import sys
 import threading
 import time
 import traceback
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -1313,6 +1314,47 @@ class RunnerSession:
             client.stop()
         return detail
 
+    def stall_then_sigkill(self, report: dict[str, Any], name: str) -> dict[str, Any]:
+        """The exporter's socket dies first, the SIGKILL arrives during the runner's crash decision.
+
+        The row's symptom is a SIGKILL that closes the telemetry socket before `waitpid` reports
+        the exit: the crash watcher thread is inside `waitpid`, so a reversed tree's `poll()`
+        samples `None` and drops the handoff. A plain SIGKILL only races that window. `SIGSTOP`
+        holds it: the watcher's `waitpid` cannot return while the child is stopped, and the
+        runner's dashboard read times out exactly as it does when the socket closes. This scene
+        blocks on its own read of the same dashboard -- past the exporter's own deadline -- and
+        then SIGKILLs, so the reversed tree is inside `poll()` while the fix inside its wait.
+        """
+        server_pid = json.loads((self.root / "server-pid.json").read_text())["pid"]
+        os.kill(server_pid, signal.SIGSTOP)
+        started = time.monotonic()
+        stalled = None
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.dashboard}/stats", timeout=20) as response:
+                response.read()
+        except Exception as error:  # noqa: BLE001 - the deadline is the fixture, not a failure path
+            stalled = repr(error)
+        waited = time.monotonic() - started
+        os.kill(server_pid, signal.SIGKILL)
+        code = self.runner.wait(timeout=300)
+        _record_exit(self.ctx, self.runner_index, self.runner)
+        handoff_path = self.root / "crash-handoff.json"
+        handoff = json.loads(handoff_path.read_text()) if handoff_path.is_file() else None
+        archive_errors = (json.loads((self.root / "wal-archive-errors.json").read_text())
+                          if (self.root / "wal-archive-errors.json").is_file() else None)
+        detail = {"runner_exit": code, "handoff": handoff, "wal_archive_errors": archive_errors,
+                  "crash_copy_world": (self.root / "crash-copy" / "world").is_dir(),
+                  "stall_error": stalled, "stall_seconds": round(waited, 3)}
+        # The fixture is only this cut when the stopped server really was silent past the
+        # exporter's own 15 s deadline; an early connect refusal would leave the reversed tree
+        # green for the wrong reason, so it is incomplete rather than a pass.
+        check(report, "stalled_telemetry_read_timed_out", stalled is not None and waited >= 10.0, detail)
+        check(report, name, code == 0 and handoff is not None and handoff.get("exit") == -signal.SIGKILL
+              and archive_errors == [] and detail["crash_copy_world"], detail)
+        for client in self.clients:
+            client.stop()
+        return detail
+
     def recover(self, archive: bool = False) -> Console:
         if archive:
             self.archive = self.battle.WalArchive(self.root / "world" / "journal", self.root / "wal-archive-recovery")
@@ -1649,7 +1691,7 @@ def kit_census(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, An
 
 
 def crash_handoff(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str, Any], display: str) -> None:
-    for cut in ("prestage", "staged"):
+    for cut in ("prestage", "staged", "stalled"):
         root = ctx.artifact_dir / f"battle-{cut}"
         session = RunnerSession(ctx, inputs, root, display, paused_ticks=1200)
         try:
@@ -1657,13 +1699,29 @@ def crash_handoff(ctx: ProfileContext, inputs: dict[str, Any], report: dict[str,
             if cut == "prestage":
                 session.battle.watch_ready(root / "take.ready", session.runner, timeout=1200,
                                            label="recorder ready before pre-stage")
+            elif cut == "stalled":
+                session.battle.watch_ready(root / "take.ready", session.runner, timeout=1200,
+                                           label="recorder ready before the stalled cut")
             else:
                 session.battle.watch_ready(root / "roster.ready", session.runner, timeout=1200, label="battle roster")
             for client in session.clients:
                 client.capture(f"before-{cut}-cut")
             log = (root / "server.log").read_text(errors="replace")
-            check(report, f"cut_point_{cut}", ("Battle staged:" not in log) if cut == "prestage"
+            check(report, f"cut_point_{cut}", ("Battle staged:" not in log) if cut in ("prestage", "stalled")
                   else ("Battle staged:" in log and "Battle started tick=" not in log), None)
+            if cut == "stalled":
+                # The exporter's socket dies first and the SIGKILL lands inside the runner's
+                # crash decision: BATTLE-CRASH-HANDOFF's row symptom, made deterministic.
+                session.stall_then_sigkill(report, "crash_handoff_preserved_stalled")
+                console = session.recover()
+                mark = console.mark()
+                console.send("battle status")
+                status = console.wait(r"Battle paused tick=.*", mark, timeout=120).group(0)
+                (root / "recovered-status.txt").write_text(status + "\n")
+                check(report, "recovered_stalled_world_opens",
+                      "side1=0 side2=0" in status and "regiments=0" in status, status)
+                session.stop_recovery(report, "recovery_stopped_cleanly_stalled")
+                continue
             session.sigkill(report, f"crash_handoff_preserved_{cut}")
             console = session.recover()
             session.viewer.start(session.address, f"after-{cut}")

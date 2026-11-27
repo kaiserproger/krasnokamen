@@ -59,3 +59,32 @@ is a runner change that makes the exception path observe the exit regardless of 
 Candidate side, same day: three runs on the clean-tree pin `af9e4adcfcb1` are green
 (`063921-v2c57hb1` 157.5 s, `064159-ei26jqqo` 160.6 s, `064445-fc0xpsid` 164.8 s), so the pair is
 3/3 green (candidate) against 2/3 red (control). Promotion stays refused until the control is 3/3.
+
+## Deterministic fixture, 2026-11-27 (D124PackBattle)
+
+The scene now has a third cut, `stalled`, which is deterministic for this pair without touching the
+fix:
+
+1. after `take.ready` (the runner is in its pre-stage `next_tick` wait, the crash watcher thread is
+   inside `Popen.wait()` -> `waitpid` on the child), the scene `SIGSTOP`s the server;
+2. it blocks on its own read of the same dashboard endpoint the exporter is blocked on
+   (`/stats`, 20 s deadline; the exporter's own read deadline is 15 s), asserts
+   `stalled_telemetry_read_timed_out`, then `SIGKILL`s the server.
+
+While the child is stopped, `waitpid` cannot return: the watcher holds `Popen._waitpid_lock` for the
+whole stall, and `_internal_poll` acquires it non-blocking, so a reversed tree's `poll()` samples
+`None` on **every** run and the handoff is dropped; the fix's `wait(timeout=10)` starts at the 15 s
+exporter deadline and sees the kill at 20 s, 5 s inside its window. Nothing here depends on the
+kernel's socket-close/waitpid ordering, which is what made the plane-SIGKILL cuts 2/3.
+
+Assertions of the cut: `stalled_telemetry_read_timed_out` (the fixture held),
+`crash_handoff_preserved_stalled` (the row's symptom; the proving assertion), and
+`recovered_stalled_world_opens` after the crash copy is reopened (`battle status` shows
+`side1=0 side2=0 regiments=0`) and stopped cleanly. The two plain-SIGKILL cuts stay in the scene.
+
+Promotion route: a passed candidate receipt of `battle-crash-handoff` on a pin of the candidate
+tree, then `ledger promote <id> --client-receipt <result.json> --fix-patch
+docs/bugs/promotions/HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL.preimage.patch`. The
+promote runs the python ref and the graphical ref on the reversed control tree itself
+(`_run_harness` pins that tree), so the graphical red is recorded as the negative control; no
+backfill is needed. State at the end of this session: scene code implemented, not yet run.

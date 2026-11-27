@@ -1,0 +1,40 @@
+{
+  "id": "BATTLE-SEPARATION-CELL-CAP-DROPS-NEIGHBOURS-UNREPORTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:313e9566e45198db840df08ef6c13650e2ad5adf097aafdd72865b3c5d91a55b",
+  "fix_commit_full": "patch:313e9566e45198db840df08ef6c13650e2ad5adf097aafdd72865b3c5d91a55b",
+  "promoted_at": "2026-11-27T11:04:12+00:00",
+  "tree_head": "3c7136cbbeaa66903847556c4bb62863b008e742",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "d08da4e7a466e183c86ae012367ed7b45ebbae295423262baba560c2dcbbd485",
+  "control_tree_head": "3c7136cbbeaa66903847556c4bb62863b008e742",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "313e9566e45198db840df08ef6c13650e2ad5adf097aafdd72865b3c5d91a55b",
+  "reversed_files": [
+    "crates/mc-core/src/battle/steering.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:battle::ranks_tests::the_production_tick_reports_the_separation_grids_dropped_candidates": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/battle/ranks_tests.rs",
+        "line": 338,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::ranks_tests::the_production_tick_reports_the_separation_grids_dropped_candidates": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D124PackBattle/.analysis/validation/20261127T101026-ledger-promote-0ab7egyf"
+}
