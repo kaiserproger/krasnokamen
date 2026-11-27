@@ -481,12 +481,6 @@ fn decode_clock_network_state<B: Buf>(buf: &mut B) -> Result<WorldClockUpdate, C
     })
 }
 
-fn move_entity_delta_to_short(delta: f64) -> i16 {
-    (delta * 4096.0)
-        .round()
-        .clamp(i16::MIN as f64, i16::MAX as f64) as i16
-}
-
 fn java_float_equals(left: f32, right: f32) -> bool {
     fn canonical_bits(value: f32) -> u32 {
         if value.is_nan() {

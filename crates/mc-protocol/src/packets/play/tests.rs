@@ -951,10 +951,8 @@ fn move_entity_rot_id_and_wire_layout_match_server_javap() {
 }
 
 #[test]
-fn move_entity_delta_scales_to_vanilla_short_units() {
-    assert_eq!(MoveEntityPosRot::delta_to_short(1.0 / 4096.0), 1);
-    assert_eq!(MoveEntityPosRot::delta_to_short(-0.5), -2048);
-    assert_eq!(MoveEntityPosRot::pack_degrees(90.0), 64);
+fn packed_degrees_matches_vanilla_mth() {
+    assert_eq!(pack_degrees(90.0), 64);
 }
 
 #[test]

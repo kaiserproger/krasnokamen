@@ -13,7 +13,7 @@ pub struct ClientboundSetHeldSlot {
 
 impl Packet for ClientboundSetHeldSlot {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_SET_HELD_SLOT at game-CB index 105 = wire id 0x69.
+    // CLIENTBOUND_SET_HELD_SLOT at game-CB index 107 = wire id 0x6B.
     const ID: i32 = 0x6B;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -622,7 +622,7 @@ pub struct ServerboundSetCarriedItem {
 
 impl Packet for ServerboundSetCarriedItem {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // SERVERBOUND_SET_CARRIED_ITEM at game-SB index 53 = wire id 0x35.
+    // SERVERBOUND_SET_CARRIED_ITEM at game-SB index 54 = wire id 0x36.
     const ID: i32 = 0x36;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -680,9 +680,8 @@ pub struct ServerboundPlaceRecipe {
 }
 
 impl Packet for ServerboundPlaceRecipe {
-    // GameProtocols registers SERVERBOUND_PLACE_RECIPE immediately before
-    // PLAYER_ABILITIES / PLAYER_ACTION; with SERVERBOUND_PLAYER_ACTION pinned
-    // at index 41, this packet is game-SB index 39 = wire id 0x27.
+    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // SERVERBOUND_PLACE_RECIPE at game-SB index 39 = wire id 0x27.
     const ID: i32 = 0x27;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

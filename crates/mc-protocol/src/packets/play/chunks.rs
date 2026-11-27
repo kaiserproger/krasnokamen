@@ -308,7 +308,7 @@ pub struct LevelChunkWithLight {
 
 impl Packet for LevelChunkWithLight {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_LEVEL_CHUNK_WITH_LIGHT at game-CB index 45 = 0x2D.
+    // CLIENTBOUND_LEVEL_CHUNK_WITH_LIGHT at game-CB index 46 = 0x2E.
     const ID: i32 = 0x2E;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -413,7 +413,7 @@ pub struct LevelEvent {
 }
 
 impl Packet for LevelEvent {
-    // CLIENTBOUND_LEVEL_EVENT at game-CB index 46 = wire id 0x2E.
+    // CLIENTBOUND_LEVEL_EVENT at game-CB index 47 = wire id 0x2F.
     const ID: i32 = 0x2F;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -452,7 +452,7 @@ pub struct SetCenterChunk {
 
 impl Packet for SetCenterChunk {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_SET_CHUNK_CACHE_CENTER at game-CB index 94 = 0x5E.
+    // CLIENTBOUND_SET_CHUNK_CACHE_CENTER at game-CB index 96 = 0x60.
     const ID: i32 = 0x60;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -552,7 +552,7 @@ pub struct SectionBlocksUpdate {
 
 impl Packet for SectionBlocksUpdate {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_SECTION_BLOCKS_UPDATE at game-CB index 84 = wire id 0x54.
+    // CLIENTBOUND_SECTION_BLOCKS_UPDATE at game-CB index 86 = wire id 0x56.
     const ID: i32 = 0x56;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -637,7 +637,7 @@ pub struct LightUpdate {
 
 impl Packet for LightUpdate {
     // Verified via `javap` of vanilla 26.1.2's GameProtocols:
-    // CLIENTBOUND_LIGHT_UPDATE at game-CB index 48 = wire id 0x30.
+    // CLIENTBOUND_LIGHT_UPDATE at game-CB index 49 = wire id 0x31.
     const ID: i32 = 0x31;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

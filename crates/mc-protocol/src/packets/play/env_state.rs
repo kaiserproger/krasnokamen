@@ -15,7 +15,7 @@ pub struct ClientboundSoundEntity {
 }
 
 impl Packet for ClientboundSoundEntity {
-    // GameProtocols.CLIENTBOUND_SOUND_ENTITY, registration index 116.
+    // GameProtocols.CLIENTBOUND_SOUND_ENTITY, registration index 118.
     // Direct SoundEvent holder: 0, identifier, optional fixed range.
     const ID: i32 = 0x76;
 
@@ -518,7 +518,7 @@ impl ClientboundSetTime {
 
 impl Packet for ClientboundSetTime {
     // `.analysis/protocol-dump.txt` / `GameProtocols`: game
-    // CLIENTBOUND_SET_TIME is clientbound registration index 113, wire id 0x71.
+    // CLIENTBOUND_SET_TIME is clientbound registration index 115, wire id 0x73.
     // Local 26.1.2 `javap` evidence:
     // - `long gameTime`;
     // - VarInt-sized map;
@@ -611,7 +611,7 @@ pub struct ClientboundSetExperience {
 
 impl Packet for ClientboundSetHealth {
     // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_HEALTH is
-    // game-CB index 104 = wire id 0x68. `javap -p -c
+    // game-CB index 106 = wire id 0x6A. `javap -p -c
     // ClientboundSetHealthPacket` shows f32 health, VarInt food, f32 saturation.
     const ID: i32 = 0x6A;
 
@@ -633,7 +633,7 @@ impl Packet for ClientboundSetHealth {
 
 impl Packet for ClientboundSetExperience {
     // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_EXPERIENCE
-    // is game-CB index 103 = wire id 0x67. Vanilla 26.1.2 `javap -p -c`
+    // is game-CB index 105 = wire id 0x69. Vanilla 26.1.2 `javap -p -c`
     // shows f32 progress, VarInt level, VarInt total experience.
     const ID: i32 = 0x69;
 
@@ -658,7 +658,7 @@ impl Packet for ClientboundSetExperience {
 
 impl Packet for ClientboundPlayerAbilities {
     // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_ABILITIES
-    // is game-CB index 64 = wire id 0x40. `javap -p -c
+    // is game-CB index 65 = wire id 0x41. `javap -p -c
     // ClientboundPlayerAbilitiesPacket` shows one flags byte
     // (1=invulnerable, 2=flying, 4=canFly, 8=instabuild), then f32
     // flying speed and f32 walking speed.
@@ -792,7 +792,7 @@ pub struct ClientboundOpenSignEditor {
 
 impl Packet for ClientboundOpenSignEditor {
     // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_OPEN_SIGN_EDITOR
-    // is game-CB index 60 = wire id 0x3C. Declared field order is BlockPos,
+    // is game-CB index 61 = wire id 0x3D. Declared field order is BlockPos,
     // then front/back text boolean.
     const ID: i32 = 0x3D;
 
