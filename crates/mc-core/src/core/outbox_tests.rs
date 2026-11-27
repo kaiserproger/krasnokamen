@@ -2,7 +2,7 @@
 //! and the fail-closed halt that keeps reliable batches from being dropped.
 
 use super::*;
-use crate::boundary::{PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput, TickOutput};
 use crate::config::CoreConfig;
 use crate::core::Core;
 use mc_domain::ConnectionId;
@@ -55,6 +55,26 @@ fn drive(
     mut on_tick: impl FnMut(u32),
 ) -> Result<Stopped, String> {
     let mut output = core.subscribe();
+    drive_feed(core, &mut output, limit, |_output, seen| {
+        on_tick(seen);
+        ticks.is_some_and(|wanted| seen >= wanted)
+    })
+}
+
+/// [`drive`] over a feed the caller already subscribed. A fixture that must not
+/// miss a specific tick — the paused-world test looks for the one that publishes
+/// its join — subscribes before queueing the input, because a tick published in
+/// between would otherwise be counted as that tick.
+///
+/// `stop` sees every published tick and returns whether to end the run; the
+/// broadcast closing ends it as [`Stopped::Halted`]. The timeout names the
+/// tick owner's halt reason, so a silent owner is not mistaken for a halted one.
+fn drive_feed(
+    core: &Core,
+    output: &mut tokio::sync::broadcast::Receiver<TickOutput>,
+    limit: std::time::Duration,
+    mut stop: impl FnMut(&TickOutput, u32) -> bool,
+) -> Result<Stopped, String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
@@ -64,10 +84,9 @@ fn drive(
             let mut seen = 0u32;
             loop {
                 match output.recv().await {
-                    Ok(_) => {
+                    Ok(output) => {
                         seen += 1;
-                        on_tick(seen);
-                        if ticks.is_some_and(|wanted| seen >= wanted) {
+                        if stop(&output, seen) {
                             return Ok(Stopped::AfterTicks(seen));
                         }
                     }
@@ -79,7 +98,13 @@ fn drive(
             }
         })
         .await
-        .map_err(|_| format!("the tick owner neither published nor stopped within {limit:?}"))?
+        .map_err(|_| {
+            format!(
+                "the tick owner neither published nor stopped within {limit:?}: the halt reason is \
+                 {:?}",
+                core.halt_reason()
+            )
+        })?
     })
 }
 
@@ -686,11 +711,30 @@ fn a_paused_world_halts_when_the_pump_stops_consuming() {
     config.pause_when_empty_seconds = 1;
     config.outbox_stall_ms = 2_000;
     let core = Core::open(config).expect("open");
+    // Subscribed before the join: a tick published between `submit` and a later
+    // subscription would be counted as the join tick while the join input is
+    // still pending, and the `Leave` below could then share its input batch and
+    // erase the queued `Joined` (a leaving session drops its batch,
+    // `tick/input/session.rs`), leaving a legitimately silent paused world.
+    let joined = uuid::Uuid::from_u128(0xB2_0000 + 1);
+    let mut output = core.subscribe();
     core.submit(join(1, "leaver"));
-    assert_eq!(
-        drive(&core, std::time::Duration::from_secs(60), Some(1), |_| {})
+    assert!(
+        matches!(
+            drive_feed(
+                &core,
+                &mut output,
+                std::time::Duration::from_secs(60),
+                |tick, _| tick.snapshot.entities.iter().any(|entity| entity.uuid == joined)
+            )
             .expect("the join tick publishes"),
-        Stopped::AfterTicks(1)
+            Stopped::AfterTicks(_)
+        ),
+        "the join must be published before the pause"
+    );
+    assert!(
+        core.outbox_queued_bytes() > 0,
+        "the join tick queues the reliable batch the paused world then stalls on"
     );
     core.submit(PlayerInput::Leave {
         connection: ConnectionId(1),
@@ -701,6 +745,14 @@ fn a_paused_world_halts_when_the_pump_stops_consuming() {
         drive(&core, std::time::Duration::from_secs(20), None, |_| {})
             .expect("a paused world halts when the pump stops consuming"),
         Stopped::Halted
+    );
+    // The active tick runs the same stall check (`tick_loop.rs:361-374`), so a
+    // closure alone would also go green with the paused branch's check deleted.
+    // Name the branch that halted.
+    let reason = core.halt_reason().unwrap_or_default();
+    assert!(
+        reason.contains("while the world is paused"),
+        "the halt must come from the paused branch's stall check, not the active tick's: {reason:?}"
     );
     core.shutdown();
 }
