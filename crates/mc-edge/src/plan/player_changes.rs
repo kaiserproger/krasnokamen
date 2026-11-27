@@ -272,24 +272,11 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 }],
             },
         ),
-        PlayerChange::Scoreboard { events } => {
-            let start = out.len();
-            for event in events.iter() {
-                crate::faction_teams::forget_for_core_team(event, viewer);
-                push_scoreboard_event(out, conn, event.clone());
-            }
-            merge_frames(out, start);
-        }
+        PlayerChange::Scoreboard { events } => plan_scoreboard_events(viewer, out, conn, events),
         PlayerChange::Roster {
             players, removed, ..
         } => plan_roster(viewer, out, players, removed),
-        PlayerChange::TextBurst { lines } => {
-            let start = out.len();
-            for line in lines {
-                plan_change(line, viewer, out);
-            }
-            merge_frames(out, start);
-        }
+        PlayerChange::TextBurst { lines } => plan_text_burst(lines, viewer, out),
         PlayerChange::StyledChat { content, .. } => {
             // A component is any NBT root: a bare string (`tellraw @s "text"`) and a list are
             // valid vanilla components, so the compound-only `write_network` would drop them.
@@ -555,38 +542,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             xp,
             can_restock,
             ..
-        } => {
-            let cost = |stack: &ItemStack| MerchantItemCost {
-                item_id: stack.item_id,
-                count: stack.count,
-            };
-            push_reliable(
-                out,
-                conn,
-                &ClientboundMerchantOffers {
-                    container_id: i32::from(*window),
-                    offers: offers
-                        .iter()
-                        .map(|offer| MerchantOffer {
-                            cost_a: cost(&offer.cost_a),
-                            result: offer.result.clone(),
-                            cost_b: offer.cost_b.as_ref().map(cost),
-                            out_of_stock: offer.uses >= offer.max_uses,
-                            uses: offer.uses,
-                            max_uses: offer.max_uses,
-                            xp: offer.xp,
-                            special_price: offer.special_price,
-                            price_multiplier: offer.price_multiplier,
-                            demand: offer.demand,
-                        })
-                        .collect(),
-                    villager_level: i32::from(*level),
-                    villager_xp: *xp,
-                    show_progress: true,
-                    can_restock: *can_restock,
-                },
-            );
-        }
+        } => plan_merchant_offers(out, conn, *window, offers, *level, *xp, *can_restock),
         PlayerChange::ShowDialog { dialog } => push_reliable(
             out,
             conn,
@@ -608,24 +564,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             slots,
             cursor,
             ..
-        } => {
-            let mut items: Vec<ItemStack> = slots.iter().map(stack_or_empty).collect();
-            // Window 0 is always 46 slots on the wire; pad short core
-            // inventories rather than sending a rejected packet.
-            if *window == 0 {
-                items.resize(46, ItemStack::EMPTY);
-            }
-            push_reliable(
-                out,
-                conn,
-                &ClientboundContainerSetContent {
-                    container_id: i32::from(*window),
-                    state_id: *state_id,
-                    items,
-                    carried_item: stack_or_empty(cursor),
-                },
-            );
-        }
+        } => plan_menu_contents(out, conn, *window, *state_id, slots, cursor),
         PlayerChange::MenuSlot {
             window,
             state_id,
@@ -992,6 +931,99 @@ fn plan_roster(
             },
         );
     }
+}
+
+/// One `Scoreboard` change can carry many events that the client must apply in
+/// order; they share a single reliable queue slot through `merge_frames`.
+fn plan_scoreboard_events(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    events: &[mc_core::scoreboard::ScoreboardEvent],
+) {
+    let start = out.len();
+    for event in events {
+        crate::faction_teams::forget_for_core_team(event, viewer);
+        push_scoreboard_event(out, conn, event.clone());
+    }
+    merge_frames(out, start);
+}
+
+/// A compacted run of chat lines: plan each line, then merge the run into one
+/// reliable slot.
+fn plan_text_burst(lines: &[PlayerChange], viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>) {
+    let start = out.len();
+    for line in lines {
+        plan_change(line, viewer, out);
+    }
+    merge_frames(out, start);
+}
+
+/// Full menu contents. Window 0 (the player inventory) is always 46 slots on
+/// the wire, so a short core inventory is padded rather than rejected.
+fn plan_menu_contents(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    window: u8,
+    state_id: i32,
+    slots: &[Option<ItemStack>],
+    cursor: &Option<ItemStack>,
+) {
+    let mut items: Vec<ItemStack> = slots.iter().map(stack_or_empty).collect();
+    if window == 0 {
+        items.resize(46, ItemStack::EMPTY);
+    }
+    push_reliable(
+        out,
+        conn,
+        &ClientboundContainerSetContent {
+            container_id: i32::from(window),
+            state_id,
+            items,
+            carried_item: stack_or_empty(cursor),
+        },
+    );
+}
+
+fn plan_merchant_offers(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    window: u8,
+    offers: &[mc_core::villager::VillagerTradeOffer],
+    level: u8,
+    xp: i32,
+    can_restock: bool,
+) {
+    let cost = |stack: &ItemStack| MerchantItemCost {
+        item_id: stack.item_id,
+        count: stack.count,
+    };
+    push_reliable(
+        out,
+        conn,
+        &ClientboundMerchantOffers {
+            container_id: i32::from(window),
+            offers: offers
+                .iter()
+                .map(|offer| MerchantOffer {
+                    cost_a: cost(&offer.cost_a),
+                    result: offer.result.clone(),
+                    cost_b: offer.cost_b.as_ref().map(cost),
+                    out_of_stock: offer.uses >= offer.max_uses,
+                    uses: offer.uses,
+                    max_uses: offer.max_uses,
+                    xp: offer.xp,
+                    special_price: offer.special_price,
+                    price_multiplier: offer.price_multiplier,
+                    demand: offer.demand,
+                })
+                .collect(),
+            villager_level: i32::from(level),
+            villager_xp: xp,
+            show_progress: true,
+            can_restock,
+        },
+    );
 }
 
 /// A death respawn (`travel == false`) or a portal/command dimension change.
