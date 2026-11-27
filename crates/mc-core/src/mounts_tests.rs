@@ -511,14 +511,10 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
             .dash_cooldown
             > 0
     );
-    assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true)))
-    );
+    assert!(state.entities.row(camel_slot).appearance.extra.contains(&(
+        19,
+        mc_data::entity_data_value::EntityDataValue::Boolean(true)
+    )));
     let velocity = state.entities.vel(camel_slot);
     state.entities.set_ground(camel_slot, true);
     riding_jump(&mut state, ConnectionId(1), 90);
@@ -540,34 +536,28 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
     let mut changes = crate::boundary::ChangeSet::default();
     tick(&mut state, &mut changes);
     assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        state.entities.row(camel_slot).appearance.extra.contains(&(
+            19,
+            mc_data::entity_data_value::EntityDataValue::Boolean(true)
+        )),
         "airborne dash survives cooldown expiration"
     );
     state.entities.set_ground(camel_slot, true);
     tick(&mut state, &mut changes);
     assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(false))),
+        state.entities.row(camel_slot).appearance.extra.contains(&(
+            19,
+            mc_data::entity_data_value::EntityDataValue::Boolean(false)
+        )),
         "delayed landing clears dash"
     );
     state.entities.set_ground(camel_slot, true);
     riding_jump(&mut state, ConnectionId(1), 90);
     assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        state.entities.row(camel_slot).appearance.extra.contains(&(
+            19,
+            mc_data::entity_data_value::EntityDataValue::Boolean(true)
+        )),
         "next dash publishes true again"
     );
     state
@@ -586,22 +576,18 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
     );
     tick(&mut state, &mut changes);
     assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        state.entities.row(camel_slot).appearance.extra.contains(&(
+            19,
+            mc_data::entity_data_value::EntityDataValue::Boolean(true)
+        )),
         "cooldown 50 is checked before decrement"
     );
     tick(&mut state, &mut changes);
     assert!(
-        state
-            .entities
-            .row(camel_slot)
-            .appearance
-            .extra
-            .contains(&(19, crate::boundary::EntityDataValue::Boolean(false))),
+        state.entities.row(camel_slot).appearance.extra.contains(&(
+            19,
+            mc_data::entity_data_value::EntityDataValue::Boolean(false)
+        )),
         "liquid clears dash"
     );
 }

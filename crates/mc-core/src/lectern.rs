@@ -1,9 +1,10 @@
 //! Native lectern book custody and page selection (26.1.2 LecternMenu).
 use crate::bees::{block, centre, distance, property};
-use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, Hand, PlayerChange};
 use crate::inventory::MenuKind;
 use crate::tick::{BlockEntityState, TickState};
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use std::collections::BTreeMap;
 

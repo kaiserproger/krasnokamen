@@ -42,8 +42,8 @@
 use super::Columns;
 use super::combat::{Action, Fighter};
 use super::formation::FormationRuntime;
-use crate::boundary::EntityId;
 use crate::entities::EntityStore;
+use mc_domain::EntityId;
 
 /// Episode lines one run may log: a run holds a few dozen (8-15 bodies per
 /// field-1k take), so this bounds a pathological flapper without cutting a

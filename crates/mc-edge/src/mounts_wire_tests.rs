@@ -19,14 +19,14 @@ fn sleeping_villager_publishes_pose_and_bed_head_then_clears_them() {
         pose: 2,
         extra: vec![(
             14,
-            mc_core::boundary::EntityDataValue::OptionalBlockPos(Some([8, 201, 12])),
+            mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(Some([8, 201, 12])),
         )],
         ..Default::default()
     };
     let awake = EntityAppearance {
         extra: vec![(
             14,
-            mc_core::boundary::EntityDataValue::OptionalBlockPos(None),
+            mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(None),
         )],
         ..Default::default()
     };
@@ -139,7 +139,7 @@ fn tame_owner_reference_and_vehicle_correction_use_exact_protocol_codecs() {
     let appearance = EntityAppearance {
         extra: vec![(
             19,
-            mc_core::boundary::EntityDataValue::OptionalLivingEntityReference(Some(owner)),
+            mc_data::entity_data_value::EntityDataValue::OptionalLivingEntityReference(Some(owner)),
         )],
         ..Default::default()
     };

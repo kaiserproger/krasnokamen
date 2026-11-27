@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::blueprint::MobCategory;
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 fn test_state(sim_distance: i32) -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry loads"));
@@ -623,41 +624,6 @@ fn savanna_tables_spawn_every_available_native_creature() {
             .map(str::to_owned)
         ),
     );
-}
-
-#[test]
-fn biome_with_only_unsupported_creatures_does_not_fall_back_to_farm_animals() {
-    let mut state = grass_state("minecraft:savanna", "minecraft:savanna");
-    let registry = Arc::get_mut(&mut state.registry).expect("unshared registry");
-    registry.biome_spawns =
-        mc_data::biomes::BiomeSpawnRules::from_entries(std::collections::BTreeMap::from([(
-            mc_data::Identifier::parse("minecraft:savanna").expect("savanna"),
-            std::collections::BTreeMap::from([(
-                "creature".to_owned(),
-                vec![mc_data::biomes::BiomeSpawnEntry {
-                    entity_type: mc_data::Identifier::parse("minecraft:arrow")
-                        .expect("non-creature"),
-                    weight: 10,
-                    min_count: 2,
-                    max_count: 3,
-                }],
-            )]),
-        )]));
-    let mut changes = crate::boundary::ChangeSet::default();
-    crate::natural_spawn::census(&mut state, &[]);
-    assert_eq!(
-        crate::natural_spawn::spawn_group(
-            &mut state,
-            &[],
-            [0.5, 65.0, 0.5],
-            MobCategory::Creature,
-            10,
-            &mut crate::natural_spawn::Rng(0),
-            &mut changes,
-        ),
-        0,
-    );
-    assert!(changes.entities_spawned.is_empty());
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use crate::boundary::{
-    BlockPos, ChangeSet, ConnectionId, DigAction, EntityId, Hand, PlayerChange, PlayerInput,
+    BlockPos, ChangeSet, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput,
 };
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{
@@ -7,6 +7,7 @@ use crate::tick::{
     container_slots, held_slot_index, inventory_transition_refused, merchant, plan_break,
     plan_placement, stations, within_block_reach, within_entity_reach,
 };
+use mc_domain::EntityId;
 
 pub(in crate::tick) fn build_preview_fence(fence: &crate::build_precommit::PreviewFence) {
     fence.apply();

@@ -1,9 +1,10 @@
 //! Daytime controls deliberately offer no certified job: neither existing
 //! remote-job routing nor night shelter may accidentally prove the return rule.
 use super::*;
-use crate::boundary::{ChangeSet, ChunkPos, EntityId};
+use crate::boundary::{ChangeSet, ChunkPos};
 use crate::settlements::{allocator, buildings, households};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 pub(crate) fn fixture() -> TickState {

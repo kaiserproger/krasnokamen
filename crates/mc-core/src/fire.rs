@@ -4,9 +4,10 @@
 use mc_data::{Identifier, ItemStack};
 use mc_world::{BlockRegistry, BlockState, BlockStateId, ScheduledBlockTick};
 
-use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, Hand};
 use crate::config::CoreError;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_placement::Face;
 
 const NEIGHBOURS: [[i32; 3]; 6] = [

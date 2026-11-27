@@ -77,7 +77,7 @@ impl Refusals {
 }
 
 pub(crate) struct Connection {
-    entity: mc_core::boundary::EntityId,
+    entity: mc_domain::EntityId,
     ticks: tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
     anchor: [f64; 2],
     inflight: Arc<AtomicUsize>,
@@ -89,7 +89,7 @@ pub(crate) struct Connection {
 impl Connection {
     pub(crate) fn new(
         spawn: [f64; 3],
-        entity: mc_core::boundary::EntityId,
+        entity: mc_domain::EntityId,
         ticks: tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
         in_overworld: bool,
     ) -> Self {

@@ -91,7 +91,7 @@ impl ChunkSource {
                 NativeError::Invalid("loaded/generated chunk position or geometry mismatch"),
             ));
         }
-        crate::light::bake_missing(&mut chunk, &self.light);
+        mc_light::bake_missing(&mut chunk, &self.light);
         Ok((chunk, generated))
     }
 

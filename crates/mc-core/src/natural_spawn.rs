@@ -6,9 +6,10 @@ use mc_physics::BlockMaterial;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::blueprint::MobCategory;
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[path = "natural_spawn_hostile.rs"]
 mod hostile;

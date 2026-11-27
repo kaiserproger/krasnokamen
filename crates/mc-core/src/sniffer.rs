@@ -130,7 +130,7 @@ fn animation(sniffer: Option<&Sniffer>) -> u8 {
 }
 
 pub(crate) fn restore_appearance(row: &mut ColdRow) {
-    let value = crate::boundary::EntityDataValue::SnifferState(animation(
+    let value = mc_data::entity_data_value::EntityDataValue::SnifferState(animation(
         row.entity_life.sniffer.as_deref(),
     ));
     let extra = &mut std::sync::Arc::make_mut(&mut row.appearance).extra;
@@ -151,7 +151,9 @@ fn publish(state: &mut TickState, slot: crate::entities::EntitySlot, value: u8) 
         .extra
         .iter()
         .find_map(|(index, data)| match data {
-            crate::boundary::EntityDataValue::SnifferState(state) if *index == STATE_INDEX => {
+            mc_data::entity_data_value::EntityDataValue::SnifferState(state)
+                if *index == STATE_INDEX =>
+            {
                 Some(*state)
             }
             _ => None,
@@ -162,7 +164,7 @@ fn publish(state: &mut TickState, slot: crate::entities::EntitySlot, value: u8) 
             state,
             slot,
             STATE_INDEX,
-            crate::boundary::EntityDataValue::SnifferState(value),
+            mc_data::entity_data_value::EntityDataValue::SnifferState(value),
         );
     }
 }

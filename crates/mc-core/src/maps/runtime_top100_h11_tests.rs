@@ -4,7 +4,7 @@ use crate::dimensions::Dimension;
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 
-fn join(state: &mut TickState, connection: u64) -> crate::boundary::EntityId {
+fn join(state: &mut TickState, connection: u64) -> mc_domain::EntityId {
     run_tick(
         state,
         &[PlayerInput::Join {
@@ -178,8 +178,9 @@ fn retained_frame_markers_stay_recoverable_at_limit() {
 #[test]
 fn spatial_candidates_match_dense_frames_and_bound_work() {
     use crate::blueprint::MovementClass;
-    use crate::boundary::{EntityAppearance, EntityId};
+    use crate::boundary::EntityAppearance;
     use crate::entities::{ColdFields, EntityKind, EntityStore};
+    use mc_domain::EntityId;
 
     for count in [0, 10_000, 100_000] {
         let mut entities = EntityStore::default();

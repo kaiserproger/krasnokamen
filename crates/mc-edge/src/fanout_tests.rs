@@ -23,11 +23,7 @@ fn tick() -> TickOutput {
 #[test]
 fn publish_tags_reliable_and_best_effort() {
     let out = tick();
-    let mut v = ViewerState::new(
-        ConnectionId(1),
-        mc_core::boundary::EntityId(1),
-        [0.5, 64.0, 0.5],
-    );
+    let mut v = ViewerState::new(ConnectionId(1), mc_domain::EntityId(1), [0.5, 64.0, 0.5]);
     let packets = publish(&out, [&mut v].into_iter(), 0);
     assert!(!packets.is_empty());
     // Center/radius are reliable; all carry framed bytes.
@@ -135,7 +131,7 @@ fn cached_chunk_packets_follow_revisions() {
     let mut chunk_packet = |output: &TickOutput, viewer: u64| {
         let mut v = ViewerState::new(
             ConnectionId(viewer),
-            mc_core::boundary::EntityId(viewer as i32),
+            mc_domain::EntityId(viewer as i32),
             [8.0, 64.0, 8.0],
         );
         publish_with_registries(output, [&mut v].into_iter(), 0, &registries, &mut cache)
@@ -205,7 +201,9 @@ fn cached_chunk_packets_follow_revisions() {
 
 #[test]
 fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_viewer() {
-    use mc_core::boundary::{EntityAppearance, EntityDataValue, EntityId, EntityView};
+    use mc_core::boundary::{EntityAppearance, EntityView};
+    use mc_data::entity_data_value::EntityDataValue;
+    use mc_domain::EntityId;
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::{AddEntity, ClientboundSetEntityData, RemoveEntities};
     let types = mc_data::entity_types::krasnokamen_required_entity_types();
@@ -350,7 +348,8 @@ fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_vie
 /// and a client that keeps reading is never closed by `reliable_overflow`.
 #[test]
 fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
-    use mc_core::boundary::{EntityAppearance, EntityId, EntityView};
+    use mc_core::boundary::{EntityAppearance, EntityView};
+    use mc_domain::EntityId;
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::{
         AddEntity, ClientboundSetEntityLeash, ClientboundSetPassengers,
@@ -526,11 +525,7 @@ fn plan_debug_line_appears_under_the_go_filter_without_the_phase_log() {
         sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
     });
     let output = chunk_tick(1, Arc::new(chunk), None);
-    let mut viewer = ViewerState::new(
-        ConnectionId(1),
-        mc_core::boundary::EntityId(1),
-        [8.0, 64.0, 8.0],
-    );
+    let mut viewer = ViewerState::new(ConnectionId(1), mc_domain::EntityId(1), [8.0, 64.0, 8.0]);
     viewer.loaded_chunks.insert((0, 0), 0);
 
     tracing::subscriber::with_default(subscriber, || {
@@ -580,8 +575,8 @@ mc_core::tick::input::session=debug,mc_edge::server::plan=debug";
 #[test]
 fn a_current_viewer_does_not_preempt_the_chain_for_a_stale_one() {
     use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
-    use mc_core::boundary::EntityId;
     use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+    use mc_domain::EntityId;
 
     let (biomes, blocks, items, block_entity_types) = registries_fixture();
     let registries = PlanRegistries {
@@ -774,8 +769,8 @@ fn a_current_viewer_does_not_preempt_the_chain_for_a_stale_one() {
 #[test]
 fn the_bridge_picks_the_base_most_viewers_hold() {
     use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
-    use mc_core::boundary::EntityId;
     use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+    use mc_domain::EntityId;
 
     let (biomes, blocks, items, block_entity_types) = registries_fixture();
     let registries = PlanRegistries {
@@ -915,9 +910,9 @@ fn the_bridge_picks_the_base_most_viewers_hold() {
 #[test]
 fn a_non_root_dimension_bridges_through_the_chain() {
     use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
-    use mc_core::boundary::EntityId;
     use mc_core::dimensions::Dimension;
     use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+    use mc_domain::EntityId;
 
     let (biomes, blocks, items, block_entity_types) = registries_fixture();
     let registries = PlanRegistries {

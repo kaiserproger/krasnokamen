@@ -6,57 +6,6 @@ world and plugin domains. Anvil is offline import/export, never serving
 fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 [operations](../OPERATING.md).
 
-### CoreUnload byte oracle
-
-`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
-compares the D65 deterministic fixture at matching ticks:
-
-| Artifact | Comparison |
-|---|---|
-| Checkpoint | tick-1 native rows: version, capture tick, SHA-256, base64 payload |
-| WAL | complete raw single-tick frames at ticks 2–3 |
-| Recovery | live and offline `recover_offline → encode_checkpoint` at tick 3; fresh **base-world** copies, no tick thread |
-| Export/censuses | every complete output file byte-for-byte (compression, headers, padding included), custody and crash censuses |
-
-Requires local `data/vanilla`. Both captures use byte-verified copies of one
-closed prepared store, preserving the WAL-v2 UUID without ignoring bytes.
-`seed.json`/producer `input.json` record every seed file's size/SHA; absent or
-changed immutable seed refuses cache reuse. Build receipts pin each producer
-before discarding its private Cargo target, so only one scratch target is needed.
-
-First run base/base in separate processes. Scratch controls reuse
-`--base-run RECEIPT/base`; recorded base HEAD/source fingerprint must still match.
-`--control X1|X2|X3` means respectively: swap `SettlementRecord.owner_name/anchor`,
-swap `VillagerState.mining_progress/lumber_progress`, or swap only their NBT pushes.
-X2 also changes `Transit.Record.members`' embedded villager in checkpoint/live
-transit rows and Entity/Transit WAL. Classifier requires a complete 64-byte WAL-v3
-header (length at offset 56), but compares the **whole frame**.
-Red requires all producers to finish and the exact expected row/WAL/export
-difference; compile/recovery/missing-artifact errors are not red controls.
-Ordinary comparison refuses any byte difference; verdict records each artifact.
-
-Real-image gate:
-`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
-Stopped input contains `world/`, `plugins/`, `server.toml`; `--world PATH` selects
-a certified alternative world subdirectory, copying only that world/plugins/config.
-Hash every source file, verify snapshot, repair redb using base pin's normal
-`NativeStore::open/drop` **on the copy only**, record post-repair hashes and refuse
-changes outside `native/state.redb`. Freeze repaired input read-only; operations
-get fresh writable copies. Never open original as DB; recheck its hashes afterward.
-
-Each tree's fingerprinted public-API probe compares all encoded global/player/
-entity rows, complete exports, custody/crash censuses and ordinary census after
-frozen startup/shutdown. Ordinary-census projection drops source paths/backing-file
-CRCs only, retaining checkpoint tick/counts and the complete receipt.
-Require settlements and a tail advancing checkpoint; `tail-records.json` states
-actual domains, including replayed climate/game-clock state. A frozen image
-does not imply active settlement/transit WAL; synthetic fixture provides that coverage.
-Build manifests separately hash ignored vanilla path/content; an old pin's
-current data hash is an observation, never retroactive build provenance.
-`--base-run PREVIOUS_RECEIPT` verifies/reuses frozen input, base fingerprint,
-pin/artifacts. `--census-refusal EXACT_ERROR` proves matching canonical refusal,
-not successful ordinary census.
-
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
@@ -179,20 +128,28 @@ one warning per crossing (re-armed below 4 MiB) and the queue peak, never a halt
 This halt is the fail-stop above, not a new commit boundary.
 
 All generated native chunks, including vanilla-only chunks, may outlive their
-selected inputs. Before enqueueing a tick's WAL append, the tick owner drains
-immutable pre-edit admission images from every dimension into required-baseline
-jobs. In FIFO order, the journal owner sends each to the sole native writer and
-waits for its Immediate fill-generated commit before appending dependent WAL.
-The tick does not await that commit or perform DB I/O, but on a tick that
-generated chunks every later append waits behind one native commit per baseline
-batch (and behind a checkpoint commit already on the native writer). Failure or a
-lost acknowledgement withholds that append and closes journal admission. There is
-no separate deferred generated-chunk save. Exhausting the bounded admission buffer
-(1024 baselines per dimension) refuses the chunk and records a load error;
-checkpointing cannot silently lose its baseline or prune its unmaterialized edits.
-Known limit: the refusal is sticky until restart, and a startup replay that must
-regenerate more than 1024 WAL-edited chunks without a stored baseline refuses on
-every start (the queue lives in memory).
+selected inputs, so every generated admission image must become a durable
+native baseline before dependent WAL can publish. Before enqueueing a tick's
+WAL append, the tick owner drains immutable pre-edit admission images from
+every dimension into required-baseline jobs; there is no separate deferred
+generated-chunk save. The journal owner hands the sole native writer its
+Immediate fill-generated commit (behind any checkpoint commit already queued
+there) and then keeps draining the tick's queue into a hold of at most
+`JOURNAL_HOLD_LIMIT` jobs instead of parking it: held work keeps its arrival
+order, nothing held is published before the baseline is durable, and appends
+keep the budget reservations they were admitted with. The wait is the writer's
+own answer through the same work queue (`JournalWork::BaselineDurable`, tagged
+with the handoff's serial), so no timer or polling interval exists; past the
+hold limit the owner falls back to the job's own answer channel. A tick that
+generated chunks therefore still puts one native commit per batch in front of
+its append. Failure or a lost acknowledgement withholds that append and the held
+work and closes journal admission. The tick itself performs no DB write or
+durability await. Exhausting the bounded admission buffer (1024 baselines per
+dimension) refuses the chunk and records a load error; checkpointing cannot
+silently lose its baseline or prune its unmaterialized edits. Known limit: the
+refusal is sticky until restart, and a startup replay that must regenerate more
+than 1024 WAL-edited chunks without a stored baseline refuses on every start
+(the queue lives in memory).
 
 Baseline fill inserts only absent, uncovered slots, never overwriting imported
 or checkpointed chunks. The first dependent native snapshot also installs its
@@ -291,11 +248,11 @@ checkpoint **or** tail, schema ≠2, records without meta, unknown prefixes/fiel
 record revision above meta or watermark above its revision. An advance gives a
 new global revision and increments watermark; neither decreases.
 Older binaries also refuse new metadata (missing their required fields).
-[Operator reset boundary](../OPERATING.md#structure-ledger-format).
+[Operator reset boundary](../OPERATING.md#changing-the-binary).
 
 Work receipts are returned, not stored: next sequence = stored watermark+1.
-Only `watermark <= snapshot.revision` is checked; per-receipt sequence/identity/
-revision/stage/work/material validations and length equality no longer exist.
+Only `watermark <= snapshot.revision` is checked; there is no per-receipt
+sequence, identity, revision, stage, work, material or length validation.
 Wrong watermarks inside the bound are undetected; repair/replanning means watermark
 is not current-stage work sum.
 
@@ -469,6 +426,9 @@ without it refuses to open and is never given a fresh identity. The marker canno
 be derived from redb because redb's unattended repair switches to an older commit
 when the newest one fails its checksum, and the damaged commit leaves no trace
 inside the store (Books R4-P1, `WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT`).
+Every redb repair is therefore logged at `error!` as a possible rollback to an
+earlier commit: the repair callback cannot tell an unclean stop from a damaged
+commit or header slot.
 
 The branch tells copies of one store apart
 (`DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY`). A world as created or imported
@@ -731,6 +691,77 @@ stays for the world's lifetime.) Required checkpoint player records
 must decode and match their keys; offline player custody is retained rather than
 silently discarded.
 
+### Datapack worldgen staging and identity fields
+
+Pack worldgen resources are binary, not UTF-8 by default. Each selected pack
+applies its filters to lower layers, then adds its own resources; builtin
+vanilla occupies its actual selected position, and authored biome convention
+defaults are its lowest layer. Biome tags merge in order, honor `replace` and
+resolve required/optional references across namespaces. Worldgen JSON/NBT and
+cache reports are staged as a private bounded copy; neither shared vanilla files
+nor hard links are modified, and generators compile owned immutable values from
+it. The staging directory is removed after construction, including refusal. The
+reserved world-owned `.krasnokamen-worldgen` directory is disposable after a
+crash only with its fsynced sibling `.krasnokamen-worldgen.owner` marker (or when
+empty); the marker is never deleted with the tree, so a crash during cleanup
+cannot erase ownership proof. Unowned nonempty paths, unexpected top-level
+entries and symlinks refuse startup (`crates/mc-core/src/datapacks_worldgen.rs`).
+
+`level.dat/Data` also carries Krasnokamen identity and clock fields that vanilla
+does not own: `KrasnokamenTerrainEpoch` and `KrasnokamenEntitySalt` (world
+identity) and `KrasnokamenSimHeldTicks` ([recovery clocks](#recovery-evidence-and-clocks)).
+The normal checkpoint level-metadata path owns them and
+`KrasnokamenWorldgenInputs`; there is no WAL image of them and no separate
+startup transaction. Unsupported worldgen domains or types, including Moog
+piece-count rules, refuse the whole pack through the one shared
+`mc-data`/`mc-worldgen` supported-type authority; a removed pack's saved
+structure starts stay untouched and inactive
+([operator view](../OPERATING.md#datapacks-and-command-blocks)).
+
+### Player custody admission
+
+Player custody admission refuses missing, non-byte, out-of-range or repeated
+inventory/ender-chest slots and repeated or unsupported equipment slots before
+projecting entries into native arrays. Offline import also checks legacy
+`Inventory` slots before `PlayerEquipmentFix` can collapse armor/offhand
+duplicates. The error names the source player and slot; a refusal publishes no
+world and leaves the source unchanged. This is a custody guard, not vanilla
+repair: vanilla defaults a missing `Slot` to 0, skips out-of-range entries and
+lets later repeated slots overwrite earlier stacks (`ItemStackWithSlot.CODEC`,
+`Inventory.load`, `PlayerEnderChestContainer.fromSlots`), while every vanilla
+26.1.2–26.3 writer encodes a `Slot` for each saved entry, slot 0 included.
+Coverage: `mc-world-conversion::player_slot_import_tests`.
+
+Native WAL admission requires exactly 41 player inventory slots before applying
+a player post-image; a short or long vector refuses the whole recovered world
+rather than reaching the join path's empty default. A nonempty player item
+compound without a string `id` refuses import and checkpoint recovery, including
+equipment, cursor and crafting-grid custody; an empty compound remains an empty
+slot. Coverage: `mc-core::native_checkpoint::tests::player_custody`.
+
+Repeated projected player custody names refuse before first-match decoding or
+removal from the opaque image, on WAL player opaque bytes before replay and
+before player serialization too, so a WAL post-image cannot bypass the codec's
+duplicate-name refusal and lose a second cursor/crafting-grid payload. WAL player
+opaque NBT may not contain any root field in `player_owned_field`
+(`crates/mc-core/src/journal/player_nbt.rs`), even once or empty: those fields
+belong to the typed post-image, and serialization removes them from opaque data.
+The same applies to `recipeBook.recipes`, whose authority is the typed unlocked
+recipe set; other `recipeBook` fields stay opaque. Admission refuses the whole
+recovery before applying the batch, naming player UUID and field.
+Coverage: `mc-world-conversion::wal_owned_player_fields_tests`.
+
+### Shutdown and the world lease
+
+Explicit shutdown and a plain drop share one stop order: `Core::shutdown` and
+`Drop for CoreInner` both call `CoreInner::stop_owners`
+(`crates/mc-core/src/core.rs`): signal the tick owner, join the tick (its final
+checkpoint and the journal `Shutdown`), join the journal (final WAL flush), and
+only then release the exclusive world lease. Both take the same `Option`
+handles, so the paths are idempotent; with unpoisoned owner mutexes a plain
+`drop(core)` never detaches a running owner or frees a lease an owner may still
+write. Regression: `core_drop_join_tests::plain_drop_holds_the_world_lease_until_the_publication_commits`.
+
 ### Corpses
 
 A killed living mob keeps its body for 20 ticks (vanilla `deathTime`) so
@@ -758,8 +789,8 @@ The key is visible to `/data` and NBT selectors while allegiance is nonzero;
 no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
 dense compaction.
 The native checkpoint/WAL/restart regression is
-`battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's
-allegiance extension. Persistence changes require Main's independent review.
+`battle_faction_survives_native_checkpoint_wal_and_restart`. Persistence
+changes require Main's independent review.
 
 Shield presentation is entity appearance, not a runtime action clock: the
 living-flags byte in `appearance.extra` is present in WAL entity post-images but
@@ -880,6 +911,10 @@ transaction. Recovery fails closed when a UUID is both an entity and a member,
 a member of two records, or a record household is also a settlement's; the
 offline census reports `transit_records` / `transit_members` and refuses the
 same duplicates. Binaries without this domain refuse such a store.
+A departed member's entity row is tombstoned at the checkpoint after departure;
+the store accepts that identity's live row again only in the checkpoint that
+drops it from every transit row. Every other tombstone stays final
+([ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)).
 
 Crash evidence reads the durable boundary itself: `krasnokamen world
 custody-census --copy <disposable copy> --receipt <new file>` repairs the
@@ -995,3 +1030,69 @@ may leave `.verify-<pid>-<n>` for manual cleanup.
 A filesystem copy of a live writer is not backup. Anvil omits native-only plugin/
 settlement authority and block history. Use [operating](../OPERATING.md) and
 [migration](../MIGRATION.md) commands and inspect their results.
+
+Backups retain database custody throughout the copy. The native redb backend
+and the hot-backup reader share the exact lease-holding file handle (not a
+reopened path or duplicated Windows handle); positioned reads have independent
+cursors, and the native writer serializes the copy between committed jobs. The
+joined native writer owns the backup store; callers send only a destination and
+a reply channel, and both writer joins finish database destruction before the
+world lease is released. Offline backup and restore likewise read through their
+lease handle; no unlock/copy/relock interval exists. Windows directory
+durability uses the platform directory-sync helper; conversion syncs only its
+output staging files, opened with write access but without creation or
+truncation ([FlushFileBuffers requires GENERIC_WRITE](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)).
+
+## CoreUnload byte oracle
+
+A refactor that must not change persisted bytes (the D65 CoreUnload slices) is
+proved with the byte oracle below.
+
+`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
+compares the D65 deterministic fixture at matching ticks:
+
+| Artifact | Comparison |
+|---|---|
+| Checkpoint | tick-1 native rows: version, capture tick, SHA-256, base64 payload |
+| WAL | complete raw single-tick frames at ticks 2–3 |
+| Recovery | live and offline `recover_offline → encode_checkpoint` at tick 3; fresh **base-world** copies, no tick thread |
+| Export/censuses | every complete output file byte-for-byte (compression, headers, padding included), custody and crash censuses |
+
+Requires local `data/vanilla`. Both captures use byte-verified copies of one
+closed prepared store, preserving the WAL-v2 UUID without ignoring bytes.
+`seed.json`/producer `input.json` record every seed file's size/SHA; absent or
+changed immutable seed refuses cache reuse. Build receipts pin each producer
+before discarding its private Cargo target, so only one scratch target is needed.
+
+First run base/base in separate processes. Scratch controls reuse
+`--base-run RECEIPT/base`; recorded base HEAD/source fingerprint must still match.
+`--control X1|X2|X3` means respectively: swap `SettlementRecord.owner_name/anchor`,
+swap `VillagerState.mining_progress/lumber_progress`, or swap only their NBT pushes.
+X2 also changes `Transit.Record.members`' embedded villager in checkpoint/live
+transit rows and Entity/Transit WAL. Classifier requires a complete 64-byte WAL-v3
+header (length at offset 56), but compares the **whole frame**.
+Red requires all producers to finish and the exact expected row/WAL/export
+difference; compile/recovery/missing-artifact errors are not red controls.
+Ordinary comparison refuses any byte difference; verdict records each artifact.
+
+Real-image gate:
+`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
+Stopped input contains `world/`, `plugins/`, `server.toml`; `--world PATH` selects
+a certified alternative world subdirectory, copying only that world/plugins/config.
+Hash every source file, verify snapshot, repair redb using base pin's normal
+`NativeStore::open/drop` **on the copy only**, record post-repair hashes and refuse
+changes outside `native/state.redb`. Freeze repaired input read-only; operations
+get fresh writable copies. Never open original as DB; recheck its hashes afterward.
+
+Each tree's fingerprinted public-API probe compares all encoded global/player/
+entity rows, complete exports, custody/crash censuses and ordinary census after
+frozen startup/shutdown. Ordinary-census projection drops source paths/backing-file
+CRCs only, retaining checkpoint tick/counts and the complete receipt.
+Require settlements and a tail advancing checkpoint; `tail-records.json` states
+actual domains, including replayed climate/game-clock state. A frozen image
+does not imply active settlement/transit WAL; synthetic fixture provides that coverage.
+Build manifests separately hash ignored vanilla path/content; an old pin's
+current data hash is an observation, never retroactive build provenance.
+`--base-run PREVIOUS_RECEIPT` verifies/reuses frozen input, base fingerprint,
+pin/artifacts. `--census-refusal EXACT_ERROR` proves matching canonical refusal,
+not successful ordinary census.

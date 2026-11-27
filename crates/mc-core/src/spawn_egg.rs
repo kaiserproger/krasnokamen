@@ -1,8 +1,9 @@
 //! SpawnEggItem.useOn admission, using 26.1.2 report-authored entity_data defaults.
 
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 
 fn entity_type(state: &TickState, stack: &ItemStack, default: &Identifier) -> Option<u32> {

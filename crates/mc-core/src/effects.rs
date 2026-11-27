@@ -613,10 +613,7 @@ fn advancement_effect_snapshot(effects: &ActiveEffects) -> serde_json::Value {
 }
 
 /// Project the authoritative effects into the existing appearance fan-out.
-pub(crate) fn sync_appearance(
-    state: &mut crate::tick::TickState,
-    entity: crate::boundary::EntityId,
-) {
+pub(crate) fn sync_appearance(state: &mut crate::tick::TickState, entity: mc_domain::EntityId) {
     use crate::boundary::EffectParticle;
     let Some(slot) = state.entities.slot_of_any(entity) else {
         return;
@@ -729,7 +726,7 @@ fn is_living(kind: crate::entities::EntityKind) -> bool {
 pub(crate) fn execute_command(
     state: &mut crate::tick::TickState,
     connection: crate::boundary::ConnectionId,
-    executor: crate::boundary::EntityId,
+    executor: mc_domain::EntityId,
     command: &crate::commands::Command,
 ) -> crate::command_execution::CommandResult {
     use crate::command_execution::CommandResult::{Failed, Success, Unavailable};
@@ -1022,7 +1019,7 @@ pub(crate) fn run(state: &mut crate::tick::TickState, intents: &mut Vec<crate::i
     }
 }
 
-pub(crate) fn sync_join(state: &mut crate::tick::TickState, entity: crate::boundary::EntityId) {
+pub(crate) fn sync_join(state: &mut crate::tick::TickState, entity: mc_domain::EntityId) {
     let Some(player) = state.players.get(&entity) else {
         return;
     };
@@ -1051,7 +1048,7 @@ pub(crate) fn sync_join(state: &mut crate::tick::TickState, entity: crate::bound
 /// Authoritative per-tick dig progress, also used for instant Start admission.
 pub(crate) fn mining_progress(
     state: &crate::tick::TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     block_state: u32,
 ) -> f32 {
     let Some(player) = state.players.get(&entity) else {

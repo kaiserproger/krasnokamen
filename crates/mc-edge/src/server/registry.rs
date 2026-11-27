@@ -1,5 +1,4 @@
 //! Connection registry: handles, session locks and lookup.
-//! Moved verbatim from `server.rs`.
 
 use super::*;
 

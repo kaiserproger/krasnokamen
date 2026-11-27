@@ -1,11 +1,12 @@
-# Solaris docs archive
+# Docs archive
 
 Superseded designs, old release-era notes, finished research and one-off prompts/articles
 that no longer describe the current system. Each entry: original path, date/era,
 what it said, why superseded, which doc replaced it. Full text lives in Git history.
 
-Current runtime: `solaris-v2` (`mc-edge` + `mc-core`, native tick/intent-merge/WAL)
-per [ADR 0013](../decisions/0013-core-model-v2.md) and [ADR 0014](../decisions/0014-v1-core-retirement.md).
+Current runtime: `mc-edge`'s `krasnokamen` over native `mc-core` (tick,
+intent merge, WAL) per [ADR 0013](../decisions/0013-core-model-v2.md) and
+[decision P8](../../DECISIONS.md#product).
 
 ## docs/articles/show-hn-solaris.md (2026-10, pre-cutover draft)
 
@@ -114,18 +115,17 @@ real-client acceptance not recorded.
 Superseded: final v1 release before the 0013/0014 core replacement.
 Replaced by: `docs/releases/v0.0.8.md`.
 
-## docs/VALIDATION_LEDGER.md historical slices (2026-06-13 .. 2026-07-11, v1)
+## docs/VALIDATION_LEDGER.md (2026-06 .. 2026-10, v1 M100 ledger)
 
-Archived 2026-10-24: 91 per-slice sections (lines ~43-1441, ~290KB) plus 2
-Oct-11 pre-gate slices (fixture surface selection; W1 projectile/respawn roots),
-summarized below. Kept in place: header/runtime-era notice, status vocabulary,
-M77 preflight, `## Frozen M100 Denominator`, non-goals appendix, M78-M100
-targets, 80% blockers, M95 audit (tooling input to `coverage-audit`), and the
-2026-10-11 Parity Wave 1 integrated native gate (latest L2 leg).
-All archived slices carry the ledger's own runtime-era warning: v1 trees,
-deleted `mc-server`/`mc-net` commands and quality labels apply to their
-recorded trees, not the current server; no row auto-revalidates on cutover.
-Full text in Git history (`git log -- docs/VALIDATION_LEDGER.md`).
+Said: the frozen v1 M100 denominator (per-area rows with status, evidence and
+gaps), its targets and blockers, and per-slice validation notes; its only reader
+was `mc-test-harness`'s `coverage-audit` binary. Superseded by the bug ledger
+(`docs/bugs/`) and the evidence labels in `docs/STATUS.md`; no harness profile,
+CI job or ledger row ran `coverage-audit`. Deleted with the binary on 2026-11-27
+(owner D125). Full text in Git history (`git log -- docs/VALIDATION_LEDGER.md`).
+
+The per-slice sections archived on 2026-10-24 (v1 trees; their commands and
+quality labels apply to their recorded trees only):
 
 - Post-M95 local automated validation update: generated gitignored
   `block_light.json`, reran fmt/clippy/test gates; stabilization label, no
@@ -177,14 +177,15 @@ Full text in Git history (`git log -- docs/VALIDATION_LEDGER.md`).
 - 2026-10-11 W1 projectile/respawn failure roots: pre-gate failure analysis
   feeding the kept Parity Wave 1 gate section.
 
-## docs/agents/PRO_CORE_AUDIT_PROMPT.md + PRO_CORE_AUDIT_RUNBOOK.md (one-off audit tooling)
+## docs/agents/PRO_CORE_AUDIT_PROMPT.md + PRO_CORE_AUDIT_RUNBOOK.md (2026-08, one-off audit)
 
-Kept in place (referenced by `tools/prepare-pro-core-audit.sh`, `Justfile`
-`pro-audit-context`, `docs/README.md`). Note: audit prompt names
-`mc-simulation` (deleted crate) in dimension 2 and model names
-(`Pi GPT-5.6 Sol/Luna`, `spawn_pi_detached`) that postdate the current
-harness vocabulary; treat the prompt as a frozen one-off instrument, not a
-current crate/topology reference. If the audit is rerun, refresh it first.
+Said: a planning-only "Pro" whole-core audit prompt and runbook, bundled by
+`tools/prepare-pro-core-audit.sh` (CodexPro `pro-bundle`, titled for
+v0.0.3-alpha.1) and applied by `tools/apply-pro-first-handoff.py`; last used
+2026-08-29. The prompt named the deleted `mc-simulation` crate and retired model
+names. Deleted with both scripts and the `Justfile` `pro-audit-context` target on
+2026-11-27 (owner D125); audits now go through the
+[review committee](../development/review-committee-and-breaker.md).
 
 ## docs/settlements/OWNER_DECISIONS.md (CP-058/059/068 ruleset, 2026-10)
 

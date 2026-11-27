@@ -2,12 +2,14 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{ConnectionId, EntityDataValue, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::hostile::{CREEPER_SWELL_DIR_INDEX, FUSE_TICKS, launch_arrow};
 use crate::projectiles::{ARROW_IN_GROUND_INDEX, ARROW_STUCK_TICKS};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 
 /// Platform height: far above the flat fixture floor.
 const Y: i32 = 200;

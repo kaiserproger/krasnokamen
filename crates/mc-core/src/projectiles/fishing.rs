@@ -6,9 +6,11 @@ use mc_data::ItemStack;
 use uuid::Uuid;
 
 use super::{ProjectileData, ProjectileKind, ProjectileState};
-use crate::boundary::{EntityDataValue, EntityId, Hand, PlayerChange};
+use crate::boundary::{Hand, PlayerChange};
 use crate::intent::Intent;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 
 #[cfg(test)]
 #[path = "fishing_floor_tests.rs"]

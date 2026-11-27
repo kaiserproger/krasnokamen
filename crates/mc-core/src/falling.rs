@@ -1,9 +1,10 @@
 //! Native falling-block lifecycle. Source removal, entity image and landing
 //! are committed on the tick owner; no instantaneous column teleportation.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_world::{BlockRegistry, BlockStateId};
 use std::sync::Arc;

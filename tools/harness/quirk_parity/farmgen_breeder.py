@@ -96,13 +96,6 @@ def main() -> None:
             {"name": "run", "commands": [], "ticks": 24000},
         ],
         "compare": {"blocks": "exact", "entities": "counts"},
-        "known_divergence": (
-            "Krasnokamen farmer villagers harvest ~2.4x faster than vanilla: carrots[age=7] drop 35 "
-            "(identical across seeds) vs vanilla 14.8 +- 3.2 over one work day (24000 ticks, "
-            "farmer + composter + 40 mature carrots). Krasnokamen villager harvest is not paced by "
-            "vanilla's HarvestFarmland walk/cooldown timing. Repro: python3 -m "
-            "tools.harness.quirk_parity --out DIR --scenario farm-villager-breeder."
-        ),
         "rate": {
             "metric": {"kind": "block_state_count", "equals": "minecraft:carrots[age=7]"},
             "direction": "drop",

@@ -253,7 +253,7 @@ pub(super) fn daylight(state: &TickState, pos: BlockPos, inverted: bool) -> u8 {
     let darken = if state.dimension == Dimension::End {
         0
     } else {
-        crate::light::sky_darken(time, state.rain_level, state.thunder_level)
+        mc_light::sky_darken(time, state.rain_level, state.thunder_level)
     };
     let light = sky.saturating_sub(darken);
     if inverted {

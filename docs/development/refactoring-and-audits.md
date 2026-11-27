@@ -1,7 +1,7 @@
 # Module extraction and architecture audits
 
-Rules for where code belongs are in [AGENTS.md](../../AGENTS.md) "Project
-invariants", the [Constitution](../AGENT_CONSTITUTION.md) and the ADRs. These
+Rules for where code belongs are the [decisions](../../DECISIONS.md) (K5, B1)
+and [new features are modules](adding-a-feature.md#new-features-are-modules). These
 are the two procedures used for large Rust files and for architecture reviews
 (2026-09/10). File names in older receipts refer to the retired v1 crates.
 

@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerInput};
 use crate::dimensions::{Dimension, travel as dimensions_travel};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

@@ -126,8 +126,10 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
     elif profile == 'quirk-parity':
         from .quirk_parity import __main__ as quirk_parity
         extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ['--'] else ctx.extra_args
+        command = extra[:1] if extra[:1] and extra[0] in quirk_parity.COMMANDS else []
+        out = [] if command == ['verify'] else ['--out', str(ctx.artifact_dir / 'quirk-parity')]
         try:
-            quirk_parity.parse_args(['--out', str(ctx.artifact_dir / 'quirk-parity'), *extra])
+            quirk_parity.parse_args([*command, *out, *extra[len(command):]])
         except SystemExit as error:
             raise ValueError('invalid quirk-parity arguments') from error
     elif profile in ('seed-review', 'seed-contact-sheet'):

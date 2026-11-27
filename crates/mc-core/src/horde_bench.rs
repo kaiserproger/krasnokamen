@@ -9,11 +9,12 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{ChunkPos, ConnectionId, EntityId, PlayerInput, TickTimes};
+use crate::boundary::{ChunkPos, ConnectionId, PlayerInput, TickTimes};
 use crate::config::CoreError;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 #[cfg(test)]
 #[path = "merge_cost_tests.rs"]
@@ -52,7 +53,7 @@ pub(crate) fn flat_world(registry: &CoreRegistry) -> ChunkWorld {
         }
     }
     template.status = "minecraft:full".into();
-    crate::light::bake_missing(&mut template, &registry.light);
+    mc_light::bake_missing(&mut template, &registry.light);
     ChunkWorld::new(
         42,
         Arc::new(FlatTerrain(template)),

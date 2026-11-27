@@ -1,4 +1,4 @@
-//! Deterministic intent merge (ADR 0013 "Tick" step 3).
+//! Deterministic intent merge (ADR 0013 "Tick and merge", decision K1).
 //!
 //! Every entity (and the input step for players) emits intents against
 //! snapshot `t`. Each intent declares its complete footprint: the targets it
@@ -11,7 +11,8 @@
 //! Inventory claims inside a footprint are data here; the `inventory` module
 //! (owned separately) validates and applies them through [`InventoryLedger`].
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
+use mc_domain::EntityId;
 
 /// One validated inventory slot claim inside a footprint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

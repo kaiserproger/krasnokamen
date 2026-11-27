@@ -1,9 +1,56 @@
 //! Clicked bucket/cauldron plans share one inventory debit with block custody.
 use super::{Flow, Fluid, contained, flow_into, offset, waterlogged};
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::{TickState, held_slot_index};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
+
+/// Player inventory claim for one bucket exchange, plus the give-back item the
+/// bucket intent hands to the actor when the held stack is not consumed whole.
+fn exchange(
+    state: &TickState,
+    entity: EntityId,
+    hand: Hand,
+    held: &ItemStack,
+    give: u32,
+) -> Option<(InvClaim, Option<u32>)> {
+    let player = state.players.get(&entity)?;
+    if player.spectator() {
+        return None;
+    }
+    let slot = held_slot_index(player, hand);
+    let creative = player.creative();
+    let single = held.count == 1;
+    let kept_in_hand = !creative && single;
+    Some((
+        InvClaim {
+            owner: entity,
+            slot: slot as u16,
+            expect_item: held.item_id,
+            expect_count: held.count,
+            take: i32::from(!creative),
+            put_item: kept_in_hand.then_some(give),
+            put_count: i32::from(kept_in_hand),
+        },
+        give_whole_stack(creative, single, give),
+    ))
+}
+
+/// Item returned to the actor when the exchange replaced a single held bucket.
+fn give_whole_stack(creative: bool, single: bool, give: u32) -> Option<u32> {
+    (!creative && !single).then_some(give)
+}
+
+/// Block state of a cauldron filled to `level=3`.
+fn filled_cauldron(state: &TickState, name: &str) -> Option<u32> {
+    let id = Identifier::parse(format!("minecraft:{name}")).ok()?;
+    state
+        .registry
+        .blocks
+        .by_name_and_props(&id, &[("level".into(), "3".into())])
+        .map(|state| state.0)
+}
 
 /// Powder-snow bucket exchange with cauldrons: a snow bucket fills an empty
 /// cauldron; an empty bucket collects a full powder-snow cauldron.
@@ -22,18 +69,11 @@ fn powder_snow_use(
         .blocks
         .by_id(mc_world::BlockStateId(current))?;
     let path = entry.block.id.path();
-    let expected = current;
     let (new, give) = if held.item_id == snow {
         if path != "cauldron" {
             return None;
         }
-        let id = Identifier::parse("minecraft:powder_snow_cauldron").ok()?;
-        let new = state
-            .registry
-            .blocks
-            .by_name_and_props(&id, &[("level".into(), "3".into())])?
-            .0;
-        (new, empty)
+        (filled_cauldron(state, "powder_snow_cauldron")?, empty)
     } else {
         if path != "powder_snow_cauldron" {
             return None;
@@ -46,35 +86,17 @@ fn powder_snow_use(
             return None;
         }
         let id = Identifier::parse("minecraft:cauldron").ok()?;
-        let new = state.registry.blocks.block(&id)?.default.0;
-        (new, snow)
+        (state.registry.blocks.block(&id)?.default.0, snow)
     };
-    let player = state.players.get(&entity)?;
-    if player.spectator() {
-        return None;
-    }
-    let slot = held_slot_index(player, hand);
-    let creative = player.creative();
-    let single = held.count == 1;
+    let (claim, give) = exchange(state, entity, hand, held, give)?;
     Some(Intent {
         actor: entity,
         seq: 0,
-        kind: IntentKind::Bucket {
-            pos,
-            give: (!creative && !single).then_some(give),
-        },
+        kind: IntentKind::Bucket { pos, give },
         footprint: Footprint {
-            block_expect: vec![(pos, expected)],
+            block_expect: vec![(pos, current)],
             block_write: vec![(pos, new)],
-            inv: vec![InvClaim {
-                owner: entity,
-                slot: slot as u16,
-                expect_item: held.item_id,
-                expect_count: held.count,
-                take: i32::from(!creative),
-                put_item: (!creative && single).then_some(give),
-                put_count: i32::from(!creative && single),
-            }],
+            inv: vec![claim],
             ..Default::default()
         },
     })
@@ -133,7 +155,6 @@ pub(crate) fn plan_use_on(
     } else {
         return None;
     };
-    let current = state.world.block_at(pos.x, pos.y, pos.z)?;
     let entry = state
         .registry
         .blocks
@@ -151,15 +172,7 @@ pub(crate) fn plan_use_on(
         "cauldron" | "water_cauldron" | "lava_cauldron" | "powder_snow_cauldron"
     ) {
         match carried {
-            Some(Fluid::Water) => {
-                let id = Identifier::parse("minecraft:water_cauldron").ok()?;
-                let new = state
-                    .registry
-                    .blocks
-                    .by_name_and_props(&id, &[("level".into(), "3".into())])?
-                    .0;
-                (pos, new, empty)
-            }
+            Some(Fluid::Water) => (pos, filled_cauldron(state, "water_cauldron")?, empty),
             Some(Fluid::Lava) => (pos, resolve("lava_cauldron")?, empty),
             None => {
                 let full = entry
@@ -194,7 +207,7 @@ pub(crate) fn plan_use_on(
             {
                 wet
             } else {
-                let _ = flow_into(state, target, fluid)?;
+                flow_into(state, target, fluid)?;
                 fluid.source(&state.registry.states)
             };
             (target, new, empty)
@@ -217,20 +230,11 @@ pub(crate) fn plan_use_on(
     if expected == new && !evaporate {
         return None;
     }
-    let player = state.players.get(&entity)?;
-    if player.spectator() {
-        return None;
-    }
-    let slot = held_slot_index(player, hand);
-    let creative = player.creative();
-    let single = held.count == 1;
+    let (claim, give) = exchange(state, entity, hand, held, give)?;
     Some(Intent {
         actor: entity,
         seq: 0,
-        kind: IntentKind::Bucket {
-            pos: target,
-            give: (!creative && !single).then_some(give),
-        },
+        kind: IntentKind::Bucket { pos: target, give },
         footprint: Footprint {
             block_expect: vec![(target, expected), (pos, current)],
             block_write: if evaporate {
@@ -238,15 +242,7 @@ pub(crate) fn plan_use_on(
             } else {
                 vec![(target, new)]
             },
-            inv: vec![InvClaim {
-                owner: entity,
-                slot: slot as u16,
-                expect_item: held.item_id,
-                expect_count: held.count,
-                take: i32::from(!creative),
-                put_item: (!creative && single).then_some(give),
-                put_count: i32::from(!creative && single),
-            }],
+            inv: vec![claim],
             ..Default::default()
         },
     })

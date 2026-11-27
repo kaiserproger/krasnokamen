@@ -563,7 +563,7 @@ fn a_piece_over_an_unreadable_column_is_classified_later_not_never() {
     );
 }
 
-fn villagers_of(state: &TickState) -> Vec<(crate::boundary::EntityId, Option<SettlementId>)> {
+fn villagers_of(state: &TickState) -> Vec<(mc_domain::EntityId, Option<SettlementId>)> {
     state
         .entities
         .slots()

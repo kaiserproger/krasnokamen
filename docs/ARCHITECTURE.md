@@ -1,9 +1,11 @@
 # Krasnokamen core architecture
 
-Krasnokamen serves Minecraft Java **26.3** (protocol 777); 26.1.2 clients
-(protocol 775) connect through the retained legacy cache and edge translation.
-`krasnokamen` is the `mc-edge` binary over native `mc-core`; the v1 server is
-retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
+Krasnokamen serves every Minecraft Java release from 26.1.2 through 26.3
+(protocols 775–777). The core speaks 26.3; an older session runs through the
+edge's adjacent translation chain over the endpoint caches `content import`
+installs ([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
+`krasnokamen` is the `mc-edge` binary over native `mc-core`;
+[ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
 
 ## Composition
 
@@ -18,9 +20,16 @@ retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
   Live and offline generation share `chunk_loader`'s immutable source and worker
   pool, not a callback into a shared tick state.
 - `crates/mc-protocol`, `mc-data`, `mc-world`, `mc-physics` and `mc-worldgen`:
-  protocol, content and shared world/physics implementation.
+  protocol, content and shared world/physics implementation. `mc-nbt` is the
+  shared NBT codec; `mc-domain` holds protocol-independent gameplay
+  value types (no transport, persistence or runtime dependency);
+  `mc-melee-range` is vanilla melee-reach geometry, dependency-free so the
+  server and the replay scanner judge contact with the same code.
 - `mc-plugin-host` and `mc-script`: isolated component execution and bounded
   admission; `mc-loader` owns the Loader wire contract.
+- `mc-vanilla`: vanilla-jar process control and registry capture for content
+  import and the harness; `mc-test-harness`: wire-probe, replay validation and
+  other differential test tools; `xtask`: code-health and generated navigation.
 - `workspace-features`: compile-time third-party feature unification for the
   server build and core tests ([ADR 0021](decisions/0021-build-time-and-crate-split.md)).
   Only mc-edge's normal dependencies and mc-core's dev dependencies activate it;
@@ -40,10 +49,11 @@ authoritative.
 - [Mutation routes](architecture/mutations.md)
 - [Native store, WAL, recovery and backup](architecture/persistence.md)
 - [Settlement authority and code locations](architecture/settlements.md)
+- [Battles: tick order, facing, steering and combat](architecture/battles.md)
 - [Chunk residency, activation and tickets](architecture/residency.md)
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
 - [Horizon `horizon:lod` far-terrain acceptance](development/horizon-lod-acceptance.md)
 - [Plugins](PLUGINS.md), [Loader](KRASNOKAMEN_LOADER.md),
-  [operations](OPERATING.md), [decisions](decisions/README.md)
+  [operations](OPERATING.md), [decisions](../DECISIONS.md)
 
 Generated indexes navigate code; they are not a second source of semantics.

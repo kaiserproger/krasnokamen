@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, EntityId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 /// Platform height: far above the flat fixture floor.
 const Y: i32 = 200;

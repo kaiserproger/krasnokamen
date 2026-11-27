@@ -1,6 +1,6 @@
 #[test]
 fn climate_variant_journal_images_restore_the_same_typed_value() {
-    use crate::boundary::EntityDataValue;
+    use mc_data::entity_data_value::EntityDataValue;
     for value in [
         EntityDataValue::ChickenVariant(1),
         EntityDataValue::CowVariant(2),

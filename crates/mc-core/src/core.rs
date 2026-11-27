@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::{Receiver, Sender, channel as mpsc_channel};
 
-use crate::boundary::{ConnectionId, EntityId, PlayerChange, PlayerInput, TickOutput, TickTimes};
+use crate::boundary::{ConnectionId, PlayerChange, PlayerInput, TickOutput, TickTimes};
 use crate::config::{CoreConfig, CoreError};
 use crate::entities::EntityKind;
 use crate::journal::{
@@ -36,6 +36,7 @@ use crate::journal_budget::{JOURNAL_QUEUE_BYTES, JournalBudget};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 #[path = "core_stop.rs"]
 mod stop;
@@ -2005,6 +2006,10 @@ mod entity_state_persistence_tests;
 #[cfg(test)]
 #[path = "mounts_persistence_tests.rs"]
 mod mounts_persistence_tests;
+
+#[cfg(test)]
+#[path = "core/quirk_parity_restart.rs"]
+pub(crate) mod quirk_parity_restart;
 
 #[cfg(test)]
 #[path = "raids_recovery_tests.rs"]

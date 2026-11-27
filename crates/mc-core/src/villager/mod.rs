@@ -76,7 +76,7 @@ pub(crate) fn sync_appearance(
     let projected = [
         Some((
             14,
-            crate::boundary::EntityDataValue::OptionalBlockPos(
+            mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(
                 villager
                     .home
                     .filter(|_| villager.sleeping)
@@ -85,7 +85,7 @@ pub(crate) fn sync_appearance(
         )),
         Some((
             if zombie { 20 } else { 19 },
-            crate::boundary::EntityDataValue::VillagerData {
+            mc_data::entity_data_value::EntityDataValue::VillagerData {
                 kind: villager.data.kind as i32,
                 profession: villager.data.profession.profession_id(),
                 level: i32::from(villager.data.level),
@@ -93,7 +93,7 @@ pub(crate) fn sync_appearance(
         )),
         zombie.then_some((
             19,
-            crate::boundary::EntityDataValue::Boolean(
+            mc_data::entity_data_value::EntityDataValue::Boolean(
                 villager
                     .conversion_time
                     .is_some_and(|remaining| remaining >= 0),
@@ -101,7 +101,7 @@ pub(crate) fn sync_appearance(
         )),
         zombie.then_some((
             21,
-            crate::boundary::EntityDataValue::Boolean(villager.data_finalized),
+            mc_data::entity_data_value::EntityDataValue::Boolean(villager.data_finalized),
         )),
     ];
     let same = row.appearance.baby == baby
@@ -410,7 +410,7 @@ pub struct VillagerState {
     pub(crate) seat: Option<BlockPos>,
     pub courtship_until: Option<u64>,
     #[serde(with = "persistence::entity_id_option")]
-    pub partner: Option<crate::boundary::EntityId>,
+    pub partner: Option<mc_domain::EntityId>,
     /// Transient navigation and reactive brain memories, owned by the tick.
     #[serde(skip)]
     pub(crate) navigation_path: Vec<BlockPos>,

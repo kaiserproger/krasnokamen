@@ -1,6 +1,7 @@
 //! Event-driven command blocks. Opaque NBT and scheduled ticks are native WAL owners.
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_world::{BlockStateId, ScheduledBlockTick};
 

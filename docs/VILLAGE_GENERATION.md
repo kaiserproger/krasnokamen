@@ -2,18 +2,13 @@
 
 Quality label: `draft`.
 
-This page describes the shared `mc-worldgen` village library and preserves its
-earlier integration/evidence record. **Runtime scope after ADR 0014 Phase 5:**
-the current `mc-edge` / `mc-core` configuration has no `settlement_profile` or
-`worldgen_mode` setting. Old village-profile selection, stream-time inhabitant
-adoption and revision-24/25 operator claims below are historical v1 behavior,
-not proof that the native server wires those paths or has graphical acceptance.
-Current serving/storage/configuration is documented in [OPERATING.md](OPERATING.md).
-
-Village assembly, processors and data loaders remain shared library code in
-`crates/mc-worldgen/src/village/` and `crates/mc-data/src/village_data.rs`.
-Use current source and native-runtime evidence before claiming an integrated
-village capability; do not infer it from the old profile or warning names.
+The native server generates villages. At startup `mc-core` (`core.rs`) loads the
+`minecraft:villages` structure-set closure through `mc_worldgen::village`, compiles
+its decor and hands one `VillagePlanSource` to the terrain generator; native
+`villager/generated.rs` adopts the inhabitants the pieces place (below).
+Assembly, processors and data loaders live in `crates/mc-worldgen/src/village/`
+and `crates/mc-data/src/village_data.rs`. Serving, storage and configuration are
+in [OPERATING.md](OPERATING.md); evidence per area is in [STATUS.md](STATUS.md).
 
 ## Modern jigsaw structures
 
@@ -296,9 +291,6 @@ Code paths:
   `crates/mc-worldgen/src/structures.rs` execute the processor lists and the
   piece templates; the template reader is also what reads each template's
   `entities` list.
-- Historical v1 adoption used `mc-net`'s `settlement_authority` session module.
-  ADR 0014 deletes that module. It is not a current source-navigation target or
-  evidence of native stream-time inhabitant adoption (see the historical note below).
 
 ## Village decor
 
@@ -573,26 +565,12 @@ regenerated, so existing villages keep the layout of the revision that built the
 (for example revision-26 interiors, water and streets); only chunks generated after
 the upgrade use the current village generator, and the border of the old explored
 area is a hard revision seam. A village straddling that border is not repaired.
-Policy: [ADR 0008](decisions/0008-overworld-density-router.md).
+Policy: [decisions G1–G3](../DECISIONS.md#world-generation).
 
-The following revision-24 paragraphs preserve the original village checkpoint
-evidence and its limits; they are not current revision numbers or operator recipes.
-**No real-client run was made for revision 24.** The checkpoint's evidence is the
-Rust gates (workspace tests, `fmt`, `code-health`, strict clippy) plus the Java
-probe over the real 26.1.2 classes for the entity transform and the decor stream,
-not a graphical client: no PrismLauncher walk, no harness real-client profile.
-What that leaves unexercised is exactly what a client would show — a village's
-silhouette on generated terrain, the villagers standing in it, the chest contents
-a player opens, and the decor a player walks through — so a village walk is the
-first thing that would test this revision visually.
-
-`WORLDGEN_REVISION` is 27 (see the sloped-ground rules above); at 24: revision-22 and revision-23 worlds carry villages
-assembled from earlier solver fidelity (23) with no inhabitants and no decor
-(22), and are refused with the fresh-`world_dir` message above. The
-`settlement_profile_vanilla_generates_no_villages` warning is retired — the
-default profile now has villages to report — and the notices a village world
-carries are the terrain-adaptation analogue and the mobs the lane does not spawn
-below.
+`WORLDGEN_REVISION` is 33 (`crates/mc-worldgen/src/lib.rs`); a world stored at an
+older revision opens only after `world upgrade-worldgen` (above). The settlement
+real-client gates play in generated villages; there is no dedicated village-walk
+gate for silhouettes on generated terrain, chest contents or decor.
 
 ## Not implemented
 

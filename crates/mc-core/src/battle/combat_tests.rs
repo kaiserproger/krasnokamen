@@ -199,7 +199,7 @@ fn living_flags(state: &TickState, id: EntityId) -> Option<i8> {
         .extra
         .iter()
         .find_map(|(index, value)| match (*index, value) {
-            (8, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
+            (8, mc_data::entity_data_value::EntityDataValue::Byte(flags)) => Some(*flags),
             _ => None,
         })
 }

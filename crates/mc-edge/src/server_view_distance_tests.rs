@@ -1,5 +1,6 @@
 use super::*;
-use mc_core::boundary::{EntityId, SnapshotChunk, WorldSnapshot};
+use mc_core::boundary::{SnapshotChunk, WorldSnapshot};
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, RawFrame, try_decode_frame};
 use mc_protocol::packets::{
     ChatVisibility, ClientInformation, MainHand, Packet, ParticleStatus, play::*,

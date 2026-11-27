@@ -1,12 +1,10 @@
 # Bug regression ledger
 
 The ledger is one file per row: `docs/bugs/rows/<ID>.toml`, one `[[bug]]` table
-whose file name is its `id`. A row records `id`, `title`, `area` (`gameplay`, `client`,
-`harness`; set from the symptom at filing and not changed by fixers),
-`severity` (`blocker`, `major`, `minor`), `status` (`open`, `fixed`; `fixed`
-only via `ledger promote`),
-`source`, `repro` (`manual`, `client`, `command`, `cargo`, `source`) and
-`regression`. Historical reports are not proof of the current candidate.
+whose file name is its `id`; the fields are listed under
+[filing a bug](#filing-a-bug). `status` becomes `fixed` only through
+[`ledger promote`](#the-fixed-rule-single-home). Historical reports are not
+proof of the current candidate.
 
 Read and edit a row with the tool, never by reassembling the whole ledger:
 
@@ -79,7 +77,7 @@ A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for t
 repository; see [loader fixes](#loader-fixes-loadersha). And
 `client:<crate>:<test>` for a fix in the client repository (`ledger promote` uses
 `cargo metadata --no-deps --format-version 1` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
-`krasnokamen-client` checkout, then runs `cargo test -p <crate> --lib -- <test>` for a
+`solaris-client` checkout, then runs `cargo test -p <crate> --lib -- <test>` for a
 library or `--bin <name>` for a bin-only package with one testable binary; unknown or
 ambiguous targets fail closed naming the package). A `cargo:` registration names
 the full exact, non-ignored test function: [`regressions.py`](../../tools/harness/regressions.py)
@@ -92,11 +90,9 @@ only proves the selector exists, not that its test executed or passed.
 that fixes the row; `promotion` is set only by `ledger promote`, see
 [the `fixed` rule](#the-fixed-rule-single-home).
 
-Add a regression check for a fix. `failing_first` records pre-fix evidence only
-if you saw it; `ledger promote` runs the negative control.
-`cargo:<crate>:<exact test path>` names
-an exact test; `harness:<profile>:<scenario>` names an existing runnable
-scenario. A profile verdict runs that profile once for all rows citing it:
+Add a regression check for a fix; `ledger promote` runs the negative control.
+A `harness:<profile>:<scenario>` ref names an existing runnable scenario. A
+profile verdict runs that profile once for all rows citing it:
 the child receipt must pass and the named behaviour must be true in its
 boolean verdict map, or `PASS` in its legacy behaviour map. Unknown profiles
 and verdicts fail validation. `harness:loader-live:<scenario>` is valid for
@@ -148,8 +144,8 @@ scenarios require recorded review.
 `python3 -m tools.harness run regressions` is part of L2 (`correctness`); run it
 alone only after an integration that skips L2. Run
 `python3 -m tools.harness run regressions-client` when a client-surface fix
-is promoted and before release. The independent breaker in
-`../QA_AGENT_PROTOCOL.md` remains a release requirement.
+is promoted and before release. The independent breaker of the
+[QA protocol](../QA_AGENT_PROTOCOL.md) remains a release requirement.
 
 ## Write-ups for blockers, data loss, dupes and agent incidents
 
@@ -292,11 +288,10 @@ worker, runs the negative control.
    uncommitted changes is refused: rerun the gate on the candidate, and after
    any later edit. The receipt must also name a release server binary that
    `pin-release` registered for exactly that candidate in
-   `.analysis/ledger-builds/<sha256>-<tree sha256>.json` (a legacy `<sha256>.json` is still read). An
-   unregistered or foreign
+   `.analysis/ledger-builds/<sha256>-<tree sha256>.json` (a legacy
+   `<sha256>.json` is still read). An unregistered or foreign
    `KRASNOKAMEN_SERVER_BINARY`, or a binary pinned from an older source, proves
-   nothing about this source and is refused. A unit test cannot close a client
-   failure.
+   nothing about this source and is refused.
 
    **Client rows whose real fix predates the client rename** (`f0a6abf6`,
    2026-11-12) have no buildable pre-fix client, because `pin-release --client`
@@ -367,16 +362,25 @@ worker, runs the negative control.
    (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
    20-blueprint default run has one 600 s deadline and cannot pass.
    Control worktrees
-   are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
-   one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
-   `ledger-control-fix`). Every cargo build or test for such a tree runs through
-   `mem-run.sh` with `cwd=<tree>` and without the caller's `CARGO_TARGET_DIR`, so
-   the runner gives the tree its own slot (marks it, touches on a switch) and
-   the fixed path reuses it instead of growing the target dir; the release
-   server build checks the slot marker against the tree actually built. No
-   incremental cache.
+   are temporary `git worktree`s beside the other worktrees (`<work>/wt/`), in
+   one of three independent promotion sets (`ledger-control-pool-<k>.lock`,
+   k = 1..3). A promote takes the first free set and, when all three are held,
+   blocks on every set at once and takes whichever frees first, so three
+   promotions run concurrently instead of queueing on one host-wide lock. Each
+   set has its own fixed paths (`ledger-control-p<k>-candidate`,
+   `ledger-control-p<k>-fix`). Every cargo build or test for such a tree runs
+   through `mem-run.sh` with `cwd=<tree>` and without the caller's
+   `CARGO_TARGET_DIR`, so the runner gives the tree its own slot (marks it,
+   touches on a switch) and the fixed path reuses it instead of growing the
+   target dir; the release server build checks the slot marker against the tree
+   actually built. No incremental cache.
    Each has its own copy of `data/vanilla` (never links into the source tree)
-   and is removed afterwards. A real-client run in such a tree first copies its
+   and is removed afterwards. Old-version leftovers from before the pool
+   (`wt/ledger-control.lock` and the `ledger-control-{candidate,fix}`,
+   `ledger-client-control`, `ledger-loader-control` trees) and a set 2/3 tree
+   left by a killed promotion are not removed by the pool (a lone promote
+   always takes set 1): delete them by hand once no old-version lane runs.
+   A real-client run in such a tree first copies its
    evidence (reports, logs, `result.json`, screenshots; no worlds or binaries)
    to `client-artifacts/<run>/` in the promote artifact dir, and the per-ref
    `receipt` in `promote.json` points there, for red and unrunnable runs too.
@@ -395,13 +399,11 @@ python3 -m tools.harness ledger graphical-control ID (--receipt PATH | --control
 ```
 
 Heavy: on the owner host run it under `mem-run.sh` (`mem-run.sh -m 12G python3
--m tools.harness ledger promote ...`), which caps its memory and gives it a
-build token. Lock order is that token, then the control lock; each build stage
-runs `mem-run.sh` again and reuses the promote's token, so a promote waiting for
-the lock never holds a token a running promote's stage needs. A promote that
-took the lock without a token deadlocked with wrapped promotes waiting for it
-(2026-11-12, the host stalled for an hour); the tool refuses to start in a
-worktree under `<work>/wt/` without a held token.
+-m tools.harness ledger promote ...`), which caps its memory; each build stage
+runs `mem-run.sh` again and reuses the promote's scope. In a worktree under
+`<work>/wt/` the tool refuses to start outside `mem-run.sh`
+(`KRASNOKAMEN_HARNESS_CPU_SCOPE` unset) and takes `wt/ledger-control.lock`, so
+promotions sharing the fixed control trees run one at a time.
 
 ### Test-only fixes (`test_only_fix`)
 
@@ -443,10 +445,12 @@ the row lacks `repro_check`. Stricter still:
   names them in `control_a_files` and control A reverses only those hunks, with every listed file
   required to be a test file of the fix commit and to hold a ref's test. Without the field control A
   reverses every changed test file (and every one needs a ref).
-- A corrected test in a test file the fix deleted or renamed has no control A and refuses. `repro_check` states what the old oracle asserted and the independent
-evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
-batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect
-cannot be injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
+- A corrected test in a test file the fix deleted or renamed has no control A and refuses.
+
+`repro_check` states what the old oracle asserted and the independent evidence (vanilla
+data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only batch lists
+old versus new assertions and justifies every removed or loosened one. A row whose defect cannot be
+injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
 
 ### Client fixes proved by a unit-test reversal (`client-test:<sha>`)
 
@@ -528,9 +532,9 @@ or a missing report is unrunnable), and it is recorded with the test file and li
 
 ### Recording a graphical control later (backfill)
 
-A client-visible row promoted without a build token for a reverted-pin run records its graphical refs
-`unrunnable` in `promotions/<ID>.json` (see rule 3). The control can be recorded afterwards without
-promoting anything:
+A client-visible row whose promotion recorded its graphical refs `unrunnable` in
+`promotions/<ID>.json` (no reverted-tree pin was available for the control run; see rule 3) can
+have the control recorded afterwards without promoting anything:
 
 ```
 python3 -m tools.harness ledger graphical-control <ID> --receipt <result.json> [--dry-run]
@@ -592,12 +596,12 @@ control A reverses and never what the gate checks: every non-doc path of a test-
 be a test file, and `_promotion_errors` refuses a receipt whose `reversed_files` differ from the row's
 `control_a_files`.
 
-A stale patch-mode receipt (missing committed patch or a patch a later commit rewrote) is a REPORT: `regressions` prints "stale patch-mode receipts: N, M without patch" and writes the list; only `ledger promote`/`--dry-run` is strict about it. A committed patch whose bytes differ from the row's `fix_commit` digest is an error.
-
 Patch-mode rows (`fix_commit = "patch:<sha256>"`) are re-audited by reversing their committed
-`docs/bugs/fix-patches/<ID>.patch` on the tree being promoted; that reversal is what `ledger promote` and
-a `--dry-run` do, and a patch that no longer reverses is refused there. `regressions` (L2) only reports
-the backlog, as stated above.
+`docs/bugs/fix-patches/<ID>.patch` on the tree being promoted: `ledger promote` and a `--dry-run`
+refuse a patch that no longer reverses. `regressions` (L2) only reports that backlog of stale
+patch-mode receipts (missing committed patch, or a patch a later commit rewrote): it prints "stale
+patch-mode receipts: N, M without patch" and writes the list. A committed patch whose non-test hunks
+differ from the row's `fix_commit` digest is an error in both.
 
 ## Probing rows before assignment
 
@@ -832,10 +836,7 @@ totals. The paced Java and native probes also check right-button pickup and
 release outside the menu. Screenshots remain necessary for visual review.
 
 Client-tier scenarios run the native client at `KRASNOKAMEN_CLIENT_ROOT` (default:
-the sibling `krasnokamen-client` checkout). The P2, mount-kind and map-marker
-promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
-the released client `5d34e88` lacks those fixes, so point `KRASNOKAMEN_CLIENT_ROOT`
-at a checkout of that branch or later.
+the sibling `solaris-client` checkout).
 
 A probe's registration or screenshot alone is not acceptance evidence; repeat
 timing-variable probes at least three times before `ledger promote`.

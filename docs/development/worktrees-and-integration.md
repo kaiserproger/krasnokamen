@@ -1,6 +1,6 @@
 # Worktrees, patches and integration
 
-[AGENTS](../../AGENTS.md) owns Git authorization: Main's standing commit/push
+The [owner rules](../RULES.md#commits-reviews-and-publication) own Git authorization: Main's standing commit/push
 permission does not extend to workers; preserve owner dirt. `<work>` and
 [historical provenance](README.md) are defined by the development index.
 
@@ -26,7 +26,7 @@ owns creation, archival, refusal conditions and pin mechanics:
 **Every file-tool edit/write uses an absolute worktree path.** Shell `cd` does
 not retarget file tools. Put this rule in every worktree brief; parents forward
 it to children. Investigate suspected Main clobber by finding successful
-relative `crates/...` edits in the transcript (2026-10-16 incident).
+relative `crates/...` edits in the transcript ([pitfall](../PITFALLS.md#the-owner-host)).
 
 Harness sibling discovery (`tools/harness/runtime.py::sibling_root`,
 `regression.sh`, `prepare-real-client-scenario.sh`) resolves beside the main
@@ -102,7 +102,7 @@ Use `KRASNOKAMEN_LOADER_ROOT`, `KRASNOKAMEN_CLIENT_ROOT` or
    `../solaris-default-plugins/tools/build_standard_pack.py`.
 3. Announce path/SHA/manifest; all gates cite them. Never relabel preflight as
    final. Server identity is `mc-edge`'s `krasnokamen`, never retired `mc-server`
-   ([ADR 0014](../decisions/0014-v1-core-retirement.md)); use the [release procedure](release-and-tags.md).
+   ([decision P8](../../DECISIONS.md#product)); use the [release procedure](release-and-tags.md).
 
 ## Background jobs
 

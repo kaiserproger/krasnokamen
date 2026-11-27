@@ -41,12 +41,13 @@ pub use targeting::{
     Work, engagement_reach, retarget_due,
 };
 
-use crate::boundary::{EntityEvent, EntityId};
+use crate::boundary::EntityEvent;
 use crate::entities::EntityStore;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 /// Frozen input shared by every sub-step. `tick` is battle-local and advances
 /// only while running, so pause never skips windups, volleys or morale clocks.
@@ -543,8 +544,8 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
         state,
         slot,
         LIVING_FLAGS,
-        crate::boundary::EntityDataValue::Byte(0),
-        crate::boundary::EntityDataValue::Byte(flags),
+        mc_data::entity_data_value::EntityDataValue::Byte(0),
+        mc_data::entity_data_value::EntityDataValue::Byte(flags),
     ) {
         state.appearance_changed.push(id);
     }

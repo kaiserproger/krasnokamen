@@ -9,10 +9,11 @@ use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::{Identifier, ItemStack};
 use mc_nbt::{ListTag, Tag, tag_type};
 
-use crate::boundary::{BlockPos, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::entities::{EntityKind, StackRow};
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, spawn_item_entity};
+use mc_domain::EntityId;
 
 #[derive(Debug, Default)]
 pub(crate) struct ContainerState {

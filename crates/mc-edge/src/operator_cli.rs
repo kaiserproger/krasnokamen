@@ -357,195 +357,198 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
             }
             crate::backup::run_restore(from, world_dir)?;
         }
-        Command::World { command } => {
-            crate::server::resolve_content_config(cfg)?;
-            let config = crate::server::core_config(cfg);
-            match command {
-                WorldCommand::ImportAnvil(paths) => {
-                    mc_world_conversion::import_anvil(
-                        &config,
-                        &paths.source,
-                        &paths.destination,
-                        &paths.receipt,
-                    )?;
-                }
-                WorldCommand::ExportAnvil(paths) => {
-                    mc_world_conversion::export_anvil(
-                        &config,
-                        &paths.source,
-                        &paths.destination,
-                        &paths.receipt,
-                    )?;
-                }
-                WorldCommand::Census(paths) => {
-                    mc_world_conversion::census_native(&config, &paths.source, &paths.receipt)?;
-                }
-                WorldCommand::CrashCensus(paths) => {
-                    let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
-                    let mut config = config.clone();
-                    config.world_dir = paths.copy.clone();
-                    let census = mc_world_conversion::crash_census(&config)?;
-                    serde_json::to_writer_pretty(output, &census)?;
-                }
-                WorldCommand::CustodyCensus(paths) => {
-                    let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
-                    let mut config = config.clone();
-                    config.world_dir = paths.copy.clone();
-                    let receipt = mc_world_conversion::custody_census(&config);
-                    serde_json::to_writer_pretty(output, &receipt)?;
-                    if let Some(error) = receipt.error {
-                        anyhow::bail!("custody census FAIL: {error}");
-                    }
-                }
-                WorldCommand::Probe(paths) => {
-                    mc_world_conversion::probe_native(
-                        &config,
-                        &paths.source,
-                        &paths.blocks,
-                        &paths.receipt,
-                    )?;
-                }
-                WorldCommand::UpgradeGameClock { copy } => {
-                    let report =
-                        mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
-                    let archive = copy.join(format!(
-                        "journal-before-game-clock-{}",
-                        report.checkpoint_tick
-                    ));
-                    println!(
-                        "game-clock conversion: copy={} checkpoint={} tick={} tail_held_ticks={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
-                        copy.display(),
-                        report.checkpoint_tick,
-                        report.tick,
-                        report.tail_held_ticks,
-                        report.held_ticks,
-                        report.held_since,
-                        report.active_debts,
-                        report.inactive_debts,
-                        report.dropped_debt,
-                        report.work_normalized,
-                        report.work_raw,
-                        report.sleep_normalized,
-                        report.sleep_raw,
-                        archive.display()
-                    );
-                }
-                WorldCommand::UpgradeWorldgen => {
-                    let report =
-                        mc_world_tools::worldgen_upgrade::upgrade_worldgen_revision(&config)?;
-                    if report.rewritten {
-                        println!(
-                            "worldgen revision upgraded: {} -> {} (existing chunks unchanged)",
-                            report.from_revision, report.to_revision
-                        );
+        Command::World { command } => run_world(cfg, command).await?,
+    }
+    Ok(true)
+}
+
+/// Convert or maintain a stopped world. Generation, prune and compaction are
+/// synchronous and their worker pools block for results, so each runs on the
+/// blocking pool, never on an async worker.
+async fn run_world(
+    cfg: &mut crate::config::EdgeConfig,
+    command: &WorldCommand,
+) -> anyhow::Result<()> {
+    crate::server::resolve_content_config(cfg)?;
+    let config = crate::server::core_config(cfg);
+    match command {
+        WorldCommand::ImportAnvil(paths) => {
+            mc_world_conversion::import_anvil(
+                &config,
+                &paths.source,
+                &paths.destination,
+                &paths.receipt,
+            )?;
+        }
+        WorldCommand::ExportAnvil(paths) => {
+            mc_world_conversion::export_anvil(
+                &config,
+                &paths.source,
+                &paths.destination,
+                &paths.receipt,
+            )?;
+        }
+        WorldCommand::Census(paths) => {
+            mc_world_conversion::census_native(&config, &paths.source, &paths.receipt)?;
+        }
+        WorldCommand::CrashCensus(paths) => {
+            let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
+            let mut config = config.clone();
+            config.world_dir = paths.copy.clone();
+            let census = mc_world_conversion::crash_census(&config)?;
+            serde_json::to_writer_pretty(output, &census)?;
+        }
+        WorldCommand::CustodyCensus(paths) => {
+            let output = crash_census_output::create(&paths.copy, &paths.receipt)?;
+            let mut config = config.clone();
+            config.world_dir = paths.copy.clone();
+            let receipt = mc_world_conversion::custody_census(&config);
+            serde_json::to_writer_pretty(output, &receipt)?;
+            if let Some(error) = receipt.error {
+                anyhow::bail!("custody census FAIL: {error}");
+            }
+        }
+        WorldCommand::Probe(paths) => {
+            mc_world_conversion::probe_native(
+                &config,
+                &paths.source,
+                &paths.blocks,
+                &paths.receipt,
+            )?;
+        }
+        WorldCommand::UpgradeGameClock { copy } => {
+            let report = mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
+            let archive = copy.join(format!(
+                "journal-before-game-clock-{}",
+                report.checkpoint_tick
+            ));
+            println!(
+                "game-clock conversion: copy={} checkpoint={} tick={} tail_held_ticks={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
+                copy.display(),
+                report.checkpoint_tick,
+                report.tick,
+                report.tail_held_ticks,
+                report.held_ticks,
+                report.held_since,
+                report.active_debts,
+                report.inactive_debts,
+                report.dropped_debt,
+                report.work_normalized,
+                report.work_raw,
+                report.sleep_normalized,
+                report.sleep_raw,
+                archive.display()
+            );
+        }
+        WorldCommand::UpgradeWorldgen => {
+            let report = mc_world_tools::worldgen_upgrade::upgrade_worldgen_revision(&config)?;
+            if report.rewritten {
+                println!(
+                    "worldgen revision upgraded: {} -> {} (existing chunks unchanged)",
+                    report.from_revision, report.to_revision
+                );
+            } else {
+                println!(
+                    "worldgen revision already current: {}; nothing changed",
+                    report.to_revision
+                );
+            }
+        }
+        WorldCommand::Pregenerate { radius, center } => {
+            let request = mc_world_tools::pregenerate::PregenerateRequest {
+                radius: *radius,
+                center: *center,
+            };
+            // Generation is synchronous and its worker pool blocks for
+            // results, so it runs on the blocking pool, never on an
+            // async worker.
+            let report = tokio::task::spawn_blocking(move || {
+                mc_world_tools::pregenerate::pregenerate(&config, &request, &mut |progress| {
+                    let done = progress.already_stored + progress.generated;
+                    let percent = if progress.chunks == 0 {
+                        100.0
                     } else {
-                        println!(
-                            "worldgen revision already current: {}; nothing changed",
-                            report.to_revision
-                        );
-                    }
-                }
-                WorldCommand::Pregenerate { radius, center } => {
-                    let request = mc_world_tools::pregenerate::PregenerateRequest {
-                        radius: *radius,
-                        center: *center,
+                        done as f64 * 100.0 / progress.chunks as f64
                     };
-                    // Generation is synchronous and its worker pool blocks for
-                    // results, so it runs on the blocking pool, never on an
-                    // async worker.
-                    let report = tokio::task::spawn_blocking(move || {
-                        mc_world_tools::pregenerate::pregenerate(
-                            &config,
-                            &request,
-                            &mut |progress| {
-                                let done = progress.already_stored + progress.generated;
-                                let percent = if progress.chunks == 0 {
-                                    100.0
-                                } else {
-                                    done as f64 * 100.0 / progress.chunks as f64
-                                };
-                                println!(
-                                    "pregenerate: {done}/{} chunks ({percent:.1}%), {} generated, \
+                    println!(
+                        "pregenerate: {done}/{} chunks ({percent:.1}%), {} generated, \
                                  {} already stored, {:.1}s",
-                                    progress.chunks,
-                                    progress.generated,
-                                    progress.already_stored,
-                                    progress.elapsed_ms as f64 / 1000.0,
-                                );
-                            },
-                        )
-                    })
-                    .await
-                    .map_err(|error| anyhow::anyhow!("pregenerate task failed: {error}"))??;
-                    println!(
-                        "pregenerate complete: chunks [{},{}]..[{},{}] around block ({},{}), \
-                         {} chunks, {} generated, {} already stored, {:.1}s",
-                        report.chunk_min[0],
-                        report.chunk_min[1],
-                        report.chunk_max[0],
-                        report.chunk_max[1],
-                        report.center[0],
-                        report.center[1],
-                        report.chunks,
-                        report.generated,
-                        report.already_stored,
-                        report.elapsed_ms as f64 / 1000.0,
+                        progress.chunks,
+                        progress.generated,
+                        progress.already_stored,
+                        progress.elapsed_ms as f64 / 1000.0,
                     );
-                }
-                WorldCommand::Prune {
-                    keep_radius,
-                    center,
-                    max_inhabited_ticks,
-                    dry_run,
-                } => {
-                    let request = mc_world_tools::world_maintenance::PruneRequest {
-                        keep_radius: *keep_radius,
-                        center: *center,
-                        max_inhabited_ticks: *max_inhabited_ticks,
-                        dry_run: *dry_run,
-                    };
-                    // Opening the world recovers a crash journal tail, and that
-                    // replay blocks on the chunk loader, which panics on an
-                    // async worker; run it on the blocking pool like pregenerate.
-                    let report = tokio::task::spawn_blocking(move || {
-                        mc_world_tools::world_maintenance::prune_world(&config, &request)
-                    })
-                    .await
-                    .map_err(|error| anyhow::anyhow!("prune task failed: {error}"))??;
-                    let chunks = report.chunks;
-                    println!(
-                        "prune{}: kept chunks [{},{}]..[{},{}] around block ({},{}); \
+                })
+            })
+            .await
+            .map_err(|error| anyhow::anyhow!("pregenerate task failed: {error}"))??;
+            println!(
+                "pregenerate complete: chunks [{},{}]..[{},{}] around block ({},{}), \
+                         {} chunks, {} generated, {} already stored, {:.1}s",
+                report.chunk_min[0],
+                report.chunk_min[1],
+                report.chunk_max[0],
+                report.chunk_max[1],
+                report.center[0],
+                report.center[1],
+                report.chunks,
+                report.generated,
+                report.already_stored,
+                report.elapsed_ms as f64 / 1000.0,
+            );
+        }
+        WorldCommand::Prune {
+            keep_radius,
+            center,
+            max_inhabited_ticks,
+            dry_run,
+        } => {
+            let request = mc_world_tools::world_maintenance::PruneRequest {
+                keep_radius: *keep_radius,
+                center: *center,
+                max_inhabited_ticks: *max_inhabited_ticks,
+                dry_run: *dry_run,
+            };
+            // Opening the world recovers a crash journal tail, and that
+            // replay blocks on the chunk loader, which panics on an
+            // async worker; run it on the blocking pool like pregenerate.
+            let report = tokio::task::spawn_blocking(move || {
+                mc_world_tools::world_maintenance::prune_world(&config, &request)
+            })
+            .await
+            .map_err(|error| anyhow::anyhow!("prune task failed: {error}"))??;
+            let chunks = report.chunks;
+            println!(
+                "prune{}: kept chunks [{},{}]..[{},{}] around block ({},{}); \
                          {} stored, {} pruned, {} kept inside the radius, {} kept inhabited, \
                          {} kept changed, {} kept not generator-made (imported or pre-provenance); \
                          file {} -> {} bytes",
-                        if *dry_run { " (dry run)" } else { "" },
-                        report.keep_chunk_min[0],
-                        report.keep_chunk_min[1],
-                        report.keep_chunk_max[0],
-                        report.keep_chunk_max[1],
-                        report.center[0],
-                        report.center[1],
-                        chunks.examined,
-                        chunks.pruned,
-                        chunks.kept_inside_rectangle,
-                        chunks.kept_inhabited,
-                        chunks.kept_changed,
-                        chunks.kept_not_generated,
-                        report.bytes_before,
-                        report.bytes_after,
-                    );
-                }
-                WorldCommand::Compact => {
-                    let report = mc_world_tools::world_maintenance::compact_world(&config)?;
-                    println!(
-                        "compact complete: {} rows repacked; file {} -> {} bytes",
-                        report.rewritten_rows, report.bytes_before, report.bytes_after,
-                    );
-                }
-            }
+                if *dry_run { " (dry run)" } else { "" },
+                report.keep_chunk_min[0],
+                report.keep_chunk_min[1],
+                report.keep_chunk_max[0],
+                report.keep_chunk_max[1],
+                report.center[0],
+                report.center[1],
+                chunks.examined,
+                chunks.pruned,
+                chunks.kept_inside_rectangle,
+                chunks.kept_inhabited,
+                chunks.kept_changed,
+                chunks.kept_not_generated,
+                report.bytes_before,
+                report.bytes_after,
+            );
+        }
+        WorldCommand::Compact => {
+            let report = mc_world_tools::world_maintenance::compact_world(&config)?;
+            println!(
+                "compact complete: {} rows repacked; file {} -> {} bytes",
+                report.rewritten_rows, report.bytes_before, report.bytes_after,
+            );
         }
     }
-    Ok(true)
+    Ok(())
 }
 
 #[cfg(test)]

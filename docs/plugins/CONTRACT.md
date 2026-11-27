@@ -71,13 +71,11 @@ Authors implement `krasnokamen_plugin_sdk::Plugin` (or bindings for the same WIT
 world) and use the WIT and SDK definitions as the API reference. Do not copy
 internal host types into a guest or rely on a host implementation detail.
 
-The contract is `krasnokamen:plugin@0.9.0`: WIT record layout changes require
-regenerating host and guest bindings, and every guest must be rebuilt and
-re-encoded against it (the Rust SDK workspace is 0.9.0; add `mob_blueprints:
-None` to existing full `StartupContribution` literals and update the manifest
-`api`). This applies to the first-party `krasnokamen-default-plugins` packages too;
-no 0.7.0 component or old record-layout shim is accepted, and an older
-component's record layout is not a compatible fallback.
+The contract is `krasnokamen:plugin@0.9.0`, and the manifest's `api` names it. A
+WIT record layout change bumps the version and regenerates host and guest
+bindings; every guest, including the first-party `krasnokamen-default-plugins`
+packages, is then rebuilt and re-encoded. An older component's record layout is
+never a compatible fallback, and there is no shim.
 
 ## Lifecycle and configuration
 
@@ -103,6 +101,28 @@ on cleanup. Plugin storage remains keyed by plugin identity in the native tick
 WAL/checkpoint. Restart creates fresh component-local state; it is not a guest
 instance migration. The current server does not support SIGHUP deployment reload.
 Retain the same startup/world identity when restarting an existing world.
+
+## Startup contributions
+
+`configure` returns one startup contribution. Only the categories a package
+sets are present, and a contribution with none is refused. Every category is
+immutable, bounded and fingerprinted into the world contract, so the same
+configuration must produce the same contribution. The bounds are documented on
+each record in `crates/mc-script/wit/lifecycle.wit`.
+
+| Category | What it declares |
+|---|---|
+| `placement` | village and terrain placement: land candidate spacing, water placement attempts and depth |
+| `trees` | per-biome tree candidate divisor and density threshold |
+| `clay` | clay disk rarity, radius and water depth |
+| `spawning` | per-biome replacement of natural spawn groups (`creature`, `monster`, `water_ambient`, `water_creature`) |
+| `items`, `crafting-recipes`, `block-tools` | plugin-owned items and their use (below) |
+| `work-recipes` | native `WorkRecipe` JSON used by settlement and NPC crafting work: at most 256 definitions and 1 MiB; ids belong to the provider and every referenced item must be registered |
+| `mob-blueprints` | data-defined native mobs (below) |
+
+The manifest's `[worldgen]` table is separate from the contribution:
+`ore_profile = "realistic_deposits"`, the only profile, selects the ore
+distribution and is part of the world contract too.
 
 ## Custom items, crafting recipes and block tools
 
@@ -140,8 +160,8 @@ before-build hooks do not cover it, like hoes. The `chisel` package in
 
 ## Custom native mobs
 
-API **0.8.0** adds `mob-blueprints: option<list<string>>` to the configure
-contribution. Each string is a strict `MobBlueprintDef` JSON object (see
+The `mob-blueprints` contribution is a list of strict `MobBlueprintDef` JSON
+objects (see
 [ADR 0016](../decisions/0016-mob-capabilities.md)); a package may contribute up to
 64 strings, each at most 16 KiB, and the complete registry allows 64 custom
 types. Each id must use its defining plugin's namespace. Definitions are sorted

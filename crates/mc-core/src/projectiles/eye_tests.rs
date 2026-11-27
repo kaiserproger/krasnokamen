@@ -16,7 +16,7 @@ fn physics_eye_without_stronghold_is_handled_without_consumption() {
     assert!(state.projectiles.spawned.is_empty());
 }
 
-fn request(state: &crate::tick::TickState, actor: crate::boundary::EntityId) -> super::eye::EyeUse {
+fn request(state: &crate::tick::TickState, actor: mc_domain::EntityId) -> super::eye::EyeUse {
     let player = &state.players[&actor];
     let mut stack = player.inventory.slots[0].clone();
     stack.count = 1;
@@ -61,7 +61,7 @@ fn physics_eye_completion_rechecks_custody_and_creative_consumption() {
         assert_eq!(record.kind, super::ProjectileKind::EyeOfEnder);
         assert_eq!(state.entities.row(slot).appearance.spawn_data, 0);
         assert!(state.entities.row(slot).appearance.extra.iter().any(|(index, value)|
-            *index == 8 && matches!(value, crate::boundary::EntityDataValue::Item(Some(stack)) if stack.item_id == item && stack.count == 1)));
+            *index == 8 && matches!(value, mc_data::entity_data_value::EntityDataValue::Item(Some(stack)) if stack.item_id == item && stack.count == 1)));
         let bytes = serde_json::to_vec(record).unwrap();
         let restored: super::ProjectileState = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(&restored, record.as_ref());

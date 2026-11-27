@@ -10,8 +10,9 @@
 use super::*;
 use crate::server::{WORLD_QUEUE_BYTES, WorldReceiver, WorldSender, world_queue};
 use mc_core::boundary::{
-    ChangeSet, EntityAppearance, EntityId, EntityView, SnapshotChunk, TickOutput, WorldSnapshot,
+    ChangeSet, EntityAppearance, EntityView, SnapshotChunk, TickOutput, WorldSnapshot,
 };
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::play::{
     AddEntity, ClientboundChunkBatchFinished, ClientboundSetEntityData, ClientboundSetPassengers,

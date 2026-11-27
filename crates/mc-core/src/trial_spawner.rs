@@ -1,9 +1,10 @@
 //! Loaded trial spawners: UUID admission, bounded waves, ejection and absolute cooldowns.
-use crate::boundary::{BlockPos, ChangeSet, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, PlayerChange};
 use crate::tick::{TickState, spawn_item_entity};
 use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::trial_nbt::{self as nbt, Fields, SpawnerData};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
 use std::collections::BTreeMap;
 
@@ -568,7 +569,7 @@ fn spawn_ominous_item(
     let mut appearance = (*row.appearance).clone();
     appearance.extra.push((
         8,
-        crate::boundary::EntityDataValue::Item(Some(item.clone())),
+        mc_data::entity_data_value::EntityDataValue::Item(Some(item.clone())),
     ));
     row.appearance = std::sync::Arc::new(appearance);
     spawner.pending = Some(Pending {

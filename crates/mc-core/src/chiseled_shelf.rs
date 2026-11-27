@@ -3,8 +3,9 @@ use mc_data::ItemStack;
 use mc_data::block_entity_kinds::BlockEntityKind;
 use mc_nbt::Tag;
 
-use crate::boundary::{BlockPos, EntityId, Hand, PlayerChange};
+use crate::boundary::{BlockPos, Hand, PlayerChange};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub(crate) fn is_chiseled(path: &str) -> bool {
     BlockEntityKind::for_block(path) == Some(BlockEntityKind::ChiseledBookshelf)

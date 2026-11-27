@@ -10,7 +10,9 @@
 use std::sync::Arc;
 
 mod views;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_stack::ItemStack;
+use mc_domain::EntityId;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
 use uuid::Uuid;
@@ -18,12 +20,6 @@ pub use views::EntityViews;
 
 /// Simulation tick number. Tick `t` output describes the state after tick `t`.
 pub type Tick = u64;
-
-/// Network entity id as sent on the wire. Players and mobs share one id space.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-pub struct EntityId(pub i32);
 
 /// Player identity for the lifetime of one connection, assigned by the edge.
 #[derive(
@@ -790,41 +786,6 @@ pub enum EffectParticle {
     EntityEffect { argb: i32 },
     TrialOmen,
     RaidOmen,
-}
-
-/// Value kinds used by type-specific entity data.
-#[derive(Debug, Clone, PartialEq)]
-pub enum EntityDataValue {
-    Byte(i8),
-    VarInt(i32),
-    VarLong(i64),
-    Float(f32),
-    Rotations([f32; 3]),
-    Boolean(bool),
-    WeatheringCopper(u8),
-    CopperGolemState(u8),
-    SnifferState(u8),
-    Direction(u8),
-    PaintingVariant(u32),
-    String(String),
-    BlockState(u32),
-    Item(Option<ItemStack>),
-    /// Single particle serializer, used by AreaEffectCloud at index 10.
-    EntityEffectParticle(i32),
-    /// Vanilla optional unsigned integer serializer (firework attachment).
-    OptionalUnsignedInt(Option<u32>),
-    /// `Optional<BlockPos>` (the sleeping position).
-    OptionalBlockPos(Option<[i32; 3]>),
-    OptionalLivingEntityReference(Option<Uuid>),
-    VillagerData {
-        kind: i32,
-        profession: i32,
-        level: i32,
-    },
-    ChickenVariant(u32),
-    CowVariant(u32),
-    PigVariant(u32),
-    ZombieNautilusVariant(u32),
 }
 
 /// Everything that changed in one tick, in commit order within each list.

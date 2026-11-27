@@ -1,0 +1,34 @@
+{
+ "id": "container-command-same-tick",
+ "family": "containers",
+ "description": "A container placed by `setblock` takes items from the next command of the same tick, as a datapack function or a console batch runs them: `item replace block` into a chest, a barrel and a furnace right after placing each one. Vanilla creates the block entity inside `setblock`.",
+ "box": [
+  0,
+  60,
+  0,
+  7,
+  66,
+  7
+ ],
+ "setup": [
+  "fill 0 63 0 7 63 7 minecraft:stone",
+  "setblock 1 64 1 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 1 64 1 container.0 with minecraft:diamond 3",
+  "setblock 3 64 1 minecraft:barrel[facing=up,open=false]",
+  "item replace block 3 64 1 container.4 with minecraft:oak_log 7",
+  "setblock 5 64 1 minecraft:furnace[facing=north,lit=false]",
+  "item replace block 5 64 1 container.0 with minecraft:cobblestone 2"
+ ],
+ "phases": [
+  {
+   "name": "t1",
+   "commands": [],
+   "ticks": 1
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ }
+}

@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{ChangeSet, EntityAppearance, EntityEvent, EntityId};
+use crate::boundary::{ChangeSet, EntityAppearance, EntityEvent};
 use crate::entities::{ColdFields, EntityKind};
 use crate::tick::{TickSampler, TickState};
+use mc_domain::EntityId;
 
 /// Vanilla `ExperienceOrb.getExperienceValue`.
 #[must_use]

@@ -1,7 +1,7 @@
 # Mutation routes
 
-Status: native v2 routes after ADR 0014 Phase 5. The governing model is
-[ADR 0013](../decisions/0013-core-model-v2.md). See
+How a change travels from input to commit, publication and recovery. The
+governing model is [ADR 0013](../decisions/0013-core-model-v2.md). See
 [state-ownership.md](state-ownership.md) and [runtime.md](runtime.md).
 These routes describe ownership, not a claim that a verification gate was run.
 
@@ -41,6 +41,11 @@ For `before-build`, the edge obtains a read-only native plan and requests the
 registered handler chain outside the tick. One queue-inclusive 100 ms deadline
 ends at the host answer. A timely approval may await merge, but is consumed
 only once after live source/roster, native state and plugin-KV fences validate.
+Click-time orientation and ray origin stay frozen; current reach, occupancy and
+support still validate. A native-input FIFO fence keeps a preview from
+overtaking earlier movement or hotbar changes. An idle native owner can retire
+metadata fences and answer ready read-only previews on an explicit wake,
+without creating an extra tick or renewing the deadline.
 Refusal repairs prediction without world edits. Unsupported hooks fail startup;
 no guest callback runs on a tick worker. See [PLUGINS.md](../PLUGINS.md).
 
@@ -98,7 +103,5 @@ See [AGENT_TOOLING.md](../AGENT_TOOLING.md#harness-entrypoint).
 
 A domain-specific route must name provenance, bounded admission, live fences,
 full resource footprint, authoritative writer, commit/unknown-outcome boundary,
-publication, recovery source and exact test scope. Do not copy historical
-multi-journal warehouse/inventory cards into the native tick model or relabel an
-old receipt as current verification. The CP-REFACTOR-030 warehouse-pilot record
-is archived in [ARCHIVE.md](../archive/ARCHIVE.md).
+publication, recovery source and exact test scope. An old receipt is not
+current verification.

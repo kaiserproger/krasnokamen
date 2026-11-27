@@ -1,19 +1,23 @@
 """Driver for one real vanilla server used as the parity oracle.
 
 The world is a void superflat world; every scenario force-loads its box, runs
-setup/phase commands through the server console, advances time with
-`tick sprint N` (completion is the server's own "Sprint completed" log line)
-and reads blocks/entities back from the saved Anvil files. No sleeps: every
-wait is on a specific server log line.
+setup/phase commands through the server console, advances a frozen world by
+exactly N ticks (`VanillaOracle.sprint`, checked against the game time) and
+reads blocks/entities back from the saved Anvil files. No sleeps: every wait is
+on a specific server log line.
 """
 from __future__ import annotations
 
+import json
+import os
 import queue
+import re
 import shutil
 import socket
 import subprocess
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 from . import anvil
@@ -21,7 +25,52 @@ from .. import runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MEM_RUN = Path("/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh")
-DEFAULT_JAR = REPO_ROOT / ".analysis" / "server.jar"
+# `<work>` on the owner host; KRASNOKAMEN_WORK names it elsewhere.
+WORK_ROOT = Path(os.environ.get("KRASNOKAMEN_WORK") or MEM_RUN.parents[3])
+# Owner-authorized tool path (D128): Temurin JDK and the vanilla server bundlers, never in Git.
+TOOLS_CACHE = WORK_ROOT / "tools-cache"
+DEFAULT_JAVA = TOOLS_CACHE / "jdk" / "temurin-25" / "bin" / "java"
+
+
+def resolve_java(explicit: str | None = None) -> str:
+    """`--java`, else KRASNOKAMEN_ORACLE_JAVA, else the tools-cache Temurin 25; never PATH."""
+    java = explicit or os.environ.get("KRASNOKAMEN_ORACLE_JAVA") or str(DEFAULT_JAVA)
+    if not Path(java).is_file():
+        raise VanillaError(f"no Java 25 at {java}: install Temurin 25 at {DEFAULT_JAVA.parent.parent} "
+                           "(docs/QUIRK_PARITY.md) or set KRASNOKAMEN_ORACLE_JAVA")
+    return java
+
+
+def resolve_jar(mc_version: str, explicit: str | None = None) -> Path:
+    """`--jar`, else `<work>/tools-cache/minecraft/<version>/server.jar` (the Mojang bundler).
+
+    The bundler's own `version.json` must name `mc_version`: a recording is stored as that
+    release, so a jar of another release is refused before any server starts.
+    """
+    jar = Path(explicit) if explicit else TOOLS_CACHE / "minecraft" / mc_version / "server.jar"
+    if not jar.is_file():
+        raise VanillaError(f"no vanilla {mc_version} server bundler at {jar} (docs/QUIRK_PARITY.md)")
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            names = set(archive.namelist())
+            version = json.loads(archive.read("version.json"))
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile) as error:
+        raise VanillaError(f"{jar} is not a vanilla server bundler with a version.json: {error}") from error
+    if version.get("id") != mc_version:
+        raise VanillaError(f"{jar} is vanilla {version.get('id')!r}, not {mc_version}")
+    if "META-INF/versions.list" not in names:
+        raise VanillaError(f"{jar} is the inner game jar, not the server bundler (no META-INF/versions.list)")
+    return jar
+
+
+def java_version(java: str) -> str:
+    """First line of `java -version` (the runtime that produced a recording)."""
+    out = subprocess.run([java, "-version"], capture_output=True, text=True, check=True)
+    return (out.stderr or out.stdout).splitlines()[0].strip()
+
+
+# Overworld bottom; scenario boxes stay far above it.
+MIN_Y = -64
 
 _ERROR_MARKERS = (
     "Unknown or incomplete command",
@@ -39,7 +88,7 @@ class VanillaError(RuntimeError):
 
 
 class VanillaOracle:
-    def __init__(self, workdir: Path, *, seed: int, jar: Path = DEFAULT_JAR,
+    def __init__(self, workdir: Path, *, seed: int, jar: Path,
                  java: str = "java", timeout: float = 180.0, use_mem_run: bool = True,
                  properties: dict[str, str] | None = None):
         self.workdir = workdir
@@ -54,15 +103,20 @@ class VanillaOracle:
         self.log_path = workdir / "vanilla.log"
         self._sync = 0
         self.game_ticks = 0
+        # (x, z) of a resident column whose bottom block carries the one-tick step marker.
+        self.step_marker: tuple[int, int] | None = None
 
     # -- lifecycle ---------------------------------------------------------
-    def start(self) -> None:
+    def start(self, fresh: bool = True) -> None:
+        """Start the server; `fresh=False` reopens the existing world (a restart)."""
         if not self.jar.is_file():
             raise VanillaError(f"missing vanilla bundler jar: {self.jar}")
-        if self.workdir.exists():
-            shutil.rmtree(self.workdir)
-        self.workdir.mkdir(parents=True)
-        (self.workdir / "eula.txt").write_text("eula=true\n")
+        if fresh:
+            if self.workdir.exists():
+                shutil.rmtree(self.workdir)
+            self.workdir.mkdir(parents=True)
+            (self.workdir / "eula.txt").write_text("eula=true\n")
+        self.lines = queue.Queue()
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -89,14 +143,14 @@ class VanillaOracle:
             argv, cwd=self.workdir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, text=True, bufsize=1)
 
-        def collect():
+        def collect(lines=self.lines, mode="w" if fresh else "a"):
             assert self.process and self.process.stdout
-            with self.log_path.open("w") as handle:
+            with self.log_path.open(mode) as handle:
                 for line in self.process.stdout:
                     handle.write(line)
                     handle.flush()
-                    self.lines.put(line.rstrip())
-            self.lines.put(None)
+                    lines.put(line.rstrip())
+            lines.put(None)
 
         threading.Thread(target=collect, daemon=True).start()
         # mem-run may queue the JVM behind other heavy jobs for a long time: wait on the log line.
@@ -114,6 +168,14 @@ class VanillaOracle:
         except Exception:
             proc.kill()
             proc.wait(timeout=10)
+
+    def restart(self) -> None:
+        """Stop cleanly (vanilla saves every loaded chunk on `stop`) and reopen the same world."""
+        proc = self.process
+        self.stop()
+        if proc is None or proc.returncode != 0:
+            raise VanillaError(f"vanilla did not stop cleanly before the restart; see {self.log_path}")
+        self.start(fresh=False)
 
     def __enter__(self):
         self.start()
@@ -182,13 +244,58 @@ class VanillaOracle:
                     problems.append(f"[chunk@{start}: {batch[0]} ..] {text}")
         return problems
 
-    def sprint(self, ticks: int) -> None:
-        if ticks <= 0:
-            return
-        # Drain stale lines so "Sprint completed" is this sprint's own report.
+    def game_time(self) -> int:
+        for line in self.run("time query gametime"):
+            found = re.search(r"The game time is (\d+) tick", line)
+            if found:
+                return int(found.group(1))
+        raise VanillaError(f"`time query gametime` printed no game time; see {self.log_path}")
+
+    def load_ticks(self, ticks: int) -> None:
+        """Let chunks load before the scenario starts; these ticks are not scenario ticks."""
         self.send(f"tick sprint {ticks}")
         self.expect("Sprint completed")
+
+    def sprint(self, ticks: int) -> None:
+        """Advance the frozen world by exactly `ticks` game ticks.
+
+        `tick sprint N` runs N + 1 ticks when the tick before it was frozen and N when that tick
+        ran: the sprint check reads the previous tick's `runGameElements`
+        (ServerTickRateManager.checkShouldSprintThisTick, 26.3), and console commands run between
+        ticks, so which case applies is timing. The driver sprints N - 1 and adds one marked step
+        when the game time shows N - 1; one tick is that step alone. The game time proves the count.
+        """
+        if ticks <= 0:
+            return
+        before = self.game_time()
+        if ticks > 1:
+            self.send(f"tick sprint {ticks - 1}")
+            self.expect("Sprint completed")
+        if ticks == 1 or self.game_time() - before == ticks - 1:
+            self._step_one()
+        ran = self.game_time() - before
+        if ran != ticks:
+            raise VanillaError(f"the world advanced {ran} game ticks instead of {ticks}; see {self.log_path}")
         self.game_ticks += ticks
+
+    def _step_one(self) -> None:
+        """`tick step 1`, returning once that tick ran.
+
+        The step logs nothing when its tick has run, so an auto impulse command block at the
+        bottom of `step_marker` says a marker: its scheduled tick runs only in the stepped tick.
+        """
+        if self.step_marker is None:
+            raise VanillaError("a one-tick step needs `step_marker`, a resident column")
+        x, z = self.step_marker
+        self._sync += 1
+        marker = f"QP_STEP_{self._sync}"
+        problems = self.run_checked(
+            [f'setblock {x} {MIN_Y} {z} minecraft:command_block{{auto:1b,Command:"say {marker}"}}'])
+        self.send("tick step 1")
+        self.expect(f"[@] {marker}")
+        problems += self.run_checked([f"setblock {x} {MIN_Y} {z} minecraft:air"])
+        if problems:
+            raise VanillaError(f"one-tick step marker refused: {problems}; see {self.log_path}")
 
     def freeze(self) -> None:
         self.run("tick freeze")

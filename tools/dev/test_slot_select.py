@@ -41,7 +41,7 @@ class SlotSelectTests(unittest.TestCase):
 
     def start(self, tree: Path, explicit: Path | None = None) -> subprocess.Popen:
         arg = f"CARGO_TARGET_DIR={explicit}" if explicit else ""
-        script = (f"set -euo pipefail; dir={self.locks}; KRASNOKAMEN_SLOT_TARGETS={self.targets}; KRASNOKAMEN_SLOT_MIN_FREE_GB=0; "
+        script = (f"set -euo pipefail; dir={self.locks}; KRASNOKAMEN_SLOT_TARGETS={self.targets}; KRASNOKAMEN_DISK_GC_BELOW_GB=0; "
                   f"source {SELECT}; select_slot {arg}; echo \"target=$target\"; exec cat")
         proc = subprocess.Popen(["bash", "-c", script], cwd=tree, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)

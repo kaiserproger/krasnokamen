@@ -411,7 +411,7 @@ struct AdmittedBuild {
 #[derive(Clone)]
 pub struct AuthorizedBuild {
     connection: ConnectionId,
-    actor: crate::boundary::EntityId,
+    actor: mc_domain::EntityId,
     log_input: Arc<PlayerInput>,
     planning_tick: u64,
     inner: Arc<Mutex<Option<AdmittedBuild>>>,

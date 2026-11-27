@@ -10,6 +10,7 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::{Arc, atomic::AtomicU64};
 
 use mc_data::Identifier;
+use mc_light::sky_darken;
 use mc_world::native::{NativeChunkSnapshot, NativeStore};
 use mc_world::{BlockRegistry, BlockStateId, Chunk, ChunkGenerator, ChunkPos, ChunkSection};
 
@@ -173,7 +174,7 @@ pub struct ChunkWorld {
     /// native transaction. Later resident edits copy on write.
     generated: Vec<CapturedChunk>,
     /// Derived light cache owned by this world, never by an edge session.
-    pub(crate) light: crate::light::LightEngine,
+    pub(crate) light: mc_light::LightEngine,
 }
 
 /// Entity-step-local resident-column cache (last chunk and last 16-high
@@ -341,7 +342,7 @@ impl SectionMatchCache {
 /// Slot-indexed users must also match `entity` after store compaction.
 #[derive(Clone, Copy)]
 pub(crate) struct ContactStamp<const N: usize = 0> {
-    pub(crate) entity: crate::boundary::EntityId,
+    pub(crate) entity: mc_domain::EntityId,
     pub(crate) position: [f64; 3],
     pub(crate) shape: [f64; 2],
     pub(crate) min: (i32, i32, i32),
@@ -568,7 +569,7 @@ impl ChunkWorld {
             published: None,
             recent: RecentChunks::default(),
             generated: Vec::new(),
-            light: crate::light::LightEngine::new(light),
+            light: mc_light::LightEngine::new(light),
         }
     }
 
@@ -1685,3 +1686,31 @@ mod world_section_dirty_tests;
 #[cfg(test)]
 #[path = "world_capture_tests.rs"]
 mod world_capture_tests;
+
+impl crate::tick::TickState {
+    /// Real local brightness for crop growth and spawning, after sky darkening.
+    #[must_use]
+    pub(crate) fn brightness(&self, x: i32, y: i32, z: i32) -> u8 {
+        self.world.light_at(x, y, z).map_or(0, |(sky, block)| {
+            if !self.dimension.has_weather() {
+                return block;
+            }
+            block.max(sky.saturating_sub(sky_darken(
+                self.day_time,
+                self.rain_level,
+                self.thunder_level,
+            )))
+        })
+    }
+
+    /// Vanilla `getRawBrightness(pos, 0)`: sky and block light with no
+    /// day/weather sky darkening. Crops, stems and bamboo saplings gate on
+    /// this, so open-sky farms grow at night; spawning and saplings
+    /// (`getMaxLocalRawBrightness`) use the darkened [`Self::brightness`].
+    #[must_use]
+    pub(crate) fn raw_brightness(&self, x: i32, y: i32, z: i32) -> u8 {
+        self.world
+            .light_at(x, y, z)
+            .map_or(0, |(sky, block)| sky.max(block))
+    }
+}

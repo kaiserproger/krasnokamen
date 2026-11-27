@@ -40,12 +40,17 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // container for `boundary::EntityView` records with a single out-edge back
     // to `boundary` and no algorithm of its own; as `boundary::views` it stops
     // being a false top-level cycle node: 186 modules.
+    // D124 `EntityId` in mc-domain, 2026-11-27: `target_grid` named only that
+    // id from the cycle and leaves it: 185 modules.
+    // D128 cut 3 (mc-light), 2026-11-27: the light module left mc-core; its only
+    // out-edge was the `TickState::{brightness, raw_brightness}` impl, which now
+    // lives in `world.rs` (already in the cycle): 184 modules.
     // D128 cut 2 (mc-placement, 2026-11-27): placement, placement_shapes and
     // chests leave core as the pure `&BlockRegistry` placement-state owner,
-    // together with the copper family tables and the concrete rule. Measured
-    // 184 modules / 246,658 production lines / 197 top-level modules on the
-    // cut tree: 184 modules.
-    cycle_modules: 184,
+    // together with the copper family tables and the concrete rule. On the
+    // tree merged with cut 3: 182 modules, 196 top-level modules, 245,946
+    // production lines.
+    cycle_modules: 182,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.

@@ -737,83 +737,85 @@ pub(super) fn restore_appearance(
     }
 }
 
-/// Restore one [`EntityDataValue`](crate::boundary::EntityDataValue) from its image.
+/// Restore one [`EntityDataValue`](mc_data::entity_data_value::EntityDataValue) from its image.
 pub(super) fn restore_data_value(
     value: &crate::journal::EntityDataValueImage,
-) -> crate::boundary::EntityDataValue {
+) -> mc_data::entity_data_value::EntityDataValue {
     match value {
         crate::journal::EntityDataValueImage::WeatheringCopper(v) => {
-            crate::boundary::EntityDataValue::WeatheringCopper(*v)
+            mc_data::entity_data_value::EntityDataValue::WeatheringCopper(*v)
         }
         crate::journal::EntityDataValueImage::CopperGolemState(v) => {
-            crate::boundary::EntityDataValue::CopperGolemState(*v)
+            mc_data::entity_data_value::EntityDataValue::CopperGolemState(*v)
         }
         crate::journal::EntityDataValueImage::SnifferState(v) => {
-            crate::boundary::EntityDataValue::SnifferState(*v)
+            mc_data::entity_data_value::EntityDataValue::SnifferState(*v)
         }
         crate::journal::EntityDataValueImage::Direction(v) => {
-            crate::boundary::EntityDataValue::Direction(*v)
+            mc_data::entity_data_value::EntityDataValue::Direction(*v)
         }
         crate::journal::EntityDataValueImage::PaintingVariant(v) => {
-            crate::boundary::EntityDataValue::PaintingVariant(*v)
+            mc_data::entity_data_value::EntityDataValue::PaintingVariant(*v)
         }
         crate::journal::EntityDataValueImage::ChickenVariant(v) => {
-            crate::boundary::EntityDataValue::ChickenVariant(*v)
+            mc_data::entity_data_value::EntityDataValue::ChickenVariant(*v)
         }
         crate::journal::EntityDataValueImage::CowVariant(v) => {
-            crate::boundary::EntityDataValue::CowVariant(*v)
+            mc_data::entity_data_value::EntityDataValue::CowVariant(*v)
         }
         crate::journal::EntityDataValueImage::PigVariant(v) => {
-            crate::boundary::EntityDataValue::PigVariant(*v)
+            mc_data::entity_data_value::EntityDataValue::PigVariant(*v)
         }
         crate::journal::EntityDataValueImage::ZombieNautilusVariant(v) => {
-            crate::boundary::EntityDataValue::ZombieNautilusVariant(*v)
+            mc_data::entity_data_value::EntityDataValue::ZombieNautilusVariant(*v)
         }
         crate::journal::EntityDataValueImage::VillagerData {
             kind,
             profession,
             level,
-        } => crate::boundary::EntityDataValue::VillagerData {
+        } => mc_data::entity_data_value::EntityDataValue::VillagerData {
             kind: *kind,
             profession: *profession,
             level: *level,
         },
-        crate::journal::EntityDataValueImage::Byte(v) => crate::boundary::EntityDataValue::Byte(*v),
+        crate::journal::EntityDataValueImage::Byte(v) => {
+            mc_data::entity_data_value::EntityDataValue::Byte(*v)
+        }
         crate::journal::EntityDataValueImage::VarInt(v) => {
-            crate::boundary::EntityDataValue::VarInt(*v)
+            mc_data::entity_data_value::EntityDataValue::VarInt(*v)
         }
         crate::journal::EntityDataValueImage::VarLong(v) => {
-            crate::boundary::EntityDataValue::VarLong(*v)
+            mc_data::entity_data_value::EntityDataValue::VarLong(*v)
         }
         crate::journal::EntityDataValueImage::Float(v) => {
-            crate::boundary::EntityDataValue::Float(*v)
+            mc_data::entity_data_value::EntityDataValue::Float(*v)
         }
         crate::journal::EntityDataValueImage::Rotations(v) => {
-            crate::boundary::EntityDataValue::Rotations(*v)
+            mc_data::entity_data_value::EntityDataValue::Rotations(*v)
         }
         crate::journal::EntityDataValueImage::Boolean(v) => {
-            crate::boundary::EntityDataValue::Boolean(*v)
+            mc_data::entity_data_value::EntityDataValue::Boolean(*v)
         }
         crate::journal::EntityDataValueImage::String(v) => {
-            crate::boundary::EntityDataValue::String(v.clone())
+            mc_data::entity_data_value::EntityDataValue::String(v.clone())
         }
         crate::journal::EntityDataValueImage::BlockState(v) => {
-            crate::boundary::EntityDataValue::BlockState(*v)
+            mc_data::entity_data_value::EntityDataValue::BlockState(*v)
         }
         crate::journal::EntityDataValueImage::Item(v) => {
-            crate::boundary::EntityDataValue::Item(v.clone())
+            mc_data::entity_data_value::EntityDataValue::Item(v.clone())
         }
         crate::journal::EntityDataValueImage::OptionalBlockPos(v) => {
-            crate::boundary::EntityDataValue::OptionalBlockPos(*v)
+            mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(*v)
         }
         crate::journal::EntityDataValueImage::EntityEffectParticle(v) => {
-            crate::boundary::EntityDataValue::EntityEffectParticle(*v)
+            mc_data::entity_data_value::EntityDataValue::EntityEffectParticle(*v)
         }
         crate::journal::EntityDataValueImage::OptionalUnsignedInt(v) => {
-            crate::boundary::EntityDataValue::OptionalUnsignedInt(*v)
+            mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(*v)
         }
         crate::journal::EntityDataValueImage::OptionalLivingEntityReference(v) => {
-            crate::boundary::EntityDataValue::OptionalLivingEntityReference(*v)
+            mc_data::entity_data_value::EntityDataValue::OptionalLivingEntityReference(*v)
         }
     }
 }

@@ -152,7 +152,6 @@ pub mod leash;
 pub(crate) mod leaves;
 mod lectern;
 pub mod level_metadata;
-mod light;
 mod llama;
 pub mod lod;
 pub(crate) mod mace;
@@ -253,6 +252,8 @@ mod fluids_tests;
 mod hostile_tests;
 #[cfg(test)]
 mod journal_tests;
+#[cfg(test)]
+mod light_world_tests;
 #[cfg(test)]
 mod merge_tests;
 #[cfg(test)]

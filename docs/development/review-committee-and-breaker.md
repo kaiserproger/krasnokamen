@@ -1,6 +1,6 @@
 # Advisor, reviewer, breaker and committee
 
-[AGENTS](../../AGENTS.md) owns review points/counts; [QA protocol](../QA_AGENT_PROTOCOL.md)
+The [owner rules](../RULES.md#commits-reviews-and-publication) own review points/counts; [QA protocol](../QA_AGENT_PROTOCOL.md)
 owns breaker acceptance. Normal review points: promotion batches ≥5 rows,
 critical persistence/protocol/custody/battle-core changes (including client
 threading/entity-tick design and code), and two reviewers before a tag.
@@ -47,7 +47,7 @@ Each finding: `file:line`, reachable path, severity. P0/P1 introduced or left op
 
 ## Independent reviewer
 
-Read-only independent review is **required at each review point** in AGENTS,
+Read-only independent review is **required at each review point** in the owner rules,
 including critical work **before Main commits**, not just before release.
 Reviewers neither edit nor delegate; fixing findings does not itself commission
 another review. Current fleet policy sets verdict counts.
@@ -153,8 +153,8 @@ The brief overrides the following defaults:
 - Absolute assigned-worktree paths; `wt-new`, authorized `wt-done`, release gates
   only from `pin-release`. Default **no commits**; report
   `git diff <base> --binary | sha256sum`.
-- One heavy command at a time through Main's runner; `-x`/`-p` serialize without
-  GO. Stale slot-era skills lose to AGENTS (14 removed on 2026-11-07).
+- Heavy commands through Main's runner (no per-agent cap, owner D127); `-x`/`-p`
+  serialize without GO. Stale slot-era skills lose to AGENTS (14 removed on 2026-11-07).
 - Smallest correct change; behavioral fix needs fix-only negative control;
   record fail-first if observed, not a gate. Workers add regression/repro
   references, never mark rows fixed; Main uses `ledger promote`.

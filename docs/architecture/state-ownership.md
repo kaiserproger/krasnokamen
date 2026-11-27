@@ -1,9 +1,9 @@
 # State ownership index
 
-Status: current native runtime after ADR 0014 Phase 5. Authority is defined by
-[ADR 0013](../decisions/0013-core-model-v2.md), not by the deleted regional-owner
-and multi-journal designs. See [runtime.md](runtime.md) for execution boundaries
-and [mutations.md](mutations.md) for routes.
+Who writes each kind of state, who reads it and where it persists. Authority is
+defined by [ADR 0013](../decisions/0013-core-model-v2.md). See
+[runtime.md](runtime.md) for execution boundaries and [mutations.md](mutations.md)
+for routes.
 
 | State | Authority / writer | Readers and projections | Persistence boundary |
 | --- | --- | --- | --- |
@@ -114,156 +114,77 @@ armor stands leave the store at once. Differences from vanilla:
 
 Persistence: [corpses](persistence.md#corpses).
 
-### Staged battle actions
+Staged battle action state and battle factions on the wire are described in
+[battles](battles.md#combat-state-and-actions).
 
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
-and charge state share the formation-aligned dense execution index; a cold
-identity remap preserves actions and ammunition when roster layout changes.
-These are runtime battle state: pause holds their clock; restart restores
-bodies and mount custody, not an in-progress battle. The native projectile
-owner alone moves arrows and resolves hits.
-The shield's raised/lowered pose is different: it is native `appearance.extra`
-metadata, persisted in WAL post-images and checkpoints. The combat runtime
-owns decisions, while the shared changed-only metadata setter owns presentation
-mutation; unchanged guard never copies or republishes appearance. Staging
-pre-raises equipped shields so the first running tick makes no mass pose write.
-The sole kernel tree is `mc-core/src/battle`, restored from the F battle
-line; `hostile` retains its runtime state, not another implementation.
+## Spectator cameras
 
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-An unparried blow removes about eight times in a thousand on the authored
-deterministic roll; seven removals in ten die on the spot and the rest
-withdraw wounded through the ranks. Any landed blow finishes a wounded man, and
-pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
-surge in section pulses whose fatigue follows the share of the front pulsing;
-outside a pulse a front-rank man still trades blows at the cautious rate with
-an enemy already in weapon reach. Riders and pursuers fight from any rank, and
-fugitives pinned against the battle bounds turn at bay; a fugitive stays where
-it met an edge instead of running on along it into a corner. A regiment worn near
-its pulse floor while in contact erodes until it breaks; one whose enemy broke
-steadies. Film pacing changes lulls, never swing speed. These are simulation
-choices based on
-[Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not measured historical
-per-swing probabilities. Volleys use 220 ticks sustained and 60 arrows per
-archer; about one arrow in seventy finds an armour gap and kills, the rest are
-one-HP hurts.
-Each regiment has an absolute staggered phase, including after wavering/rejoin;
-the soldiers within that regiment still draw and release together. The staged
-battle uses sustained cadence; there is no unused opening-burst control.
-Horses refuse steady frontal foot ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. Once their own foot closes, unengaged riders swing
-round the nearest enemy foot regiment into its rear, and ride down the
-fugitives of the nearest broken foot regiment until those reach the edge of
-the field. A rider who fled to the edge rallies there and rides back until he
-falls, even when his regiment has broken; foot fugitives stay at bay on the
-edge. A regiment rides these sweeps as
-a block, never toward one shared point: each rider follows the sweep from its
-own file/rank slot. Targets and swings are laid round the regiments' live
-centroids, not their virtual leaders, which march ahead of files lagging on
-relief. A rider attacking closes on its own
-place round its target (golden-angle rings 1.2-3.6 blocks out), so riders that
-chose the same foe do not pile onto one block. The work counters bound visits,
-target checks, reaction checks, strikes, arc iterations and charge decisions;
-they are not a 20-TPS performance measurement.
-Mounted terrain turns are retained for up to 60 ticks, including while pursuing a
-target or formation slot. A side slide must retain the headroom required by
-steps in its projected direction; otherwise steering weighs another direction
-instead of pressing into a canopy-blocked step. The bounded detour prevents
-the slot from pulling the horse back into the same obstacle on its next tick.
-The ten-second stall census runs after target validation. A soldier holding a
-live enemy within six blocks is in contact, not advancing, even when its virtual
-leader is farther ahead. An invalid retained target cannot hide a blocked soldier;
-the census is derived telemetry and never changes motion.
+Spectator cameras are transient native bindings, published with the immutable
+world snapshot. `/spectate` and battle named-follow use that same authority;
+the native tick follows the target position for residency and ignores viewer
+movement while bound. Binding changes synchronize the viewer once, not on every
+follow tick. Death or disconnect releases the current camera; only battle's
+named intent retries a returning target or a respawned viewer on the same
+connection. Explicit stop, sneak, viewer disconnect or leaving spectator mode
+clears that intent. Entity-ID bindings are transient; battle history persists
+only the named follow intent and resolves it through this same authority.
+Restored names remain pending while their viewers are offline; a real Leave
+input cancels intent before removing the connection. Re-arm completion is
+recorded only after equipment replacement, not when an identity is observed or
+a placement is attempted. Refused re-arm retries on the same connection;
+successful respawn equipment prevents an extra reconnect re-arm.
 
-A new `battle live` hold replaces the holder's entire inventory with a fresh
-copy of his kit. It retires plugin reservations before changing stock, clears
-the old inventory, and routes the close through the ordinary
-native/plugin/settlement menu owners. The cursor and crafting grid fit in that
-emptied inventory, then are discarded with all non-kit contents; no overflow
-item entities are minted. Menu ownership and the client's open window close
-together. A held player's respawn, reconnect (once per connection) or repeated
-`battle live` re-arms him under the same custody, but only with the kit pieces
-he still carries (matched by every identity field except count and wear, wear
-kept): a piece he dropped or stored is never issued a second time.
+The edge binds only a paired target, with camera release, removal, pairing and
+rebind ordered on the entity world FIFO; credit loss retains delivery debt.
+Shared command resolution finds named/UUID targets across worlds and transfers
+the viewer through existing dimension custody before publishing a binding.
+When a bound target changes dimensions, its viewers move with it and then
+release, rather than retaining a dimension-local entity reference. Explicit
+player teleport also releases the player's camera; refused teleports do not.
+The effects appearance owner projects spectator invisibility and suppresses
+effect particles without deleting the player's potion state.
+The snapshot shares the global roster allocation for current player modes.
+Entity interest uses that roster and camera ownership for vanilla player
+tracking eligibility, not a second mode store: ordinary viewers never receive
+spectator bodies; spectator viewers receive only self-camera player bodies.
+Retained interest revisits player rows when either immutable input changes,
+including already paired and previously hidden players, without scanning mobs.
 
-Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
-two-block XZ grid from the frozen native body snapshot. Conservative half-extent
-expansion covers wide bodies, Y bounds reject other heights, and canonical
-candidate sorting preserves hit order. Dragon/deployed geometry remains an
-explicit exceptional superset. Sparse world spans fall back to the existing
-native chunk query before allocating empty-world cells (maximum 1,048,576).
-Differential flight tests exercise both paths against exhaustive collision.
+## Mount custody
 
-Battle arrow/spectral-arrow ground lifetime is captured at launch as 100 admitted
-ticks, independent of later owner death. Ordinary arrows retain their previous
-1,201-tick expiry. Settled arrows anchor to native entity lifetime age; idle
-projectile ticks neither take `row_mut` nor publish appearance merely to age.
-Pickup, expiry and physical-profile custody changes still use native owners.
-`grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
-native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
-Hydration refuses an anchored projectile without a native lifetime-age long;
-retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
-Block impact establishes the native-age anchor. Loss of support exits the idle
-path and clears both the anchor and ground age before falling; a later landing
-starts a fresh ground lifetime, including across checkpoint/WAL recovery.
-Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
-time without one arrow image per tick. Loyalty tridents keep their dynamic
-return path and are not treated as idle arrows.
+Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
+first rider with a live body controls motion; absent recovery claims are skipped
+and reserve no attachment position for live passengers. A passenger's reverse
+link and published passenger entity IDs are derived, never separate
+authorities. Removing one passenger preserves the other seats. Native images
+retain the list; offline animal NBT uses `krasnokamen:Riders`. The shared image
+reader validates duplicate UUIDs and the vehicle's seat capacity; replay also
+rejects one UUID claimed by multiple vehicles. Before adding a rider, live Ride
+removes that UUID from every other vehicle in the dimension and removes absent
+claims (and an existing claim for that actor) from its target. Only the camel
+(3, `Camel.canAddPassenger`) and happy ghast (4) seat more than one rider. The
+earlier scalar `krasnokamen:Rider` NBT key and WAL `rider` field are refused
+outright, so an old image fails the load instead of silently unseating its rider.
 
-Native mob NBT writes `krasnokamen:Faction` exactly once for a nonzero faction;
-ordinary faction-zero mobs carry no faction key.
-
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
-the horse so native battle motion is not suppressed as ordinary tamed AI.
-Recovery allows a live mob passenger rather than requiring a player UUID,
-rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
-Native regressions include checkpoint/WAL mount custody, real mounted movement,
-100-tick grounded expiry, idle no-touch pickup, native lazy-clock replay, and
-matching uninterrupted/restarted expiry through actual checkpoint and WAL producers.
-Protocol and persistence changes require Main's independent review.
-
-### Battle factions on the wire
-
-A mob's side is its persisted `Body::faction`; a live player's side is his
-`battle live` hold (runtime only, his own faction stays 0). The snapshot
-publishes both: `EntityView::faction` and the derived
-`WorldSnapshot::player_factions` (same `Arc` while the holds are unchanged).
-The edge (`mc-edge/src/faction_teams.rs`) projects them per connection into
-vanilla scoreboard teams `sf <faction>` (mobs by UUID string, players by name;
-nametag never, collision always, red/blue colours) that exist only on the
-client: no core team, no persistence, no gameplay effect. A team leaves when
-the snapshot holds no row and no player of its faction; respawns keep the
-teams and a dimension change syncs them again. Each connection keeps the
-entries it sent (mob UUIDs, player names) as its baseline. Entries whose
-faction ends remain in that team until the whole team is removed; a change
-to another nonzero faction moves the entry by an add. Projection packets
-use only create (0), remove-team (1), and add (3), never remove-entry (4).
-A routed core `/team` add implicitly moves an entry and the edge forgets
-that projected membership without sending a removal. Holds end only by
-`battle reset` or a restart (`spectate` and going offline keep them).
-`battle reset` removes staged rows, but summoned faction rows keep their team.
-An ex-holder keeps the projected team's hidden nameplate and team colour while
-that team survives a reset, until the team leaves.
-Nameplates are always hidden for projected teams, including with hidden HUD;
-options enable friendly fire but not see-friendly-invisibles.
-No `/team` command can name a team
-`sf <n>` (team names are one token); a core team of exactly that name
-(`WorldSnapshot::team_names`) blocks the faction. Because an add moves a
-client's entry and a removal from the wrong team disconnects a vanilla client,
-an entry gets a faction only while it is in no `/team` team
-(`scoreboard::require_no_team`: summon with `UUID`, battle mount, `battle
-live`), and `/team join` refuses battle-faction UUIDs and holders.
-
-Allegiance is defined once by `battle::faction::relation`: two nonzero equal
-factions are Same, two nonzero different factions are Enemy, and either zero
-is Neutral. Melee selection uses Enemy, friendly support uses Same, and
-arrows collide with everything except Same. Separately, `battle_row(faction)`
-marks native roster/AI ownership (currently nonzero). Ordinary AI suppression,
-battle columns, sparse roster indexing and battle arrow lifetime use this
-marker, not an enemy predicate. Neither changes the persisted faction format.
-
+A recovered absent UUID is a pending claim, not an occupied seat: it survives
+idle ticks until its passenger reconnects or another live Ride takes that
+vehicle. No rider kind is persisted, so an absent mob UUID follows the same rule.
+`mounts::live_riders` resolves those UUIDs against live bodies and is the single
+gameplay occupancy source for control, AI, leash follow, breeding, despawn,
+portals and battle projections; there is no cached mounted flag to go stale, and
+the durable rider index intentionally keeps absent claims. Explicit
+leave/dismount, death, or a known dead or invalid passenger clears its relation.
+Plain Join and successful plugin-login unlock both call `mounts::join`; the
+active vehicle tick also rebuilds the reverse link and passenger projection.
+Re-seating has no distance or chunk-activity check within the dimension:
+bringing the returning player to the vehicle is accepted policy, not vanilla
+parity. Dimension travel ejects seats and ends pending absent claims but keeps
+the vehicle's chest and cargo; a later claimant joins at their saved position.
+Death ejects seats and drops that custody. WAL recovery regression:
+`happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`
+(`crates/mc-core/src/mounts_persistence_tests.rs`); native tests also cover
+reclaimed seats, first-live steering, plugin unlock, competing claims and a
+clean `Core::shutdown` with a still-seated player.
 
 ## Container openers
 
@@ -311,35 +232,11 @@ Only the writer's WAL-gated commit may advance the manifest and prune covered
 frames; stale ACKs cannot erase newer inventory custody. Player and container
 post-images retain that same durable fence in Overworld, Nether and End.
 
-### CAF-04 capture ladder
-
-One BASE run followed by one AFTER run in the same Main-authorized exclusive
-window, release-test pins `53e3a2cae5f7-d3518158` and
-`53e3a2cae5f7-3ecc759c`, with phase logging disabled. The unchanged audit fixture
-loads 2,000 empty native chunks and places live owners outside the dirty chunks.
-Cells below are medians of three capture samples, in milliseconds.
-
-| Dirty chunks | Disjoint live owners | BASE | Grouped |
-| ---: | ---: | ---: | ---: |
-| 100 | 0 | 0.003 | 0.002 |
-| 100 | 100 | 0.013 | 0.003 |
-| 100 | 1,000 | 0.114 | 0.012 |
-| 100 | 10,000 | 1.089 | 0.107 |
-| 500 | 0 | 0.008 | 0.008 |
-| 500 | 100 | 0.059 | 0.009 |
-| 500 | 1,000 | 0.556 | 0.018 |
-| 500 | 10,000 | 5.497 | 0.109 |
-| 2,000 | 0 | 0.034 | 0.042 |
-| 2,000 | 100 | 0.247 | 0.037 |
-| 2,000 | 1,000 | 2.205 | 0.042 |
-| 2,000 | 10,000 | 21.759 | 0.130 |
-
-The largest cell is 167.38 times faster in this pair. The empty-owner
-2,000-chunk cell is 0.008 ms slower; this single pair does not establish
-statistical significance. These numbers isolate chunk capture, not the writer,
-fsync, end-to-end checkpoint latency or battle TPS. CAF-05/06/08 are unchanged.
-Raw command, pin provenance and logs are retained in the executor's
-`.analysis/codex-logs/stage2core/caf04-result.json` receipt.
+Measured effect (one BASE/AFTER pair, release-test pins `53e3a2cae5f7-d3518158`
+and `53e3a2cae5f7-3ecc759c`, medians of three samples, chunk capture only, not
+the writer, fsync or end-to-end checkpoint latency): 2,000 dirty chunks with
+10,000 disjoint live owners took 21.759 ms before and 0.130 ms grouped; with no
+live owners the grouped path was 0.008 ms slower, within noise.
 
 ## Rules
 
@@ -377,11 +274,11 @@ Raw command, pin provenance and logs are retained in the executor's
 6. Plugin code owns policy, not native pointers, entity slots, region keys or
    custody authority. Revalidate live session/generation/revision at native apply.
 7. Names alone are not evidence: inspect the owning symbol before changing a
-   specific mutation or claiming a test covers it. Historical warehouse-pilot
-   tests and old multi-journal recovery receipts do not prove native v2 behavior.
+   specific mutation or claiming a test covers it. Old receipts do not prove
+   current behaviour.
 8. Every cross-thread queue is bounded in bytes or items, or it has a written
-   reason and a counter. The tick→edge reliable handoff is the one the audit
-   caught unbounded: it now charges `outbox_queue_bytes` (256 MiB; two documented
+   reason and a counter. The tick→edge reliable handoff charges
+   `outbox_queue_bytes` (256 MiB; two documented
    exceptions — an oversized batch alone in an empty queue, and the halt's
    terminal `Disconnect` batch), warns once per 8 MiB crossing (re-armed below
    4 MiB), and a non-empty queue that consumes no batch for 10 s halts the tick
@@ -396,15 +293,10 @@ Raw command, pin provenance and logs are retained in the executor's
 
 ## Entity wire publication optimization
 
-The wire projection uses dense copy-on-write pages and mutation-owned candidate
-IDs instead of persistent-tree updates. Equal candidates do not advance the
-revision; the ordered chunk/ID index preserves publication order. Snapshot and
-ordering parity are the correctness fence. Revert the collection together if
-that fence fails.
-
-Historical isolated 100k-row microbenchmarks reported 8.65–8.92 ms versus
-57.48–58.53 ms for moving-row publication; this excludes gameplay, edge and
-other server work and is not a TPS claim.
+Effect of the dense pages of rule 3: historical isolated 100k-row
+microbenchmarks reported 8.65–8.92 ms versus 57.48–58.53 ms for moving-row
+publication; this excludes gameplay, edge and other server work and is not a
+TPS claim. The fence is snapshot and ordering parity (rule 3).
 
 `target_grid.rs` addresses repeated linear scans by building a non-authoritative
 per-class nearest-target index only above its consumer and table thresholds.
@@ -425,12 +317,6 @@ known span does not advance a lap boundary. Disabled collectors allocate
 nothing; the `phase ms:`, `tick outer ms:` and `journal build ms:` summary
 prefixes and field units remain compatible with the coreperf log reader.
 These opt-in log records do not replace authoritative `TickTimes` telemetry.
-
-Battle staging resolves its vanilla item carriers and husk/horse type IDs once
-in the stable registry tables. Loadout component variants still use the canonical
-item codec; resolved equipment enters the summon image before normal attribute
-and wire-appearance restoration. No per-fighter item-name NBT round trip or
-entity-name registry lookup is needed, and no combinatorial loadout cache is kept.
 
 ## Recurring allocator and farming projections
 

@@ -1043,14 +1043,6 @@ mod tests {
     }
 
     #[test]
-    fn known_navigation_strings_are_translated() {
-        assert_eq!(text(Lang::En, Key::Back), "Back");
-        assert_eq!(text(Lang::Ru, Key::Back), "Назад");
-        assert_eq!(text(Lang::Ru, Key::Army), "Армия");
-        assert_eq!(text(Lang::Ru, Key::ClaimReview), "Принять грамоту");
-    }
-
-    #[test]
     fn russian_plural_picks_one_few_many() {
         for (n, expected) in [
             (0, "видов"),

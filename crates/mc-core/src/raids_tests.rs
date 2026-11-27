@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{BlockPos, ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::survival::Difficulty;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use std::sync::{Arc, LazyLock};
 
 pub(crate) fn fixture(root: Option<&std::path::Path>) -> (TickState, EntityId, EntityId) {

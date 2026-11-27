@@ -7,11 +7,13 @@ mod persistence;
 #[path = "../vehicles_tests.rs"]
 mod tests;
 
-use crate::boundary::{BlockPos, ChangeSet, EntityDataValue, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, Hand};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_data::statistics::StatType;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

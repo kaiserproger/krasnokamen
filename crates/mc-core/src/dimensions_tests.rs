@@ -300,8 +300,9 @@ fn global_tick_budget_follows_dimension_swaps_without_refilling() {
     swap_globals(&mut root, &mut children[0]);
 }
 
-use crate::boundary::{ConnectionId, EntityId, PlayerChange, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn dimension_state(

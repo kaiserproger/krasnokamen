@@ -11,9 +11,10 @@ use mc_data::advancements::{
 };
 use serde_json::{Map, Value, json};
 
-use crate::boundary::{ChangeSet, EntityId, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::entities::EntityKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Debug)]
 pub(crate) struct Event {

@@ -22,10 +22,11 @@ mod signal;
 #[path = "redstone_tests.rs"]
 mod tests;
 
-use crate::boundary::{ChunkPos, EntityId};
+use crate::boundary::ChunkPos;
 use crate::tick::TickState;
 use blocks::offset;
 use blocks::{NEIGHBOURS, facing_delta};
+use mc_domain::EntityId;
 use mc_world::{BlockPos, BlockRegistry, BlockState, BlockStateId, ScheduledBlockTick};
 use planning::BlockPlanningRead;
 use std::collections::{BTreeMap, HashSet};

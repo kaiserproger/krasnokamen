@@ -11,12 +11,14 @@ use uuid::Uuid;
 use super::{
     ProjectileData, ProjectileKind, ProjectileState, damage, launch, owner_id, remove, touch,
 };
-use crate::boundary::{BlockPos, EntityDataValue, EntityId, ExplosionEvent, PlayerChange};
+use crate::boundary::{BlockPos, ExplosionEvent, PlayerChange};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntityKind;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CloudState {
@@ -1181,11 +1183,11 @@ fn hatch(
                 .iter_mut()
                 .find(|(at, _)| *at == crate::blueprint::CHICKEN_VARIANT_DATA_INDEX)
             {
-                *value = crate::boundary::EntityDataValue::ChickenVariant(data);
+                *value = mc_data::entity_data_value::EntityDataValue::ChickenVariant(data);
             } else {
                 appearance.extra.push((
                     crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::ChickenVariant(data),
+                    mc_data::entity_data_value::EntityDataValue::ChickenVariant(data),
                 ));
             }
             state.appearance_changed.push(child);

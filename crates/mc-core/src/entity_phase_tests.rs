@@ -263,7 +263,7 @@ fn retained_swell_metadata_still_reaches_the_serial_special_pass() {
         .retain(|(index, _)| *index != crate::hostile::CREEPER_SWELL_DIR_INDEX);
     appearance.extra.push((
         crate::hostile::CREEPER_SWELL_DIR_INDEX,
-        crate::boundary::EntityDataValue::VarInt(1),
+        mc_data::entity_data_value::EntityDataValue::VarInt(1),
     ));
     assert!(!crate::hostile::swell_metadata_neutral(
         state.entities.row(slot)
@@ -1041,7 +1041,7 @@ fn full_step_with_period(
         unchanged_since: state.entity_phase_revision,
         difficulty: state.difficulty,
         sky_darken: if state.dimension.has_weather() {
-            crate::light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
+            mc_light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
         } else {
             15
         },
@@ -1112,7 +1112,7 @@ fn resting_battle_row_with_a_look_target_faces_it_and_then_rests() {
             * mc_physics::mth::RAD_TO_DEG)
     };
     let error = |yaw: f32, wanted: f32| (yaw - wanted + 180.0).rem_euclid(360.0) - 180.0;
-    let enemy = crate::boundary::EntityId(9_999);
+    let enemy = mc_domain::EntityId(9_999);
     for species in ["minecraft:husk", "minecraft:horse"] {
         let (mut state, slot) = resting_mob(species);
         state.entities.set_faction(slot, 1);
@@ -1247,7 +1247,7 @@ fn battle_rest_tolerance_is_half_a_quantum_on_the_wrapped_yaw_error() {
     let id = state.entities.body(slot).id;
     state.hostile.battle.combat.charge_from(id, 0);
     let pos = state.entities.pos(slot);
-    let enemy = crate::boundary::EntityId(9_999);
+    let enemy = mc_domain::EntityId(9_999);
     let rests = |state: &mut TickState, dx: f64, dz: f64| {
         let target = [pos[0] + dx, pos[1], pos[2] + dz];
         crate::battle::facing::project_row(state, slot, Some((enemy, target)));
@@ -1473,10 +1473,7 @@ fn only_a_damaging_hopper_with_a_target_divides_its_delay() {
         if target {
             state.hostile.targets.insert(
                 id,
-                (
-                    (crate::boundary::EntityId(id.0 + 1), [8.0, 101.0, 8.0]),
-                    1.5,
-                ),
+                ((mc_domain::EntityId(id.0 + 1), [8.0, 101.0, 8.0]), 1.5),
             );
         }
         state.entities.prepare_motion_hints(&state.registry);

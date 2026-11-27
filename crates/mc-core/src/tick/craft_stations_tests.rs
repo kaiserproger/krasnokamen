@@ -31,7 +31,7 @@ fn inputs(state: &crate::tick::TickState, kind: MenuKind) -> Vec<ItemStack> {
 }
 fn open(
     state: &mut crate::tick::TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     pos: [f64; 3],
     block: &str,
     menu_type: u32,

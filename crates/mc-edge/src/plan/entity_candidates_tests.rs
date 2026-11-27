@@ -2,7 +2,8 @@
 //! `visible_entity_ids` + `entity_trackable` pass and fills spawn/boss buffers.
 use super::*;
 use crate::plan::entity_candidates::collect;
-use mc_core::boundary::{ChangeSet, EntityId};
+use mc_core::boundary::ChangeSet;
+use mc_domain::EntityId;
 
 fn type_id_of(name: &str) -> u32 {
     mc_data::entity_types::krasnokamen_required_entity_types()

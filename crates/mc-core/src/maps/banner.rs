@@ -1,6 +1,7 @@
 use super::{Banner, map_id};
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand, pos: BlockPos) -> bool {

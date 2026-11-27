@@ -1,0 +1,65 @@
+{
+ "id": "gravity-blocks",
+ "family": "blocks",
+ "description": "Falling blocks: sand and a gravel column placed in the air fall and land, concrete powder landing in water hardens, and sand falling onto a torch breaks into an item while the torch stays.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  76,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "fill 9 64 1 11 64 3 minecraft:glass",
+  "setblock 10 64 2 minecraft:water",
+  "setblock 6 64 6 minecraft:torch"
+ ],
+ "phases": [
+  {
+   "name": "dropped",
+   "commands": [
+    "setblock 2 70 2 minecraft:sand",
+    "setblock 4 70 2 minecraft:gravel",
+    "setblock 4 71 2 minecraft:gravel",
+    "setblock 4 72 2 minecraft:gravel",
+    "setblock 10 70 2 minecraft:white_concrete_powder",
+    "setblock 6 72 6 minecraft:sand"
+   ],
+   "ticks": 3
+  },
+  {
+   "name": "landed",
+   "commands": [],
+   "ticks": 40
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "landed",
+   "check": "block",
+   "pos": [
+    2,
+    64,
+    2
+   ],
+   "equals": "minecraft:sand"
+  },
+  {
+   "phase": "landed",
+   "check": "block",
+   "pos": [
+    6,
+    64,
+    6
+   ],
+   "equals": "minecraft:torch"
+  }
+ ]
+}

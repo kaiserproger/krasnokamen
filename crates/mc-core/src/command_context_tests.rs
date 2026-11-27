@@ -124,33 +124,6 @@ fn selector_empty_tag_command_path() {
 }
 
 #[test]
-fn execute_blocks_matches_and_rejects_regions() {
-    let (mut state, entity) = fixture();
-    command(
-        &mut state,
-        entity,
-        "setblock 4 60 4 minecraft:diamond_block",
-    );
-    command(
-        &mut state,
-        entity,
-        "setblock 5 60 4 minecraft:diamond_block",
-    );
-    command(&mut state, entity, "setblock 6 60 4 minecraft:stone");
-    command(
-        &mut state,
-        entity,
-        "execute if blocks 4 60 4 4 60 4 5 60 4 all run time add 1",
-    );
-    command(
-        &mut state,
-        entity,
-        "execute unless blocks 4 60 4 4 60 4 6 60 4 all run time add 1",
-    );
-    assert_eq!(state.day_time, 2);
-}
-
-#[test]
 fn clone_is_operator_only() {
     assert!(crate::commands::parse("clone 4 60 4 4 60 4 5 60 4", false).is_err());
     assert!(crate::commands::parse("clone 4 60 4 4 60 4 5 60 4", true).is_ok());

@@ -1,6 +1,32 @@
 //! Visual entity events and explosion packets.
 use super::*;
 
+/// A sound played at an entity's position, as vanilla `ClientboundSoundEntity`.
+/// `source` is the vanilla `SoundSource` id (7 = players); the entity id seeds
+/// the pitch jitter, so a resend sounds the same.
+fn push_entity_sound(
+    out: &mut Vec<PlannedPacket>,
+    conn: ConnectionId,
+    entity: EntityId,
+    sound: &str,
+    source: i32,
+    volume: f32,
+) {
+    push_best_effort(
+        out,
+        conn,
+        &mc_protocol::packets::play::ClientboundSoundEntity {
+            sound: mc_protocol::codec::Identifier::parse(sound).expect("static entity sound"),
+            source,
+            entity_id: entity.0,
+            fixed_range: None,
+            volume,
+            pitch: 1.0,
+            seed: i64::from(entity.0),
+        },
+    );
+}
+
 pub(super) fn push_entity_event(
     out: &mut Vec<PlannedPacket>,
     conn: ConnectionId,
@@ -25,21 +51,13 @@ pub(super) fn push_entity_event(
             let angle = f64::from(yaw).to_radians();
             let dx = -angle.sin();
             let dz = angle.cos();
-            push_best_effort(
+            push_entity_sound(
                 out,
                 conn,
-                &mc_protocol::packets::play::ClientboundSoundEntity {
-                    sound: mc_protocol::codec::Identifier::parse(
-                        "minecraft:entity.player.attack.sweep",
-                    )
-                    .expect("sweep sound identifier"),
-                    source: 7,
-                    entity_id: entity.0,
-                    fixed_range: None,
-                    volume: 1.0,
-                    pitch: 1.0,
-                    seed: i64::from(entity.0),
-                },
+                entity,
+                "minecraft:entity.player.attack.sweep",
+                7,
+                1.0,
             );
             push_best_effort(
                 out,
@@ -51,43 +69,31 @@ pub(super) fn push_entity_event(
             );
         }
         EntityEvent::ShieldBlock { entity, disabled } => {
-            push_best_effort(
+            push_entity_sound(
                 out,
                 conn,
-                &mc_protocol::packets::play::ClientboundSoundEntity {
-                    sound: mc_protocol::codec::Identifier::parse(if disabled {
-                        "minecraft:item.shield.break"
-                    } else {
-                        "minecraft:item.shield.block"
-                    })
-                    .expect("shield sound identifier"),
-                    source: 7, // SoundSource.PLAYERS
-                    entity_id: entity.0,
-                    fixed_range: None,
-                    volume: if disabled { 0.8 } else { 1.0 },
-                    pitch: 1.0,
-                    seed: i64::from(entity.0),
+                entity,
+                if disabled {
+                    "minecraft:item.shield.break"
+                } else {
+                    "minecraft:item.shield.block"
                 },
+                7,
+                if disabled { 0.8 } else { 1.0 },
             );
         }
         EntityEvent::GoldenDandelion { entity, locked } => {
-            push_best_effort(
+            push_entity_sound(
                 out,
                 conn,
-                &mc_protocol::packets::play::ClientboundSoundEntity {
-                    sound: mc_protocol::codec::Identifier::parse(if locked {
-                        "minecraft:item.golden_dandelion.use"
-                    } else {
-                        "minecraft:item.golden_dandelion.unuse"
-                    })
-                    .expect("golden dandelion sound identifier"),
-                    source: 7,
-                    entity_id: entity.0,
-                    fixed_range: None,
-                    volume: 1.0,
-                    pitch: 1.0,
-                    seed: i64::from(entity.0),
+                entity,
+                if locked {
+                    "minecraft:item.golden_dandelion.use"
+                } else {
+                    "minecraft:item.golden_dandelion.unuse"
                 },
+                7,
+                1.0,
             );
         }
         EntityEvent::Bottle {
@@ -95,23 +101,17 @@ pub(super) fn push_entity_event(
             empty,
             cauldron,
         } => {
-            push_best_effort(
+            push_entity_sound(
                 out,
                 conn,
-                &mc_protocol::packets::play::ClientboundSoundEntity {
-                    sound: mc_protocol::codec::Identifier::parse(if empty {
-                        "minecraft:item.bottle.empty"
-                    } else {
-                        "minecraft:item.bottle.fill"
-                    })
-                    .expect("bottle sound identifier"),
-                    source: if cauldron { 4 } else { 6 },
-                    entity_id: entity.0,
-                    fixed_range: None,
-                    volume: 1.0,
-                    pitch: 1.0,
-                    seed: i64::from(entity.0),
+                entity,
+                if empty {
+                    "minecraft:item.bottle.empty"
+                } else {
+                    "minecraft:item.bottle.fill"
                 },
+                if cauldron { 4 } else { 6 },
+                1.0,
             );
         }
         EntityEvent::Swing {
@@ -201,10 +201,10 @@ pub(super) fn push_entity_event(
 /// Visual-only blast range (vanilla 64); addressed impulses bypass this bound.
 pub(super) const EXPLOSION_RANGE_SQ: f64 = 64.0 * 64.0;
 
-/// The explode packet of a blast, as the vanilla TNT fixture shapes it
-/// (26.3 ids: particle explosion_emitter 29, sound reference
-/// entity.generic.explode 703, poof 69 / smoke 72 block particles):
-/// The publish-wide index supplies an already summed recipient impulse.
+/// The blast packet, shaped as the vanilla TNT fixture sends it: 26.3 ids
+/// `explosion_emitter` 29, sound `entity.generic.explode` 703, block particles
+/// poof 69 and smoke 72. The publish-wide index supplies an already summed
+/// recipient impulse.
 pub(super) fn explode_packet(
     explosion: &mc_core::boundary::ExplosionEvent,
     knockback: Option<[f64; 3]>,

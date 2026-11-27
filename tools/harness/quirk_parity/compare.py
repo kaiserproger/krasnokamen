@@ -1,6 +1,7 @@
 """Snapshot comparison and oracle self-check for the quirk/farm parity gate."""
 from __future__ import annotations
 
+import hashlib
 from collections import Counter
 from typing import Any
 
@@ -40,55 +41,82 @@ def block_diff(vanilla: dict, krasnokamen: dict, ignore: list[str]) -> list[dict
     return diffs
 
 
-def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
+def _none_last(values: tuple) -> tuple:
+    return tuple((value is None, value if value is not None else 0) for value in values)
+
+
+def _close(a: Any, b: Any, epsilon: float) -> bool:
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(a - b) <= epsilon
+    return a == b
+
+
+Row = tuple[str, Any, Any]  # (observable path, vanilla value, Krasnokamen value)
+
+
+def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
+                     prefix: str = "", wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
     """Compare one snapshot; multi-cell snapshots are compared cell by cell.
 
     A cell list present on only one side, or with a different length, is itself a
     difference: zipping unequal lists would drop the unmatched tail observations
     and pass a truncated or padded receipt as a match.
+
+    `rows` (when given) receives every difference as an observable path with both values;
+    a path listed in `wildcards` (differs between two vanilla recordings) is no difference.
     """
+    rows = [] if rows is None else rows
     va_cells = vanilla.get("cells")
     so_cells = krasnokamen.get("cells")
     if va_cells is not None or so_cells is not None:
         if va_cells is None or so_cells is None:
             missing = "vanilla" if va_cells is None else "Krasnokamen"
+            rows.append((f"{prefix}cells", va_cells is not None, so_cells is not None))
             return {"cells": {"error": f"per-cell snapshot missing from {missing}"}}
         if len(va_cells) != len(so_cells):
+            rows.append((f"{prefix}cells", len(va_cells), len(so_cells)))
             return {"cells": {"error":
                               f"cell count differs: vanilla {len(va_cells)}, Krasnokamen {len(so_cells)}"}}
         cells = {}
         for index, (va, so) in enumerate(zip(va_cells, so_cells)):
-            diff = compare_cell(spec, va, so)
+            diff = compare_cell(spec, va, so, rows, f"{prefix}cells/{index}/", wildcards)
             if diff:
                 cells[str(index)] = diff
         return {"cells": cells} if cells else {}
-    return compare_cell(spec, vanilla, krasnokamen)
+    return compare_cell(spec, vanilla, krasnokamen, rows, prefix, wildcards)
 
 
-def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
+def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
+                 prefix: str = "", wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
+    rows = [] if rows is None else rows
     out: dict[str, Any] = {}
     if spec.get("blocks", "exact") == "exact":
-        diffs = block_diff(vanilla["blocks"], krasnokamen["blocks"], spec.get("ignore_blocks", []))
+        diffs = [d for d in block_diff(vanilla["blocks"], krasnokamen["blocks"], spec.get("ignore_blocks", []))
+                 if f"{prefix}blocks/{d['pos']}" not in wildcards]
+        rows += [(f"{prefix}blocks/{d['pos']}", d["vanilla"], d["krasnokamen"]) for d in diffs]
         if diffs:
             out["blocks"] = {"count": len(diffs), "first": diffs[:MAX_DIFFS]}
+    if spec.get("containers", "exact") == "exact":
+        a, b = vanilla.get("containers", {}), krasnokamen.get("containers", {})
+        found = {pos: {"vanilla": a.get(pos), "krasnokamen": b.get(pos)}
+                 for pos in sorted(set(a) | set(b))
+                 if a.get(pos) != b.get(pos) and f"{prefix}containers/{pos}" not in wildcards}
+        rows += [(f"{prefix}containers/{pos}", row["vanilla"], row["krasnokamen"]) for pos, row in found.items()]
+        if found:
+            out["containers"] = found
     if spec.get("entities", "counts") == "counts":
         a = entity_counts(vanilla["entities"], spec)
         b = entity_counts(krasnokamen["entities"], spec)
         tolerance = spec.get("entity_tolerance", 0)
-        rows = {}
+        found = {}
         for key in sorted(set(a) | set(b)):
-            if abs(a[key] - b[key]) > tolerance:
-                rows[key] = {"vanilla": a[key], "krasnokamen": b[key]}
-        if rows:
-            out["entities"] = rows
-    if spec.get("containers", "exact") == "exact":
-        a, b = vanilla.get("containers", {}), krasnokamen.get("containers", {})
-        rows = {pos: {"vanilla": a.get(pos), "krasnokamen": b.get(pos)}
-                for pos in sorted(set(a) | set(b)) if a.get(pos) != b.get(pos)}
-        if rows:
-            out["containers"] = rows
+            if abs(a[key] - b[key]) > tolerance and f"{prefix}entities/{key}" not in wildcards:
+                found[key] = {"vanilla": a[key], "krasnokamen": b[key]}
+                rows.append((f"{prefix}entities/{key}", a[key], b[key]))
+        if found:
+            out["entities"] = found
     positions = spec.get("entity_positions")
-    if positions:
+    if positions and f"{prefix}entity_positions" not in wildcards:
         epsilon = positions.get("epsilon", 0.01)
         want = set(positions["types"])
         pa = sorted(tuple(round(c, 6) for c in e["pos"]) for e in vanilla["entities"] if e["type"] in want)
@@ -96,16 +124,37 @@ def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]
         if len(pa) != len(pb) or any(
                 any(abs(x - y) > epsilon for x, y in zip(u, v)) for u, v in zip(pa, pb)):
             out["entity_positions"] = {"vanilla": pa[:MAX_DIFFS], "krasnokamen": pb[:MAX_DIFFS]}
+            rows.append((f"{prefix}entity_positions", pa[:MAX_DIFFS], pb[:MAX_DIFFS]))
+    fields = spec.get("entity_fields")
+    if fields:
+        epsilon = fields.get("epsilon", 0.01)
+        for kind in fields["types"]:
+            path = f"{prefix}entity_fields/{kind}"
+            if path in wildcards:
+                continue
+            va, so = (sorted((tuple(e.get(name) for name in fields["fields"])
+                              for e in side["entities"] if e["type"] == kind), key=_none_last)
+                      for side in (vanilla, krasnokamen))
+            if len(va) != len(so) or not all(_close(x, y, epsilon) for u, v in zip(va, so) for x, y in zip(u, v)):
+                out.setdefault("entity_fields", {})[kind] = {"vanilla": va[:MAX_DIFFS], "krasnokamen": so[:MAX_DIFFS]}
+                rows.append((path, va[:MAX_DIFFS], so[:MAX_DIFFS]))
     return out
 
 
-def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
+def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict, rows: list[Row] | None = None,
+                     wildcards: frozenset[str] = frozenset()) -> dict[str, Any]:
     """Return {"phases": {name: diff}, "match": bool}.
 
     Traces are compared only when the scenario root enables ``trace`` — the same
     key the drivers read to record them; ``compare`` holds comparison rules, not
     the trace switch.
+
+    `rows` receives the differences as observable paths in timeline order: phases in
+    receipt order, a phase's per-tick trace before its end-of-phase snapshot, and inside
+    one snapshot blocks, containers, entity counts, entity positions. The first row of a
+    timeline is where the servers started to differ (`mismatch_groups`).
     """
+    rows = [] if rows is None else rows
     spec = scenario.get("compare", {})
     only = set(spec.get("phases", []))
     phases: dict[str, Any] = {}
@@ -117,8 +166,9 @@ def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[s
         other = by_name.get(name)
         if other is None:
             phases[name] = {"error": "phase missing from Krasnokamen receipt"}
+            rows.append((name, "present", None))
             continue
-        diff = compare_snapshot(spec, phase["snapshot"], other["snapshot"])
+        trace_diff: dict[str, Any] | None = None
         # Both drivers record no trace for the initial "setup" phase (always the
         # first receipt entry) but record one for every declared phase when the
         # scenario enables traces, even when the phase has zero ticks. A
@@ -128,21 +178,27 @@ def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[s
             va_trace, so_trace = phase.get("trace"), other.get("trace")
             if va_trace is None and so_trace is None:
                 if not (index == 0 and name == "setup"):
-                    diff["trace"] = {"error": "trace missing from both phase receipts"}
+                    trace_diff = {"error": "trace missing from both phase receipts"}
+                    rows.append((f"{name}/trace", None, None))
             elif va_trace is None or so_trace is None:
                 missing = "vanilla" if va_trace is None else "Krasnokamen"
-                diff["trace"] = {"error": f"trace missing from {missing} phase receipt"}
+                trace_diff = {"error": f"trace missing from {missing} phase receipt"}
+                rows.append((f"{name}/trace", va_trace is not None, so_trace is not None))
             elif len(va_trace) != len(so_trace):
-                diff["trace"] = {"error":
-                                 f"trace length differs: vanilla {len(va_trace)}, Krasnokamen {len(so_trace)}"}
+                trace_diff = {"error":
+                              f"trace length differs: vanilla {len(va_trace)}, Krasnokamen {len(so_trace)}"}
+                rows.append((f"{name}/trace", len(va_trace), len(so_trace)))
             else:
-                rows = {}
+                ticks = {}
                 for tick, (va, so) in enumerate(zip(va_trace, so_trace)):
-                    tick_diff = compare_snapshot(spec, va, so)
+                    tick_diff = compare_snapshot(spec, va, so, rows, f"{name}/trace/{tick + 1}/", wildcards)
                     if tick_diff:
-                        rows[str(tick + 1)] = tick_diff
-                if rows:
-                    diff["trace"] = rows
+                        ticks[str(tick + 1)] = tick_diff
+                if ticks:
+                    trace_diff = ticks
+        diff = compare_snapshot(spec, phase["snapshot"], other["snapshot"], rows, f"{name}/", wildcards)
+        if trace_diff is not None:
+            diff["trace"] = trace_diff
         if diff:
             phases[name] = diff
     # Both drivers emit the same phase names for one scenario; an extra phase on
@@ -154,7 +210,36 @@ def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[s
         if name in vanilla_names or (only and name not in only):
             continue
         phases[name] = {"error": "phase not present in vanilla receipt"}
+        rows.append((name, None, "present"))
     return {"phases": phases, "match": not phases}
+
+
+def mismatch_id(case_id: str, path: str) -> str:
+    """Stable id of one divergence: the same first differing path of the same case keeps its id."""
+    return hashlib.sha256(f"{case_id}\n{path}".encode()).hexdigest()[:12]
+
+
+def mismatch_groups(case_id: str, rows: list[Row], limit: int = 20) -> list[dict[str, Any]]:
+    """Group difference rows by the first differing path of each independent timeline.
+
+    Cells of a multi-box scenario are independent timelines; everything else is one.
+    Later rows of a timeline are usually consequences of its first one, so they are
+    listed under it instead of becoming separate mismatches.
+    """
+    groups: dict[str, dict[str, Any]] = {}
+    for path, vanilla, krasnokamen in rows:
+        parts = path.split("/")
+        cell = next((f"cells/{parts[i + 1]}" for i, part in enumerate(parts[:-1])
+                     if part == "cells" and parts[i + 1].isdigit()), "")
+        group = groups.get(cell)
+        if group is None:
+            groups[cell] = {"mismatch_id": mismatch_id(case_id, path), "path": path,
+                            "vanilla": vanilla, "krasnokamen": krasnokamen, "rows": 1, "later_paths": []}
+            continue
+        group["rows"] += 1
+        if len(group["later_paths"]) < limit:
+            group["later_paths"].append(path)
+    return list(groups.values())
 
 
 def check_vanilla(scenario: dict, vanilla: dict) -> list[str]:

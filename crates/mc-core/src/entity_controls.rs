@@ -80,7 +80,7 @@ pub(crate) fn blocks_damage(
     state: &crate::tick::TickState,
     slot: crate::entities::EntitySlot,
     kind: crate::survival::DamageKind,
-    attacker: Option<crate::boundary::EntityId>,
+    attacker: Option<mc_domain::EntityId>,
 ) -> bool {
     state.entities.row(slot).controls.invulnerable
         && !kind.bypasses_invulnerability()
@@ -98,11 +98,11 @@ pub(crate) fn sync_no_gravity(appearance: &mut crate::boundary::EntityAppearance
         .iter_mut()
         .find(|(index, _)| *index == DATA_NO_GRAVITY)
     {
-        *current = crate::boundary::EntityDataValue::Boolean(value);
+        *current = mc_data::entity_data_value::EntityDataValue::Boolean(value);
     } else if value {
         appearance.extra.push((
             DATA_NO_GRAVITY,
-            crate::boundary::EntityDataValue::Boolean(true),
+            mc_data::entity_data_value::EntityDataValue::Boolean(true),
         ));
     }
 }

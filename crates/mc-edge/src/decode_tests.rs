@@ -672,7 +672,7 @@ fn punch_before_or_after_attack_never_adds_a_second_attack_intent() {
             inputs,
             vec![PlayerInput::Attack {
                 connection: conn(),
-                target: mc_core::boundary::EntityId(159),
+                target: mc_domain::EntityId(159),
             }],
             "animation has no independent intent that could reset combat strength"
         );
@@ -692,7 +692,7 @@ fn attack_and_interact_decode() {
         out,
         vec![PlayerInput::Attack {
             connection: conn(),
-            target: mc_core::boundary::EntityId(42),
+            target: mc_domain::EntityId(42),
         }]
     );
     let bytes = body(&ServerboundInteract {
@@ -714,7 +714,7 @@ fn attack_and_interact_decode() {
         out,
         vec![PlayerInput::InteractEntity {
             connection: conn(),
-            target: mc_core::boundary::EntityId(43),
+            target: mc_domain::EntityId(43),
             hand: Hand::Off,
             location: [location.x, location.y, location.z],
         }]
@@ -1244,7 +1244,7 @@ fn vehicle_move_and_secondary_interaction_preserve_authority_inputs() {
             .unwrap()
             .as_slice(),
         [PlayerInput::InteractEntitySecondary {
-            target: mc_core::boundary::EntityId(43),
+            target: mc_domain::EntityId(43),
             ..
         }]
     ));

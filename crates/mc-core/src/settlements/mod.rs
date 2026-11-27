@@ -55,8 +55,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeS
     elapsed
 }
 
-use crate::boundary::EntityId;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Bind the exact native entity, never create a replacement NPC or roster row.
 pub(crate) fn bind(

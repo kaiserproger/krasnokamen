@@ -1499,11 +1499,10 @@ fn weather_gap_lightning_transforms_charges_and_damages_items_and_turtles() {
     );
     let row = state.entities.row(state.entities.slot_of(creeper).unwrap());
     assert!(row.entity_life.charged_lightning);
-    assert!(
-        row.appearance
-            .extra
-            .contains(&(17, crate::boundary::EntityDataValue::Boolean(true)))
-    );
+    assert!(row.appearance.extra.contains(&(
+        17,
+        mc_data::entity_data_value::EntityDataValue::Boolean(true)
+    )));
     assert_eq!(row.health, 15.0);
     let row = state
         .entities
@@ -1699,7 +1698,7 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             !appearance.extra.iter().any(|(index, _)| *index == 3),
             "must not corrupt custom-name visibility"
         );
-        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, mc_data::entity_data_value::EntityDataValue::ChickenVariant(v) if *v == expected)));
         let dandelion = item(&state, "minecraft:golden_dandelion");
         state.players.get_mut(&owner).unwrap().inventory.slots[0] = dandelion;
         assert!(crate::golden_dandelion::interact(
@@ -1713,8 +1712,11 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             .row(state.entities.slot_of(chicken).unwrap())
             .appearance;
         assert!(appearance.extra.iter().any(|(index, value)| *index == 17
-            && matches!(value, crate::boundary::EntityDataValue::Boolean(true))));
-        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+            && matches!(
+                value,
+                mc_data::entity_data_value::EntityDataValue::Boolean(true)
+            )));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, mc_data::entity_data_value::EntityDataValue::ChickenVariant(v) if *v == expected)));
         let uuid = state
             .entities
             .row(state.entities.slot_of(chicken).unwrap())
@@ -1758,8 +1760,11 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             .row(state.entities.slot_of(chicken).unwrap())
             .appearance;
         assert!(appearance.extra.iter().any(|(index, value)| *index == 17
-            && matches!(value, crate::boundary::EntityDataValue::Boolean(true))));
-        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, crate::boundary::EntityDataValue::ChickenVariant(v) if *v == expected)));
+            && matches!(
+                value,
+                mc_data::entity_data_value::EntityDataValue::Boolean(true)
+            )));
+        assert!(appearance.extra.iter().any(|(index, value)| *index == 18 && matches!(value, mc_data::entity_data_value::EntityDataValue::ChickenVariant(v) if *v == expected)));
     }
 }
 

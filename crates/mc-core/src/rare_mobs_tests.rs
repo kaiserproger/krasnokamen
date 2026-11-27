@@ -1,8 +1,8 @@
-use crate::boundary::EntityId;
 use crate::dimensions::Dimension;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::journal::{JournalWriter, replay_batches};
 use crate::tick::{TickState, run_tick};
+use mc_domain::EntityId;
 
 fn spawn(state: &mut TickState, name: &str, pos: [f64; 3]) -> EntityId {
     let type_id = state

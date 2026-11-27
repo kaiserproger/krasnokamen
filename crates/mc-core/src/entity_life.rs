@@ -7,10 +7,11 @@ use std::sync::Arc;
 use mc_data::{Identifier, ItemStack};
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{EntityId, Hand};
+use crate::boundary::Hand;
 use crate::entities::{ColdRow, EntityKind};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::{TickState, spawn_item_entity};
+use mc_domain::EntityId;
 
 #[path = "entity_life_breeding.rs"]
 pub(crate) mod breeding;
@@ -83,7 +84,9 @@ pub(crate) fn snow_golem_pumpkin_flags(appearance: &crate::boundary::EntityAppea
         .extra
         .iter()
         .find_map(|(index, value)| match value {
-            crate::boundary::EntityDataValue::Byte(flags) if *index == SNOW_GOLEM_PUMPKIN_INDEX => {
+            mc_data::entity_data_value::EntityDataValue::Byte(flags)
+                if *index == SNOW_GOLEM_PUMPKIN_INDEX =>
+            {
                 Some(*flags as u8)
             }
             _ => None,
@@ -101,7 +104,7 @@ pub(crate) fn set_snow_golem_pumpkin(
     } else {
         flags & !SNOW_GOLEM_PUMPKIN_BIT
     };
-    let value = crate::boundary::EntityDataValue::Byte(flags as i8);
+    let value = mc_data::entity_data_value::EntityDataValue::Byte(flags as i8);
     match appearance
         .extra
         .iter_mut()
@@ -327,7 +330,9 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
         appearance.extra.retain(|(index, _)| *index != 18);
         appearance.extra.push((
             18,
-            crate::boundary::EntityDataValue::VarInt(i32::from(row.entity_life.brown_mooshroom)),
+            mc_data::entity_data_value::EntityDataValue::VarInt(i32::from(
+                row.entity_life.brown_mooshroom,
+            )),
         ));
     }
     if contract.name == "minecraft:creeper" {
@@ -335,7 +340,7 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
         appearance.extra.retain(|(index, _)| *index != 17);
         appearance.extra.push((
             17,
-            crate::boundary::EntityDataValue::Boolean(row.entity_life.charged_lightning),
+            mc_data::entity_data_value::EntityDataValue::Boolean(row.entity_life.charged_lightning),
         ));
     }
 }
@@ -347,7 +352,7 @@ fn inherited_variant(
     actor: EntityId,
     partner: EntityId,
     type_id: u32,
-) -> Option<(u8, crate::boundary::EntityDataValue)> {
+) -> Option<(u8, mc_data::entity_data_value::EntityDataValue)> {
     let name = &state.registry.blueprint(type_id)?.name;
     let (index, _) = crate::blueprint::variant_data(name, 0)?;
     let (low, high) = if actor < partner {

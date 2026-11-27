@@ -14,9 +14,10 @@ use mc_data::block_tools::{BlockToolRule, CLICKED_FACE, COPY_PREFIX, ToolFace};
 use mc_data::{Identifier, ItemStack};
 use mc_world::{BlockRegistry, BlockState, BlockStateId};
 
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_placement::Face;
 
 const FACES: [Face; 6] = [

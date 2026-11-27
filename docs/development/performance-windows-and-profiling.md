@@ -14,8 +14,8 @@ This page owns measurement method, not a second catalog.
    It freezes builds, drains tests/servers and serializes measurement; no GO.
    [Runner lock/lane rules](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28)
    apply, including scene-before-exclusive ordering.
-3. `tools/dev/measurement-windows` and the existing announcement plan own
-   allocations (recurring 01:00–02:30 plus dated grants). Expired grants do not
+3. `tools/dev/measurement-windows` owns allocations: owner-dated grants only
+   (the daily 01:00–02:30 baseline was removed on 2026-11-16). Expired grants do not
    recur. Outside grant = refusal, not permission to bypass it. Only Main may
    explicitly authorize override; reassign before next cell, never mid-cell.
 4. Report gate status, p50/p95/p99, stage breakdown, CPU time/tick and raw profile path.
@@ -170,7 +170,7 @@ failure a server bug.
 Durable optimization boundaries:
 
 - Quiescence caches prove geometric absence, never suppress live burn/fire/
-  portal timers. [Tick-anchor projection](lessons.md) replaces journaled
+  portal timers. [Tick-anchor projection](../PITFALLS.md#code) replaces journaled
   per-tick counters. Transparent huge pages had no measurable gain (2026-10-18).
 - Contact work classifies on pool; serial owner receives only live burn,
   feet-cauldron or real-hazard rows. Section palettes are coarse, so pool checks
@@ -182,7 +182,7 @@ Durable optimization boundaries:
   ignored roofed 100-player/104k-mob test. Outside measurement, build with
   `<work>/solaris/tools/dev/pin-release <absolute-tree> --core-tests --no-incremental`;
   run the printed release test executable under `-p` with phase logs. The tool
-  uses the ordinary build lane and a 12G cap; do not use ad-hoc `cargo test --release`.
+  runs under a 12G cap; do not use ad-hoc `cargo test --release`.
 - Commit laps split `merchant_mounts_allay` into merchant/mounts/allay/
   equipment_pickup. 3000 mature items exposed collector selection at 1.2–1.5 ms;
   it now scans `MOTION_ITEM_COLLECTOR`, not cold type rows. Egg clocks run on
@@ -210,8 +210,8 @@ not real-protocol capacity. `N100_MOBS=104000` (multiple of eight),
 `N100_VILLAGERS=64` defaults; 100 in-process players, 60 real ticks.
 100k/20k PGO training **and every candidate** use `N100_MOBS=100000
 N100_VILLAGERS=20000`. Outside measurement, build with Main's absolute
-`<work>/solaris/tools/dev/pin-release <absolute-tree> --core-tests --no-incremental`
-in the ordinary build lane; run its printed executable with
+`<work>/solaris/tools/dev/pin-release <absolute-tree> --core-tests --no-incremental`;
+run its printed executable with
 `--ignored --nocapture native100_like_entity_phase_micro` in `-x -p`.
 NATIVE100 samples contain total ms and test-only villager brain/roster µs;
 seven `villager_phase_us` counters (refresh/admission/evaluation/social/

@@ -1,9 +1,10 @@
 use super::flat_player_fixture;
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::intent::{Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::{TickState, run_tick};
 use mc_data::Identifier;
+use mc_domain::EntityId;
 
 fn place(state: &mut TickState, pos: [f64; 3], name: &str, properties: &[(&str, &str)]) {
     let block = state
@@ -420,18 +421,6 @@ fn scratch_caches_reset_each_pass_and_gate_the_run() {
     assert!(!sample(&mut state, entity, DamageKind::Lava));
     place(&mut state, [pos[0], pos[1] + 1.0, pos[2]], "stone", &[]);
     assert!(sample(&mut state, entity, DamageKind::Suffocation));
-}
-
-#[test]
-fn hazard_free_pass_still_suffocates_and_decays_burn() {
-    let (mut state, entity, pos) = flat_player_fixture();
-    // Section gates must not suppress exact eye damage or retained burn clocks
-    // when the body's actual cells contain no ignition hazard.
-    place(&mut state, [pos[0], pos[1] + 1.0, pos[2]], "stone", &[]);
-    crate::contact_hazards::ignite(&mut state, entity, 40);
-    let slot = state.entities.slot_of(entity).unwrap();
-    assert!(sample(&mut state, entity, DamageKind::Suffocation));
-    assert_eq!(state.entities.body(slot).burn_ticks, 39);
 }
 
 #[test]

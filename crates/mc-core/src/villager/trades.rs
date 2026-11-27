@@ -1,6 +1,6 @@
 //! Trade tables and atomic payment/result transitions on the tick owner.
 use super::{Gossip, VillagerProfession, VillagerState, VillagerTradeOffer};
-use crate::boundary::{ClickMode, EntityId};
+use crate::boundary::ClickMode;
 use crate::inventory::{ItemRules, Menu, PlayerInventory};
 use crate::registry::CoreRegistry;
 use mc_data::ItemStack;
@@ -8,6 +8,7 @@ use mc_data::inventory_semantics_26_1_2::{can_stack, take_from_stack};
 use mc_data::villager_trades_26_1_2::{
     profession_level_offers_26_1_2, villager_level_for_xp_26_1_2,
 };
+use mc_domain::EntityId;
 use uuid::Uuid;
 
 pub(crate) fn hero_discount(base: i32, hero: Option<u8>) -> i32 {

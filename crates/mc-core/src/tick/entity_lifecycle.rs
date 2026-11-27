@@ -130,7 +130,7 @@ impl TickState {
             let color = crate::blueprint::natural_wool_color(roll as u64, (roll >> 64) as u64);
             appearance.extra.push((
                 crate::blueprint::SHEEP_WOOL_DATA_INDEX,
-                crate::boundary::EntityDataValue::Byte(color as i8),
+                mc_data::entity_data_value::EntityDataValue::Byte(color as i8),
             ));
         }
         let appearance = Arc::new(appearance);
