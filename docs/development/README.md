@@ -16,7 +16,7 @@ in Git history (`git log -p -- docs/development/<page>.md`).
 | create a worktree, deliver a patch, integrate a branch, freeze a build | [Worktrees, patches and integration](worktrees-and-integration.md) |
 | launch, brief, message or recover agents | [Running agents](agent-fleet.md) |
 | run or add a real-client gate, compare against vanilla, smoke a server with a client | [Real-client gates](real-client-gates.md) |
-| debug a failing live gate or plugin | [Triage of failing live gates](live-gate-triage.md) |
+| debug a failing live gate or plugin | [Receipts and failure diagnosis](../AGENT_TOOLING.md#receipts-and-failure-diagnosis), [pitfalls](../PITFALLS.md#live-gates-and-plugins) |
 | accept horizon LOD output | [Horizon LOD acceptance](horizon-lod-acceptance.md) |
 | measure performance or profile | [Performance windows and profiling](performance-windows-and-profiling.md) |
 | run protocol-bot load against a release server | [Catalog load](catalog-load.md) |

@@ -445,8 +445,16 @@ calls are not statically proven.
   halves, then require the exact bed raycast and rendered capture; a found path,
   bed row or wall screenshot does not replace that, and saved-world route proofs
   are not fresh-seed acceptance.
-- Graphical failures: [real-client gates](development/real-client-gates.md),
-  [live-gate triage](development/live-gate-triage.md).
+- Verify each hypothesis in source or logs before spending another 5–60 minute
+  run. Stacked causes hide each other: fix them in the order they appear and
+  rerun once per fix; when many fixtures fail the same way, look for the shared
+  source state, not each target.
+- When the harness cannot reach crate-private state, add temporary
+  `eprintln!`/`tracing` lines with one unique marker, run one serial gate so
+  stderr lands in the server log, turn the finding into a failing-first test,
+  then remove every trace (grep for zero markers) and rerun.
+- Graphical failures: [real-client gates](development/real-client-gates.md);
+  causes already seen: [pitfalls](PITFALLS.md#live-gates-and-plugins).
 
 ## Java and Loader client launch (`client`)
 

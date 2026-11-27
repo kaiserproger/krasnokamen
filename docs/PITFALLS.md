@@ -81,6 +81,13 @@ command's own exit (`${PIPESTATUS[0]}` or the harness `result.json`), and give
 every scan a positive control that must be found. Check: break it once (make
 the build fail, hide a known citation) and see the check fail.
 
+**A relayed number was wrong.** An owner decision (D60, 2026-11-19) quoted
+"96/96 green" for a driver that number never described and an 8/8 helper count
+for the failed script, both passed along from other agents' reports. Never
+forward an agent's or advisor's claim as fact: read the receipt or the
+`file:line` yourself. Check: every number in a report names the receipt it
+came from.
+
 ## The owner host
 
 **A relative path edited Main instead of the worktree.** File tools resolve a
@@ -128,6 +135,57 @@ cases too; above a load of about 4 only ratios within one session count. Check:
 record `uptime` and the pin manifest beside every number
 ([performance windows](development/performance-windows-and-profiling.md)).
 
+## Live gates and plugins
+
+Start a failing gate from its receipt
+([receipts and failure diagnosis](AGENT_TOOLING.md#receipts-and-failure-diagnosis)),
+and classify it (fixture, environment, stale binary, product) before you change
+product code.
+
+**A gate ran a stale or foreign binary.** `cargo test` does not rebuild the
+`krasnokamen` binary; pooled target directories once served another tree's
+artifacts (an `unresolved import` of a known symbol, new tests silently
+absent); `touch crates/*/src/main.rs` to force a rebuild created empty bin
+targets (E0601) and an empty `crates/xtask/src/lib.rs`. A gate counts only for
+the binary, plugin package and content it ran. Check: the receipt names the
+server binary's path and SHA-256, and it matches the pin you meant.
+
+**A broad fix let read-only actions mutate.** A "status poll completes pending
+work" reconciliation let a pending start intent leak into a mutation path. A
+reconciliation fix names the exact case it handles (action, intent, state,
+epoch), and read-only actions never mutate on a generic condition. Check:
+restore the broad condition once and watch the fix's test fail.
+
+**Every plugin command went silent after one step.** The host retires an
+instance after an invalid guest answer; causes seen were an operation id outside
+`[a-z0-9_-]` or over `MAX_SCRIPT_ID_BYTES` (64), and a storage value over
+`MAX_PLUGIN_STORAGE_VALUE_BYTES` (4096) built from an unbounded list. Bound the
+value in the plugin (or store a digest) and unit-test the worst case. Check:
+`grep 'plugin instance retired' server.log`.
+
+**A WIT change broke every prebuilt plugin.** After a WIT change each old
+`plugin.wasm` failed at load (`failed to convert function to given type`); a
+guest's API version must equal `COMPONENT_PLUGIN_API_VERSION`. Rebuild every
+first-party package and bump each `plugin.toml` in the same change; a capability
+name core's manifest parser does not know is a core bug. Check: the standard
+pack loads on the changed core.
+
+**A shared plugin candidate gave passes that proved nothing.** Gates that ran on
+a candidate other agents wrote into, or rebuilt in place, could not be tied to
+one core state, and the pack fingerprint fails when inputs change mid-build.
+Build each candidate into a new directory with
+`../solaris-default-plugins/tools/build_standard_pack.py`, one per core state,
+and hand over write ownership explicitly; passes on mixed candidates are
+provisional. Check: the candidate's `content-receipt.json` input hashes match
+the sources you changed.
+
+**Admission was reported as completion.** An `Applied` move receipt proves the
+slot and route check only; the body could still never arrive, and refusal-only
+receipts said nothing about the feature working. Arrival or cancellation comes
+from a later query of native state; acceptance needs world evidence (block
+states before and after, item transfers), not reply strings or HP loss. Check:
+the gate asserts the world change ([durable operation receipts](plugins/OPERATIONS.md#native-server)).
+
 ## Code
 
 **Per-tick fields journaled as full images flooded the WAL.** Writing an entity
@@ -160,3 +218,20 @@ only broader player-path checks found them (2026-10-31). A release candidate
 passes the player path on every advertised client and loader before the tag.
 Check: the [break-it protocol](QA_AGENT_PROTOCOL.md) receipt covers each
 advertised client.
+
+**An idle player's client stalled.** The server sent nothing to an idle player,
+and the vanilla client stopped. Send `SetTime` periodically, as vanilla does
+every 20 ticks. Check: an idle client stays connected past the keepalive window.
+
+**A same-dimension respawn left the client on the loading screen.** The respawn
+burst lacked GameEvent 13 (start waiting for chunks), and the server did not
+forget and resend the view. Send both. Check: a real-client respawn reaches
+Play with chunks rendered.
+
+**A dropped best-effort packet left a mob invisible forever.** The server had
+optimistically marked the viewer's cache before the packet was dropped. A drop
+undoes the mark. Check: a test that drops the packet and sees it sent again.
+
+**Encoding the whole join view on the connection task starved the client.** It
+took about 11 s in a debug build. Chunk streaming belongs to the pump, not the
+connection task. Check: join-to-Play time on a debug server stays bounded.
