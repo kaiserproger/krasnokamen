@@ -1,0 +1,89 @@
+{
+ "id": "block-break-drops",
+ "family": "blocks",
+ "description": "Blocks broken without a tool (`setblock ... air destroy`): loot-table drops (stone needs a pickaxe and drops nothing, grass drops dirt, glass nothing), a chest spilling its contents, attached blocks (torch, redstone dust, the upper door half) popping off when their support goes, and sand falling when its support is removed. Drops are compared as item totals per id after they settle.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  72,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "setblock 1 64 1 minecraft:stone",
+  "setblock 3 64 1 minecraft:dirt",
+  "setblock 5 64 1 minecraft:oak_log[axis=y]",
+  "setblock 7 64 1 minecraft:glass",
+  "setblock 9 64 1 minecraft:grass_block[snowy=false]",
+  "setblock 11 64 1 minecraft:bookshelf",
+  "setblock 1 64 5 minecraft:oak_planks",
+  "setblock 1 65 5 minecraft:torch",
+  "setblock 3 64 5 minecraft:oak_planks",
+  "setblock 3 65 5 minecraft:sand",
+  "setblock 3 66 5 minecraft:sand",
+  "setblock 5 64 5 minecraft:stone",
+  "setblock 5 65 5 minecraft:redstone_wire",
+  "setblock 7 64 5 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 7 64 5 container.0 with minecraft:diamond 3",
+  "item replace block 7 64 5 container.5 with minecraft:cobblestone 20",
+  "setblock 9 64 5 minecraft:oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]",
+  "setblock 9 65 5 minecraft:oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+ ],
+ "phases": [
+  {
+   "name": "broken",
+   "commands": [
+    "setblock 1 64 1 minecraft:air destroy",
+    "setblock 3 64 1 minecraft:air destroy",
+    "setblock 5 64 1 minecraft:air destroy",
+    "setblock 7 64 1 minecraft:air destroy",
+    "setblock 9 64 1 minecraft:air destroy",
+    "setblock 11 64 1 minecraft:air destroy",
+    "setblock 1 64 5 minecraft:air destroy",
+    "setblock 3 64 5 minecraft:air destroy",
+    "setblock 5 64 5 minecraft:air destroy",
+    "setblock 7 64 5 minecraft:air destroy",
+    "setblock 9 64 5 minecraft:air destroy"
+   ],
+   "ticks": 2
+  },
+  {
+   "name": "settled",
+   "commands": [],
+   "ticks": 40
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "settled",
+   "check": "count",
+   "key": "minecraft:item|minecraft:diamond",
+   "min": 3,
+   "max": 3
+  },
+  {
+   "phase": "settled",
+   "check": "count",
+   "key": "minecraft:item|minecraft:torch",
+   "min": 1,
+   "max": 1
+  },
+  {
+   "phase": "settled",
+   "check": "block",
+   "pos": [
+    3,
+    64,
+    5
+   ],
+   "equals": "minecraft:sand"
+  }
+ ]
+}

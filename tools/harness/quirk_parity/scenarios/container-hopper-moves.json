@@ -1,0 +1,70 @@
+{
+ "id": "container-hopper-moves",
+ "family": "containers",
+ "description": "Container item moves by hoppers: chest -> hopper -> chest, a sideways hopper chain into a barrel, a hopper locked by a redstone block (moves nothing), a hopper picking up a dropped item stack, and a hopper filling a furnace input. Item totals per container after 8, 40 and 200 ticks.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  72,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "setblock 2 64 2 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "setblock 2 65 2 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 2 66 2 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 2 66 2 container.0 with minecraft:iron_ingot 10",
+  "setblock 7 64 2 minecraft:barrel[facing=up,open=false]",
+  "setblock 6 65 2 minecraft:hopper[enabled=true,facing=east]",
+  "setblock 7 65 2 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 6 66 2 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 6 66 2 container.0 with minecraft:cobblestone 5",
+  "item replace block 6 66 2 container.3 with minecraft:oak_log 2",
+  "setblock 10 64 2 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "setblock 10 65 2 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 10 66 2 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 10 66 2 container.0 with minecraft:gold_ingot 6",
+  "setblock 11 65 2 minecraft:redstone_block",
+  "setblock 2 64 8 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "setblock 2 65 8 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 10 64 8 minecraft:furnace[facing=north,lit=false]",
+  "setblock 10 65 8 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 10 66 8 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 10 66 8 container.0 with minecraft:raw_iron 3"
+ ],
+ "phases": [
+  {
+   "name": "t8",
+   "commands": [
+    "summon minecraft:item 2.5 66.0 8.5 {Item:{id:\"minecraft:emerald\",count:7},PickupDelay:0s}"
+   ],
+   "ticks": 8
+  },
+  {
+   "name": "t40",
+   "commands": [],
+   "ticks": 32
+  },
+  {
+   "name": "t200",
+   "commands": [],
+   "ticks": 160
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "t200",
+   "check": "count",
+   "key": "minecraft:item|minecraft:emerald",
+   "min": 0,
+   "max": 0
+  }
+ ]
+}

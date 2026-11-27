@@ -1,0 +1,72 @@
+{
+ "id": "smelting-furnaces",
+ "family": "smelting",
+ "description": "Furnace, blast furnace and smoker cook times and fuel: raw iron with coal (200 ticks per item), raw gold in a blast furnace (100), beef in a smoker (100), cobblestone with a lava bucket (leaves the bucket), and a hopper-fed furnace (input from above, fuel from the side, output pulled into a chest below). Contents and lit states after 100, 250 and 700 ticks.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  72,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "setblock 2 64 2 minecraft:furnace[facing=north,lit=false]",
+  "item replace block 2 64 2 container.0 with minecraft:raw_iron 3",
+  "item replace block 2 64 2 container.1 with minecraft:coal 1",
+  "setblock 5 64 2 minecraft:blast_furnace[facing=north,lit=false]",
+  "item replace block 5 64 2 container.0 with minecraft:raw_gold 2",
+  "item replace block 5 64 2 container.1 with minecraft:coal 1",
+  "setblock 8 64 2 minecraft:smoker[facing=north,lit=false]",
+  "item replace block 8 64 2 container.0 with minecraft:beef 2",
+  "item replace block 8 64 2 container.1 with minecraft:coal 1",
+  "setblock 11 64 2 minecraft:furnace[facing=north,lit=false]",
+  "item replace block 11 64 2 container.0 with minecraft:cobblestone 4",
+  "item replace block 11 64 2 container.1 with minecraft:lava_bucket 1",
+  "setblock 2 62 8 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "setblock 2 63 8 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 2 64 8 minecraft:furnace[facing=north,lit=false]",
+  "setblock 2 65 8 minecraft:hopper[enabled=true,facing=down]",
+  "setblock 2 66 8 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 2 66 8 container.0 with minecraft:raw_copper 4",
+  "setblock 3 64 8 minecraft:hopper[enabled=true,facing=west]",
+  "setblock 3 65 8 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "item replace block 3 65 8 container.0 with minecraft:coal 2"
+ ],
+ "settle_ticks": 1,
+ "phases": [
+  {
+   "name": "t100",
+   "commands": [],
+   "ticks": 100
+  },
+  {
+   "name": "t250",
+   "commands": [],
+   "ticks": 150
+  },
+  {
+   "name": "t700",
+   "commands": [],
+   "ticks": 450
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "t700",
+   "check": "block",
+   "pos": [
+    2,
+    64,
+    2
+   ],
+   "equals": "minecraft:furnace[facing=north,lit=false]"
+  }
+ ]
+}

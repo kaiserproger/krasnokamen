@@ -1,0 +1,83 @@
+{
+ "id": "fluid-flow",
+ "family": "blocks",
+ "description": "Fluid ticks in two independent basins: a water source spreading over a walled stone floor (levels after 5, 20 and 60 ticks), and lava meeting water (flowing lava into water makes cobblestone, water flowing onto a lava source makes obsidian).",
+ "boxes": [
+  [
+   0,
+   60,
+   0,
+   15,
+   70,
+   15
+  ],
+  [
+   16,
+   60,
+   0,
+   31,
+   70,
+   15
+  ]
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "fill 0 64 0 15 64 0 minecraft:glass",
+  "fill 0 64 15 15 64 15 minecraft:glass",
+  "fill 0 64 1 0 64 14 minecraft:glass",
+  "fill 15 64 1 15 64 14 minecraft:glass",
+  "fill 16 63 0 31 63 15 minecraft:stone",
+  "fill 16 64 0 31 64 0 minecraft:glass",
+  "fill 16 64 15 31 64 15 minecraft:glass",
+  "fill 16 64 1 16 64 14 minecraft:glass",
+  "fill 31 64 1 31 64 14 minecraft:glass",
+  "fill 22 64 1 22 64 14 minecraft:glass"
+ ],
+ "phases": [
+  {
+   "name": "poured",
+   "commands": [
+    "setblock 7 64 7 minecraft:water",
+    "setblock 19 64 7 minecraft:lava",
+    "setblock 23 64 4 minecraft:lava",
+    "setblock 25 64 4 minecraft:water"
+   ],
+   "ticks": 5
+  },
+  {
+   "name": "t20",
+   "commands": [],
+   "ticks": 15
+  },
+  {
+   "name": "t60",
+   "commands": [],
+   "ticks": 40
+  },
+  {
+   "name": "t200",
+   "commands": [
+    "setblock 19 64 9 minecraft:water"
+   ],
+   "ticks": 140
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "t60",
+   "check": "block",
+   "pos": [
+    7,
+    64,
+    7
+   ],
+   "equals": "minecraft:water[level=0]",
+   "cell": 0
+  }
+ ]
+}

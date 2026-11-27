@@ -1,0 +1,67 @@
+{
+ "id": "block-shape-updates",
+ "family": "blocks",
+ "description": "Neighbour shape updates when a block is placed with `setblock`: fences, panes and walls connect to the new neighbour, stairs form corners, redstone dust connects and takes power from a new redstone block, two single chests stay single. The placed block keeps the exact state the command gave; only its neighbours update.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  72,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "setblock 1 64 1 minecraft:oak_fence",
+  "setblock 4 64 1 minecraft:glass_pane",
+  "setblock 7 64 1 minecraft:cobblestone_wall",
+  "setblock 10 64 1 minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]",
+  "setblock 1 64 5 minecraft:redstone_wire",
+  "setblock 4 64 5 minecraft:chest[facing=north,type=single,waterlogged=false]",
+  "setblock 7 64 5 minecraft:oak_fence",
+  "setblock 10 64 5 minecraft:iron_bars"
+ ],
+ "phases": [
+  {
+   "name": "placed",
+   "commands": [
+    "setblock 2 64 1 minecraft:oak_fence",
+    "setblock 5 64 1 minecraft:glass_pane",
+    "setblock 7 64 2 minecraft:cobblestone_wall",
+    "setblock 7 65 1 minecraft:torch",
+    "setblock 10 64 2 minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]",
+    "setblock 2 64 5 minecraft:redstone_block",
+    "setblock 5 64 5 minecraft:chest[facing=north,type=single,waterlogged=false]",
+    "setblock 8 64 5 minecraft:stone",
+    "setblock 10 64 6 minecraft:glass"
+   ],
+   "ticks": 2
+  },
+  {
+   "name": "removed",
+   "commands": [
+    "setblock 2 64 1 minecraft:air",
+    "setblock 2 64 5 minecraft:air",
+    "setblock 8 64 5 minecraft:air"
+   ],
+   "ticks": 2
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "placed",
+   "check": "block",
+   "pos": [
+    1,
+    64,
+    1
+   ],
+   "equals": "minecraft:oak_fence[east=true,north=false,south=false,waterlogged=false,west=false]"
+  }
+ ]
+}
