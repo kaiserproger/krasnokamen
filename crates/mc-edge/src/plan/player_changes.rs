@@ -133,50 +133,13 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             },
         ),
         PlayerChange::RecipesReloaded { reload } => {
-            if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
-                // The recipe book entries that follow come from these recipes;
-                // the catalog is recorded so the book does not send it again.
-                viewer.advancements = std::sync::Arc::clone(&packets.advancements);
-                push_reliable(out, conn, &packets.catalog.update);
-                viewer.recipe_catalog = Some(std::sync::Arc::clone(&packets.catalog));
-            }
+            plan_recipes_reloaded(viewer, out, conn, reload)
         }
         PlayerChange::RecipesUnlocked {
             registry,
             recipes,
             replace,
-        } => {
-            let catalog = crate::recipes::catalog(&registry.0);
-            if viewer
-                .recipe_catalog
-                .as_ref()
-                .is_none_or(|previous| !std::sync::Arc::ptr_eq(previous, &catalog))
-            {
-                // Catalog precedes book displays and refreshed station menus,
-                // including a join racing reload or multiple lagged reloads.
-                push_reliable(out, conn, &catalog.update);
-                viewer.recipe_catalog = Some(std::sync::Arc::clone(&catalog));
-            }
-            let entries = recipes
-                .iter()
-                .filter_map(|id| {
-                    let mut entry = catalog.entries.get(id)?.clone();
-                    if *replace {
-                        // Joining never replays the unlock toast.
-                        entry.flags = 0;
-                    }
-                    Some(entry)
-                })
-                .collect();
-            push_reliable(
-                out,
-                conn,
-                &ClientboundRecipeBookAdd {
-                    entries,
-                    replace: *replace,
-                },
-            );
-        }
+        } => plan_recipes_unlocked(viewer, out, conn, registry, recipes, *replace),
         PlayerChange::VehicleCorrected {
             position,
             yaw,
@@ -660,19 +623,18 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             pitch,
             game_mode,
             ..
-        } => {
-            let respawn = Respawn {
-                teleport_id: *teleport_id,
-                dimension: *dimension,
-                position: *position,
-                yaw: *yaw,
-                pitch: *pitch,
-                game_mode: *game_mode,
-                portal_cooldown: 0,
-                travel: false,
-            };
-            plan_respawn(&respawn, viewer, out);
-        }
+        } => plan_respawn_change(
+            viewer,
+            out,
+            *teleport_id,
+            *dimension,
+            *position,
+            *yaw,
+            *pitch,
+            *game_mode,
+            0,
+            false,
+        ),
         PlayerChange::DimensionChanged {
             teleport_id,
             dimension,
@@ -682,19 +644,18 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             game_mode,
             portal_cooldown,
             ..
-        } => {
-            let respawn = Respawn {
-                teleport_id: *teleport_id,
-                dimension: *dimension,
-                position: *position,
-                yaw: *yaw,
-                pitch: *pitch,
-                game_mode: *game_mode,
-                portal_cooldown: i32::from(*portal_cooldown),
-                travel: true,
-            };
-            plan_respawn(&respawn, viewer, out);
-        }
+        } => plan_respawn_change(
+            viewer,
+            out,
+            *teleport_id,
+            *dimension,
+            *position,
+            *yaw,
+            *pitch,
+            *game_mode,
+            i32::from(*portal_cooldown),
+            true,
+        ),
         PlayerChange::GameModeChanged { game_mode, .. } => {
             push_reliable(
                 out,
@@ -1024,6 +985,82 @@ fn plan_merchant_offers(
             can_restock,
         },
     );
+}
+
+/// A registry reload replaces the catalog: record it so the following book
+/// entries and station menus do not resend it.
+fn plan_recipes_reloaded(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    reload: &mc_core::boundary::RegistryReload,
+) {
+    if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
+        viewer.advancements = std::sync::Arc::clone(&packets.advancements);
+        push_reliable(out, conn, &packets.catalog.update);
+        viewer.recipe_catalog = Some(std::sync::Arc::clone(&packets.catalog));
+    }
+}
+
+/// Newly unlocked recipes. The catalog goes first when the viewer does not hold
+/// it yet (a join racing a reload, or several lagged reloads); a replace event
+/// drops the unlock toast, which joining never replays.
+fn plan_recipes_unlocked(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    registry: &mc_core::boundary::RecipeSource,
+    recipes: &[String],
+    replace: bool,
+) {
+    let catalog = crate::recipes::catalog(&registry.0);
+    if viewer
+        .recipe_catalog
+        .as_ref()
+        .is_none_or(|previous| !std::sync::Arc::ptr_eq(previous, &catalog))
+    {
+        // Catalog precedes book displays and refreshed station menus.
+        push_reliable(out, conn, &catalog.update);
+        viewer.recipe_catalog = Some(std::sync::Arc::clone(&catalog));
+    }
+    let entries = recipes
+        .iter()
+        .filter_map(|id| {
+            let mut entry = catalog.entries.get(id)?.clone();
+            if replace {
+                entry.flags = 0;
+            }
+            Some(entry)
+        })
+        .collect();
+    push_reliable(out, conn, &ClientboundRecipeBookAdd { entries, replace });
+}
+
+/// A death respawn (`travel == false`) or a portal/command dimension change.
+#[allow(clippy::too_many_arguments)]
+fn plan_respawn_change(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    teleport_id: i32,
+    dimension: mc_core::dimensions::Dimension,
+    position: [f64; 3],
+    yaw: f32,
+    pitch: f32,
+    game_mode: u8,
+    portal_cooldown: i32,
+    travel: bool,
+) {
+    let respawn = Respawn {
+        teleport_id,
+        dimension,
+        position,
+        yaw,
+        pitch,
+        game_mode,
+        portal_cooldown,
+        travel,
+    };
+    plan_respawn(&respawn, viewer, out);
 }
 
 /// A death respawn (`travel == false`) or a portal/command dimension change.
