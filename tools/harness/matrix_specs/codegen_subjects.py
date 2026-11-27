@@ -408,7 +408,7 @@ def build():
          {"op": 0 if k == "nonop_selector_msg" else 2, "console": k != "nonop_selector_msg", **({"mp": True} if k in ("at_a", "at_r", "at_p", "sort_random") else {})})
         for k, s, o in sel])
     kinds = enum_variants(SURVIVAL / "lib.rs", "DamageKind")
-    domain("damage", ["core:survival.rs", "core:tick/damage.rs"], ["read_world_state"],
+    domain("damage", ["crates/mc-survival/src/lib.rs", "core:tick/damage.rs"], ["read_world_state"],
            [(k, DMG[k][0], f"{DMG[k][1]}; death message + damage type id on wire", {}) for k in kinds] +
            [(f"vanilla_{k}", v[0], f"vanilla: {v[1]}", {"status": "no_code_hit"}) for k, v in VANILLA_DMG_GAPS.items()])
     effects = enum_variants(DATA / "mob_effects_26_1_2.rs", "MobEffect")
