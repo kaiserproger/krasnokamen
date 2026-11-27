@@ -1,4 +1,4 @@
-//! Deterministic intent merge (ADR 0013 "Tick" step 3).
+//! Deterministic intent merge (ADR 0013 "Tick and merge", decision K1).
 //!
 //! Every entity (and the input step for players) emits intents against
 //! snapshot `t`. Each intent declares its complete footprint: the targets it

@@ -1,5 +1,6 @@
 //! Tick journal: framed batches of absolute post-images + tombstones,
-//! native-transaction checkpoints, recovery by replay (ADR 0013 "Durability").
+//! native-transaction checkpoints, recovery by replay (ADR 0013 "Persistence and
+//! recovery"; `docs/architecture/persistence.md`).
 //!
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
