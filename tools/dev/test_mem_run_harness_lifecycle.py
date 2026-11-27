@@ -1,7 +1,7 @@
 """Integration: mem-run must retain its scope until a killed harness's tree is gone.
 
 The harness command is started through `sh -c` so the runner does not classify it as
-a compile and the test never queues behind the host's three build tokens: its subject
+a compile and the test never queues behind the host's build tokens: its subject
 is scope lifetime, not token admission. `token=none` in the runner's scope line is
 asserted, so a future change that reintroduces a token wait fails here instead of
 hanging until the bound.

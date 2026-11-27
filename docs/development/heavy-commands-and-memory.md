@@ -30,8 +30,8 @@ hidden inside `sh -c`/`bash -c`: classification is not a security boundary.
 |---|---|
 | Memory | No memory slots. Per-command default 8G, non-`-x` requests capped at 12G; agent policy normally selects 6G/12G. Slice `MemoryMax` is the lower of host RAM−16 GiB and, if set, parent `MemoryHigh`−8 GiB. Slice `MemoryHigh` is cleared. Effective parent limits still apply. |
 | Scope | `MemorySwapMax=1G`, CPU quota = physical cores ×100%, `CPUWeight=50`, nice 19. Preemptible builds get weight 10; scene-slot commands 500. `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` keeps harness children in this scope rather than escaping into another. |
-| Build tokens | Three host-wide tokens; compiles wait without polling via `slot-lock.py` on `tokens/token-{1,2,3}.lock`. Built binaries/gates/servers need none. `fleet-status` shows holders/waiters. |
-| Priority | `KRASNOKAMEN_BUILD_LANE=background` may take any token but yields to normal-lane waiters on `tokens/priority.gate`. Main's priority slice and battle takes/render/pins keep normal lane (proposal status above). D27 p.6 authorized the four-token trial; it ended on 2026-11-18 after 15-minute load stayed >20. D27 p.7 removed token-3 reserve; restore it only for a starved live-take window. |
+| Build tokens | Six host-wide tokens (three before owner D124, 2026-11-27); compiles wait without polling via `slot-lock.py` on `tokens/token-1..6.lock`. Built binaries/gates/servers need none. `fleet-status` shows holders/waiters. |
+| Priority | `KRASNOKAMEN_BUILD_LANE=background` may take any token but yields to normal-lane waiters on `tokens/priority.gate`. Main's priority slice and battle takes/render/pins keep normal lane (proposal status above). D27 p.6 authorized the four-token trial; it ended on 2026-11-18 after 15-minute load stayed >20. D27 p.7 removed token-3 reserve; restore it only for a starved live-take window. D124 raised the count to six because ten queued lanes shared three tokens at load ~1–2 of 16 threads; the count now follows measured load and the slice's OOM counters (`receipts/D124/disk/TOKENS.md`), not the old trial's limit. |
 | Token lifetime | Runner fd 9 and independent scope guardian hold it, never the command. Release only when scope is empty, including kill/OOM. `KRASNOKAMEN_BUILD_TOKEN{,_PID}` permits ancestor-verified reuse by nested compiles, avoiding three-holder deadlock. Scope line says `<n>`, `<n>(reused)` or `none`. |
 | Jobserver | Watchdog owns `/tmp/solaris-mem-slots/jobserver`, a make-style FIFO with one token per logical CPU, passed by `CARGO_MAKEFLAGS`; concurrent Cargo builds share roughly `nproc` compilers. |
 | Peak estimate | Successful scope `memory.peak` goes to `/tmp/solaris-mem-slots/peaks`, keyed by argv without paths/leading env. Next estimate = 1.25× largest of last five, unknown 4 GiB, bounded by cap. |
@@ -248,6 +248,6 @@ and evidence, not reproducible bulk.
 
 The October fixed-memory-slot, 3×5G, CPU-2/3 and Main-GO recipes are retired.
 Current design is the watchdog/shared jobserver (2026-10-28), tree-marked pooled
-targets (11-04) and three nested-reusable compile tokens (11-11; D27's four-token
-trial ended 11-18). Exit 75 is a named admission refusal, not the old memory-slot
+targets (11-04) and six nested-reusable compile tokens (three from 11-11, raised to
+six by D124; D27's four-token trial ended 11-18). Exit 75 is a named admission refusal, not the old memory-slot
 rule. Follow this page and the live runner, not historical skills.

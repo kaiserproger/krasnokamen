@@ -2,7 +2,7 @@
 """Run a command holding one of N shared host slots (flock), whichever frees first.
 
 The one slot mechanism on the owner host: scene-slot.sh (six graphical-gate slots)
-and mem-run.sh (three build tokens) both run through it.
+and mem-run.sh (six build tokens since owner D124, 2026-11-27; three before) both run through it.
 
     slot-lock.py --dir DIR --name FMT --slots a,b,c --env VAR [--fd N]
                  [--wait-dir DIR] [--wait-message TEXT]

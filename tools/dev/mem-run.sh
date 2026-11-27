@@ -114,7 +114,10 @@ if ! awk -v g="$_grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0 
   echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds no larger than 86400, got '$_grace'" >&2
   exit 75
 fi
-# Build tokens (owner 2026-11-11): at most three compile commands run host-wide.
+# Build tokens (owner 2026-11-11): at most six compile commands run host-wide (owner
+# D124, 2026-11-27: raised from three to lift the launch limit while ten lanes wait;
+# CPU stays bounded by the shared jobserver at nproc and memory by each scope's
+# MemoryMax plus the watchdog).
 # Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
 # with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
 # pin-release, harness `run build|clippy|code-health|correctness|test|regressions|
@@ -137,7 +140,10 @@ fi
 # token-3 reserve for that goal stays removed (owner D27 p.7, 2026-11-18); restore a
 # reserve only for live-take windows if a take is starved. A four-token trial (owner D27
 # p.6) was ended at 12:1x on 2026-11-18: the 15-minute load stayed above 20 (21.3, 24.1, 23.9).
-build_tokens=3
+# Six tokens (owner D124, 2026-11-27) supersede that trial's count: the fleet measures
+# load and the slice's own OOM counters in receipts/D124/disk/TOKENS.md instead of fixing
+# the limit in advance.
+build_tokens=6
 token_slots=$(seq -s, "$build_tokens")
 token_gate=(--hold-gate "$dir/tokens/priority.gate")
 if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
