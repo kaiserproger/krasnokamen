@@ -574,7 +574,7 @@ fn run_dimension_tick_inner<'a>(
         };
         let slots = [
             usize::from(player.inventory.selected.min(8)),
-            crate::inventory::OFF_HAND,
+            mc_inventory::OFF_HAND,
             36,
             37,
             38,

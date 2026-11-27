@@ -114,7 +114,7 @@ fn size(name: &str) -> Option<usize> {
     match name {
         _ if mc_placement::copper::chest(name) => Some(27),
         "chest" | "trapped_chest" | "barrel" => Some(27),
-        name if crate::shulker::is_block(name) => Some(27),
+        name if mc_inventory::shulker::is_block(name) => Some(27),
         "hopper" | "brewing_stand" => Some(5),
         "jukebox" => Some(1),
         "dispenser" | "dropper" | "crafter" => Some(9),
@@ -528,7 +528,9 @@ fn insertion_slot(
 ) -> Option<(BlockPos, usize)> {
     let name = kind(state, pos)?;
     size(name)?;
-    if crate::shulker::is_block(name) && crate::shulker::is_item(&state.registry.items, incoming) {
+    if mc_inventory::shulker::is_block(name)
+        && mc_inventory::shulker::is_item(&state.registry.items, incoming)
+    {
         return None;
     }
     if name == "jukebox" && !crate::jukebox::accepts(state, incoming) {

@@ -6,7 +6,7 @@ use mc_data::ItemStack;
 use mc_data::armor::{ArmorStats, armor_reduced_damage, protection_reduced_damage};
 use mc_data::food::FoodEntry;
 
-use crate::inventory::ItemRules;
+use mc_inventory::ItemRules;
 
 pub const MAX_HEALTH: f32 = 20.0;
 pub const MAX_FOOD: i32 = 20;

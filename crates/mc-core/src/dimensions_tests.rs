@@ -2388,7 +2388,7 @@ fn open_diamond_chest(state: &mut TickState, connection: u64) -> PlayerInput {
         state_id: menu.state_id,
         slot: 0,
         button: 0,
-        mode: crate::boundary::ClickMode::QuickMove,
+        mode: mc_inventory::ClickMode::QuickMove,
     }
 }
 

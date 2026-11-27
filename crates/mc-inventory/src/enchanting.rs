@@ -387,6 +387,16 @@ pub fn next_seed(seed: i32) -> i32 {
     LegacyRandom::new(i64::from(seed)).next_i32()
 }
 
+pub fn level(stack: &ItemStack, name: &str) -> u32 {
+    stack
+        .enchantments
+        .iter()
+        .filter(|entry| entry.id.namespace() == "minecraft" && entry.id.path() == name)
+        .map(|entry| entry.level.max(0) as u32)
+        .max()
+        .unwrap_or(0)
+}
+
 /// The nine EnchantmentMenu properties. Missing clues/levels are -1, disabled
 /// costs are zero. Costs are required player levels, not the 1/2/3 level and
 /// lapis amounts charged on a successful purchase (those belong to the caller).

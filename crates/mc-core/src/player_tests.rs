@@ -5,9 +5,10 @@ use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemStack};
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerChange};
+use crate::boundary::{ConnectionId, Hand, PlayerChange};
 use crate::commands::GameMode;
-use crate::inventory::{ItemRules, MenuKind, OFF_HAND};
+use mc_inventory::ClickMode;
+use mc_inventory::{ItemRules, MenuKind, OFF_HAND};
 
 const STONE: u32 = 1;
 const STEW: u32 = 2;

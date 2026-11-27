@@ -177,7 +177,7 @@ fn leash_decode_normal_empty_hand_detaches_and_emits_empty_link_once() {
 #[test]
 fn leash_decode_empty_offhand_also_detaches_without_mainhand_debit() {
     let (mut state, mut decoder, actor, pig, mut viewer, cache) = attached();
-    state.players.get_mut(&actor).unwrap().inventory.slots[mc_core::inventory::OFF_HAND] =
+    state.players.get_mut(&actor).unwrap().inventory.slots[mc_inventory::OFF_HAND] =
         ItemStack::EMPTY;
     let output = packet(
         &mut state,

@@ -1,7 +1,5 @@
 //! Trade tables and atomic payment/result transitions on the tick owner.
 use super::{Gossip, VillagerProfession, VillagerState, VillagerTradeOffer};
-use crate::boundary::ClickMode;
-use crate::inventory::{ItemRules, Menu, PlayerInventory};
 use crate::registry::CoreRegistry;
 use mc_data::ItemStack;
 use mc_data::inventory_semantics_26_1_2::{can_stack, take_from_stack};
@@ -9,6 +7,8 @@ use mc_data::villager_trades_26_1_2::{
     profession_level_offers_26_1_2, villager_level_for_xp_26_1_2,
 };
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::{ItemRules, Menu, PlayerInventory};
 use uuid::Uuid;
 
 pub(crate) fn hero_discount(base: i32, hero: Option<u8>) -> i32 {
@@ -529,7 +529,7 @@ pub fn select(
             continue;
         };
         let max = rules.max_stack(cost);
-        for slot in (9..36).chain(0..9).chain([crate::inventory::OFF_HAND]) {
+        for slot in (9..36).chain(0..9).chain([mc_inventory::OFF_HAND]) {
             let stack = &mut inventory.slots[slot];
             if stack.item_id != cost.item_id
                 || (has_predicate(cost) && !can_stack(stack, cost))

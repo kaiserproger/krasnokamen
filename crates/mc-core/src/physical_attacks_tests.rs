@@ -356,7 +356,7 @@ fn held_identity_and_two_handed_offhand_gate_costs_again_at_merge() {
         AttackAdmission::Accepted
     );
     let item = state.registry.items.id_of(&id("minecraft:arrow")).unwrap();
-    state.players.get_mut(&actor_id).unwrap().inventory.slots[crate::inventory::OFF_HAND] =
+    state.players.get_mut(&actor_id).unwrap().inventory.slots[mc_inventory::OFF_HAND] =
         ItemStack::new(item, 1);
     state.tick = start + 6;
     assert!(commit_attack(&mut state, actor_id, start).is_none());

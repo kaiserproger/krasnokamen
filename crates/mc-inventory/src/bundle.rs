@@ -54,7 +54,7 @@ fn name<'a>(rules: &'a ItemRules<'_>, stack: &ItemStack) -> Option<&'a str> {
     rules.items.name_of(stack.item_id).map(|id| id.as_str())
 }
 
-pub(crate) fn is_bundle(rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
+pub fn is_bundle(rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
     !stack.is_empty()
         && name(rules, stack)
             .is_some_and(|name| name == "minecraft:bundle" || name.ends_with("_bundle"))
@@ -66,7 +66,7 @@ fn can_fit(rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
 }
 
 /// The bundle's stacks, newest first; `None` when the stored component is unreadable.
-pub(crate) fn read(rules: &ItemRules<'_>, bundle: &ItemStack) -> Option<Vec<ItemStack>> {
+pub fn read(rules: &ItemRules<'_>, bundle: &ItemStack) -> Option<Vec<ItemStack>> {
     let Some(component) = bundle
         .extended()
         .preserved_components
@@ -96,7 +96,7 @@ pub(crate) fn read(rules: &ItemRules<'_>, bundle: &ItemStack) -> Option<Vec<Item
 }
 
 /// Store `contents`; an empty bundle carries no component, like a fresh one.
-pub(crate) fn write(rules: &ItemRules<'_>, bundle: &mut ItemStack, contents: &[ItemStack]) -> bool {
+pub fn write(rules: &ItemRules<'_>, bundle: &mut ItemStack, contents: &[ItemStack]) -> bool {
     let value = if contents.is_empty() {
         None
     } else {
@@ -220,7 +220,7 @@ pub(super) fn insert(
 }
 
 /// Toggle the transient selection on this actual stack. Invalid indices clear it.
-pub(crate) fn select(rules: &ItemRules<'_>, stack: &mut ItemStack, index: i32) {
+pub fn select(rules: &ItemRules<'_>, stack: &mut ItemStack, index: i32) {
     if !is_bundle(rules, stack) {
         return;
     }
@@ -232,10 +232,7 @@ pub(crate) fn select(rules: &ItemRules<'_>, stack: &mut ItemStack, index: i32) {
 }
 
 /// Vanilla `Mutable.removeOne`: the selected stack, or the newest if unselected.
-pub(crate) fn remove_selected(
-    stack: &ItemStack,
-    contents: &mut Vec<ItemStack>,
-) -> Option<ItemStack> {
+pub fn remove_selected(stack: &ItemStack, contents: &mut Vec<ItemStack>) -> Option<ItemStack> {
     if contents.is_empty() {
         return None;
     }
@@ -249,7 +246,7 @@ pub(crate) fn remove_selected(
 }
 
 /// Copy only the transient selection after a logically unchanged custody transition.
-pub(crate) fn copy_selection(target: &mut ItemStack, source: &ItemStack) {
+pub fn copy_selection(target: &mut ItemStack, source: &ItemStack) {
     let selected = source.extended().bundle_selection.0;
     if selected.is_some() || target.extended().bundle_selection.0.is_some() {
         target.extended_mut().bundle_selection.0 = selected;

@@ -5,7 +5,7 @@
 
 use mc_data::ItemStack;
 
-use crate::inventory::ItemRules;
+use mc_inventory::ItemRules;
 
 /// Player base `attack_speed` attribute.
 const BASE_ATTACK_SPEED: f32 = 4.0;
@@ -204,8 +204,8 @@ pub(crate) fn mace_attack(
         } else {
             0.0
         },
-        breach: crate::enchantments::level(held, "breach"),
-        wind_burst: crate::enchantments::level(held, "wind_burst"),
+        breach: mc_inventory::enchanting::level(held, "breach"),
+        wind_burst: mc_inventory::enchanting::level(held, "wind_burst"),
     })
 }
 

@@ -1,0 +1,19 @@
+[package]
+name = "mc-inventory"
+description = "Player inventory, menus, crafting and container click rules over owned state (Krasnokamen)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mc-data = { path = "../mc-data" }
+mc-domain = { path = "../mc-domain" }
+mc-nbt = { path = "../mc-nbt" }
+serde.workspace = true
+serde_json.workspace = true

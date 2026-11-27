@@ -1,10 +1,11 @@
 //! Personal chest custody lives in the player's retained EnderItems image,
 //! not in the placed block. Decode only for admission/menu events, never ticks.
-use crate::boundary::{BlockPos, ChangeSet, ClickMode, ConnectionId};
+use crate::boundary::{BlockPos, ChangeSet, ConnectionId};
 use crate::config::CoreError;
 use crate::tick::TickState;
 use mc_data::{ItemStack, item_nbt};
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
 use mc_nbt::{ListTag, Tag, tag_type};
 use std::sync::Arc;
 
@@ -131,7 +132,7 @@ pub(crate) fn select_bundle_item(
     {
         stack = cached.clone();
     }
-    crate::inventory::bundle::select(&state.registry.item_rules(), &mut stack, selected);
+    mc_inventory::bundle::select(&state.registry.item_rules(), &mut stack, selected);
     player
         .ender_bundle_selections
         .retain(|(slot, _)| *slot != index);
@@ -188,7 +189,7 @@ pub(crate) fn open(
         .expect("chest owner")
         .open_menu(
             &registry.item_rules(),
-            crate::inventory::MenuKind::Chest { rows: 3 },
+            mc_inventory::MenuKind::Chest { rows: 3 },
             "Ender Chest".into(),
             &slots,
         );

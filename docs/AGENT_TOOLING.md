@@ -330,7 +330,10 @@ functions applies only after 1.0 ships.
 `cargo run -p xtask -- code-health` (harness `run code-health`) measures
 `mc-core` production code with `syn`, never text: comments, attributes,
 `#[cfg(test)]`/`#[test]` items and `*_tests.rs` files are outside every number.
-`--root <dir>` measures another checkout read-only. These families fail when
+`--root <dir>` measures another checkout read-only. Crates split out of
+`mc-core` (`split_crates` in `ratchet.rs`, [ADR 0021](decisions/0021-build-time-and-crate-split.md#d124d128-crate-cuts-hub-value-types-down-then-domain-crates))
+keep counting toward the anti-pattern ceilings, so a move never loosens one;
+the module cycle and hot files stay mc-core's. These families fail when
 they rise above their ceiling in `crates/xtask/src/code_health/ratchet.rs`:
 
 - top-level modules in the largest dependency cycle (Tarjan over

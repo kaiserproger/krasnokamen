@@ -213,10 +213,10 @@ fn hanging_and_wall_sign_decorations_support_offhand_and_creative() {
         inscribe(&mut state);
         give(&mut state, player, "orange_dye", 2);
         let dye = held(&state, player);
-        state.players.get_mut(&player).unwrap().inventory.slots[crate::inventory::OFF_HAND] = dye;
+        state.players.get_mut(&player).unwrap().inventory.slots[mc_inventory::OFF_HAND] = dye;
         assert!(crate::signs::use_on(&mut state, player, Hand::Off, POS));
         assert_eq!(
-            state.players[&player].inventory.slots[crate::inventory::OFF_HAND].count,
+            state.players[&player].inventory.slots[mc_inventory::OFF_HAND].count,
             1
         );
         assert_eq!(

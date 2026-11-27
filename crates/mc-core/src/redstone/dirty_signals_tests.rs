@@ -1,9 +1,10 @@
 use super::*;
-use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{ConnectionId, Hand, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::ItemStack;
+use mc_inventory::ClickMode;
 use std::sync::{Arc, LazyLock};
 
 const CHEST: BlockPos = BlockPos { x: 6, y: 200, z: 6 };

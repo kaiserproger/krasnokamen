@@ -2929,7 +2929,8 @@ fn container_transfer_fixture(
     case: ContainerCase,
     dimension: Dimension,
 ) -> (World, ContainerCustody) {
-    use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
+    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use mc_inventory::ClickMode;
     let mut world = World::new(directory);
     world.run(&[PlayerInput::Join {
         connection: ConnectionId(1),
@@ -3550,7 +3551,8 @@ fn assert_container_wal_pruned(world: &World) {
 
 #[test]
 fn container_stale_ack_and_real_eviction_keep_full_custody_in_every_dimension() {
-    use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
+    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use mc_inventory::ClickMode;
 
     for dimension in Dimension::ALL {
         let directory = tempfile::tempdir().unwrap();

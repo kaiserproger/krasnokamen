@@ -184,11 +184,11 @@ fn bottle_use_item_offhand_and_creative_input_keep_correct_custody() {
     let stone = ItemStack::new(item_id(&state, "stone"), 1);
     let player = state.players.get_mut(&actor).unwrap();
     player.inventory.slots[0] = stone.clone();
-    player.inventory.slots[crate::inventory::OFF_HAND] = bottle;
+    player.inventory.slots[mc_inventory::OFF_HAND] = bottle;
     run_tick(&mut state, &[use_item(Hand::Off, 90.0)]);
     assert_eq!(state.players[&actor].inventory.slots[0], stone);
     assert!(water(
-        &state.players[&actor].inventory.slots[crate::inventory::OFF_HAND],
+        &state.players[&actor].inventory.slots[mc_inventory::OFF_HAND],
         &state
     ));
 

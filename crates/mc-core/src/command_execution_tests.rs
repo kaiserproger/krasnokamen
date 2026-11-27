@@ -246,8 +246,8 @@ fn debug_menu_station_and_beacon_have_no_block_storage() {
         .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
         .unwrap();
     for kind in [
-        crate::inventory::MenuKind::Anvil,
-        crate::inventory::MenuKind::Beacon,
+        mc_inventory::MenuKind::Anvil,
+        mc_inventory::MenuKind::Beacon,
     ] {
         let player = state.players.get_mut(&alice).unwrap();
         player.open_menu(&registry.item_rules(), kind, "Probe".into(), &[]);

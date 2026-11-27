@@ -345,7 +345,7 @@ pub(super) fn press(state: &mut TickState, slot: i16) -> Vec<PlayerChange> {
             state_id: menu.state_id,
             slot,
             button: 0,
-            mode: crate::boundary::ClickMode::Pickup,
+            mode: mc_inventory::ClickMode::Pickup,
         }],
     )
 }

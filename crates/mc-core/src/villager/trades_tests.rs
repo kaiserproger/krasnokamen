@@ -1,5 +1,5 @@
 use super::*;
-use crate::inventory::{MenuKind, MerchantMenu};
+use mc_inventory::{MenuKind, MerchantMenu};
 
 fn registry() -> CoreRegistry {
     CoreRegistry::load(None).unwrap()
@@ -656,7 +656,7 @@ fn select_refills_payment_returned_to_offhand_without_duplication() {
     for stack in &mut inventory.slots[..36] {
         *stack = item(&registry, "stone", 64);
     }
-    inventory.slots[crate::inventory::OFF_HAND] = item(&registry, "emerald", 10);
+    inventory.slots[mc_inventory::OFF_HAND] = item(&registry, "emerald", 10);
     for _ in 0..2 {
         select(
             &mut menu,
@@ -667,7 +667,7 @@ fn select_refills_payment_returned_to_offhand_without_duplication() {
             0,
         );
         assert_eq!(menu.grid[0], item(&registry, "emerald", 10));
-        assert!(inventory.slots[crate::inventory::OFF_HAND].is_empty());
+        assert!(inventory.slots[mc_inventory::OFF_HAND].is_empty());
         assert_eq!(menu.result, villager.offers[0].result);
         assert!(
             inventory.slots[..36]
@@ -678,20 +678,20 @@ fn select_refills_payment_returned_to_offhand_without_duplication() {
     // Vanilla close tops up a matching offhand stack, but never chooses an
     // empty offhand slot. Move one real payment there before returning the rest.
     menu.grid[0].count -= 1;
-    inventory.slots[crate::inventory::OFF_HAND] = item(&registry, "emerald", 1);
+    inventory.slots[mc_inventory::OFF_HAND] = item(&registry, "emerald", 1);
     assert!(
         menu.close(&registry.item_rules(), &mut inventory)
             .is_empty()
     );
     assert_eq!(
-        inventory.slots[crate::inventory::OFF_HAND],
+        inventory.slots[mc_inventory::OFF_HAND],
         item(&registry, "emerald", 10)
     );
     assert!(
         menu.close(&registry.item_rules(), &mut inventory)
             .is_empty()
     );
-    assert_eq!(inventory.slots[crate::inventory::OFF_HAND].count, 10);
+    assert_eq!(inventory.slots[mc_inventory::OFF_HAND].count, 10);
 }
 
 #[test]

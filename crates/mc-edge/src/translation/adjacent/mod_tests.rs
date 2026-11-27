@@ -355,9 +355,9 @@ fn legacy_creative_count_edit_preserves_canonical_player_inventory_item() {
     use super::tables::IdMap;
     use mc_core::boundary::{ConnectionId, PlayerInput};
     use mc_core::commands::GameMode;
-    use mc_core::inventory::ItemRules;
     use mc_core::player::PlayerState;
     use mc_data::{Identifier, ItemStack};
+    use mc_inventory::ItemRules;
     use mc_protocol::codec::WriteMc;
 
     let items = mc_data::items::krasnokamen_required_items();

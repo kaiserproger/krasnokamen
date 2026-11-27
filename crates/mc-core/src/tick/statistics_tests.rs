@@ -5,7 +5,7 @@ use mc_domain::EntityId;
 
 #[test]
 fn pickup_publishes_only_changed_slots_for_active_menu() {
-    for menu in [None, Some(crate::inventory::MenuKind::CraftingTable)] {
+    for menu in [None, Some(mc_inventory::MenuKind::CraftingTable)] {
         let (mut state, entity, pos) = flat_player_fixture();
         let apple = state
             .registry
@@ -15,7 +15,7 @@ fn pickup_publishes_only_changed_slots_for_active_menu() {
         let player = state.players.get_mut(&entity).unwrap();
         player.inventory.slots[0] = mc_data::ItemStack::new(apple, 63);
         if let Some(kind) = menu {
-            player.open = Some(crate::inventory::Menu::new(7, kind));
+            player.open = Some(mc_inventory::Menu::new(7, kind));
         }
         state.outbox.clear();
         let dropped =
@@ -68,11 +68,11 @@ fn pickup_into_offhand_syncs_inventory_with_or_without_open_chest() {
             .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
             .unwrap();
         let player = state.players.get_mut(&entity).unwrap();
-        player.inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(apple, 63);
+        player.inventory.slots[mc_inventory::OFF_HAND] = mc_data::ItemStack::new(apple, 63);
         if chest {
-            player.open = Some(crate::inventory::Menu::new(
+            player.open = Some(mc_inventory::Menu::new(
                 7,
-                crate::inventory::MenuKind::Chest { rows: 3 },
+                mc_inventory::MenuKind::Chest { rows: 3 },
             ));
             player.open.as_mut().unwrap().carried = mc_data::ItemStack::new(apple, 3);
         }
@@ -114,10 +114,8 @@ fn pickup_with_lectern_open_updates_hidden_player_inventory() {
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:apple").unwrap())
         .unwrap();
-    state.players.get_mut(&entity).unwrap().open = Some(crate::inventory::Menu::new(
-        7,
-        crate::inventory::MenuKind::Lectern,
-    ));
+    state.players.get_mut(&entity).unwrap().open =
+        Some(mc_inventory::Menu::new(7, mc_inventory::MenuKind::Lectern));
     state.outbox.clear();
     let dropped =
         crate::tick::spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(apple, 1));

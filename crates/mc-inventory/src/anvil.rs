@@ -457,22 +457,22 @@ pub(super) mod tests {
     use mc_data::items::{ItemRegistry, ItemReport};
     use mc_data::tags::TagsData;
 
-    pub(in crate::inventory) struct Data {
-        pub(in crate::inventory) items: ItemRegistry,
+    pub(crate) struct Data {
+        pub(crate) items: ItemRegistry,
         facts: ItemFactsTable,
-        pub(in crate::inventory) tags: TagsData,
+        pub(crate) tags: TagsData,
     }
 
-    pub(in crate::inventory) fn catalog() -> EnchantmentCatalog {
+    pub(crate) fn catalog() -> EnchantmentCatalog {
         EnchantmentCatalog::runtime()
     }
 
-    pub(in crate::inventory) fn id(name: &str) -> Identifier {
+    pub(crate) fn id(name: &str) -> Identifier {
         Identifier::parse(name).unwrap()
     }
 
     impl Data {
-        pub(in crate::inventory) fn new() -> Self {
+        pub(crate) fn new() -> Self {
             let names = [
                 "diamond_sword",
                 "diamond",
@@ -501,7 +501,7 @@ pub(super) mod tests {
                 tags: TagsData::default(),
             }
         }
-        pub(in crate::inventory) fn rules(&self) -> ItemRules<'_> {
+        pub(crate) fn rules(&self) -> ItemRules<'_> {
             ItemRules {
                 items: &self.items,
                 facts: &self.facts,
@@ -509,10 +509,10 @@ pub(super) mod tests {
                 recipes: &[],
             }
         }
-        pub(in crate::inventory) fn stack(&self, name: &str) -> ItemStack {
+        pub(crate) fn stack(&self, name: &str) -> ItemStack {
             ItemStack::new(self.items.id_of(&id(name)).unwrap(), 1)
         }
-        pub(in crate::inventory) fn book(&self, name: &str, level: i32) -> ItemStack {
+        pub(crate) fn book(&self, name: &str, level: i32) -> ItemStack {
             let mut book = self.stack("enchanted_book");
             book.extended_mut()
                 .stored_enchantments

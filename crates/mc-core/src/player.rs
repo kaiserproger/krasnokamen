@@ -8,12 +8,11 @@ use mc_data::ItemStack;
 use mc_data::inventory_semantics_26_1_2::{decrement_stack, take_from_stack};
 use mc_data::statistics::{CustomStat, StatType};
 
-use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerChange};
+use crate::boundary::{ConnectionId, Hand, PlayerChange};
 use crate::commands::{self, Command, GameMode};
-use crate::inventory::{
-    ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory, SlotRef,
-};
 use crate::survival::Vitals;
+use mc_inventory::ClickMode;
+use mc_inventory::{ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory, SlotRef};
 
 pub(crate) use reservations::NativeToolWearPlan;
 
@@ -185,7 +184,7 @@ impl PlayerState {
     pub(crate) fn using_bundle(&self, rules: &ItemRules<'_>) -> bool {
         self.using.is_some_and(|using| {
             let held = &self.inventory.slots[self.held_slot(using.hand)];
-            held.item_id == using.item_id && crate::inventory::bundle::is_bundle(rules, held)
+            held.item_id == using.item_id && mc_inventory::bundle::is_bundle(rules, held)
         })
     }
 
@@ -218,8 +217,8 @@ impl PlayerState {
             open: None,
             vitals: Vitals::default(),
             active_effects: crate::effects::ActiveEffects::default(),
-            enchantment_seed: crate::inventory::enchanting::next_seed(connection.0 as i32),
-            enchantment_offer_seed: crate::inventory::enchanting::next_seed(connection.0 as i32),
+            enchantment_seed: mc_inventory::enchanting::next_seed(connection.0 as i32),
+            enchantment_offer_seed: mc_inventory::enchanting::next_seed(connection.0 as i32),
             warden_warning: Default::default(),
             game_mode,
             fall_distance: 0.0,
@@ -1049,7 +1048,7 @@ impl PlayerState {
         if self.spectator()
             || self.vitals.is_dead()
             || self.item_on_cooldown(held.item_id)
-            || (!self.creative() && crate::enchantments::level(old, "binding_curse") > 0)
+            || (!self.creative() && mc_inventory::enchanting::level(old, "binding_curse") > 0)
             || mc_data::inventory_semantics_26_1_2::can_stack(held, old)
         {
             return Some(PlayerEffects::default());
@@ -1111,7 +1110,7 @@ impl PlayerState {
         else {
             return;
         };
-        if crate::inventory::bundle::is_bundle(rules, held) {
+        if mc_inventory::bundle::is_bundle(rules, held) {
             self.using = Some(ItemUse {
                 hand,
                 remaining: 200,
@@ -1217,23 +1216,18 @@ impl PlayerState {
             self.using = None;
             return PlayerEffects::default();
         }
-        if crate::inventory::bundle::is_bundle(rules, held) {
+        if mc_inventory::bundle::is_bundle(rules, held) {
             let drop_now = item_use.remaining == 200
                 || (item_use.remaining < 190 && item_use.remaining.is_multiple_of(2));
             item_use.remaining -= 1;
             item_use.elapsed = item_use.elapsed.saturating_add(1);
             self.using = (item_use.remaining > 0).then_some(item_use);
             if drop_now
-                && let Some(mut contents) = crate::inventory::bundle::read(rules, held)
-                && let Some(dropped) =
-                    crate::inventory::bundle::remove_selected(held, &mut contents)
+                && let Some(mut contents) = mc_inventory::bundle::read(rules, held)
+                && let Some(dropped) = mc_inventory::bundle::remove_selected(held, &mut contents)
             {
                 let before = self.snapshot();
-                if crate::inventory::bundle::write(
-                    rules,
-                    &mut self.inventory.slots[slot],
-                    &contents,
-                ) {
+                if mc_inventory::bundle::write(rules, &mut self.inventory.slots[slot], &contents) {
                     self.statistics
                         .increment(StatType::Used, item_use.item_id, 1);
                     return PlayerEffects {
@@ -1365,7 +1359,7 @@ impl PlayerState {
             );
             effects
                 .dropped
-                .retain(|stack| crate::enchantments::level(stack, "vanishing_curse") == 0);
+                .retain(|stack| mc_inventory::enchanting::level(stack, "vanishing_curse") == 0);
             if !keep_experience {
                 self.vitals.experience = crate::survival::Experience::default();
                 effects.changes.push(self.experience_change());
@@ -1644,3 +1638,9 @@ mod reservations;
 #[cfg(test)]
 #[path = "player_reservations_tests.rs"]
 mod reservation_tests;
+
+#[cfg(test)]
+mod bundle_use_tests;
+
+#[cfg(test)]
+mod craft_stations_tests;

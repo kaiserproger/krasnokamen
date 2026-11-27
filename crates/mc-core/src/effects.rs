@@ -388,7 +388,7 @@ impl crate::player::PlayerState {
     }
     pub(crate) fn consume_effects(
         &mut self,
-        rules: &crate::inventory::ItemRules<'_>,
+        rules: &mc_inventory::ItemRules<'_>,
         stack: &mc_data::ItemStack,
     ) -> Vec<crate::boundary::PlayerChange> {
         let name = rules
@@ -1107,7 +1107,8 @@ pub(crate) fn mining_progress(
         }
     }
     speed *= player.active_effects.dig_multiplier();
-    let aqua_affinity = crate::enchantments::level(&player.inventory.slots[39], "aqua_affinity");
+    let aqua_affinity =
+        mc_inventory::enchanting::level(&player.inventory.slots[39], "aqua_affinity");
     let eye_in_water = state.entities.slot_of(entity).is_some_and(|slot| {
         let pos = state.entities.pos(slot);
         state

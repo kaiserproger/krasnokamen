@@ -1,9 +1,9 @@
 use super::*;
 use crate::{
     commands::{self, Command},
-    inventory::PlayerInventory,
     registry::CoreRegistry,
 };
+use mc_inventory::PlayerInventory;
 use std::sync::LazyLock;
 
 fn registry() -> &'static CoreRegistry {

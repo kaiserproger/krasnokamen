@@ -1798,6 +1798,7 @@ dependencies = [
  "im",
  "mc-data",
  "mc-domain",
+ "mc-inventory",
  "mc-light",
  "mc-loader",
  "mc-melee-range",
@@ -1866,6 +1867,7 @@ dependencies = [
  "mc-core",
  "mc-data",
  "mc-domain",
+ "mc-inventory",
  "mc-loader",
  "mc-nbt",
  "mc-plugin-host",
@@ -1897,6 +1899,17 @@ dependencies = [
  "workspace-features",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "mc-inventory"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-data",
+ "mc-domain",
+ "mc-nbt",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2079,6 +2092,7 @@ dependencies = [
  "mc-core",
  "mc-data",
  "mc-domain",
+ "mc-inventory",
  "mc-nbt",
  "mc-plugin-host",
  "mc-world",

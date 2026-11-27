@@ -145,7 +145,7 @@ pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand, pos: Bl
     let index = if hand == Hand::Main {
         usize::from(player.inventory.selected)
     } else {
-        crate::inventory::OFF_HAND
+        mc_inventory::OFF_HAND
     };
     let held = &player.inventory.slots[index];
     let item = state

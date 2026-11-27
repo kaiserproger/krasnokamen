@@ -506,7 +506,7 @@ fn rearm_closes_a_full_crafting_table_without_spawning_items() {
         .open
         .as_mut()
         .expect("table opened through input");
-    assert_eq!(menu.kind, crate::inventory::MenuKind::CraftingTable);
+    assert_eq!(menu.kind, mc_inventory::MenuKind::CraftingTable);
     menu.grid[0] = stick;
     menu.carried = arrow;
     let window = menu.window;

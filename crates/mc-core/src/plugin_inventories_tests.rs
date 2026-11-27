@@ -224,7 +224,8 @@ fn reserve_holds_real_stock_without_removing_or_reissuing_items() {
 }
 #[test]
 fn entity_menu_clicks_preserve_reserved_player_inventory_and_resync() {
-    use crate::boundary::{ChangeSet, ClickMode, Hand, PlayerChange};
+    use crate::boundary::{ChangeSet, Hand, PlayerChange};
+    use mc_inventory::ClickMode;
     for mount_menu in [true, false] {
         let (mut state, actor) = state();
         let actor_slot = state.entities.slot_of(actor).unwrap();

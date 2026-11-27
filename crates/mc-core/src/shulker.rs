@@ -4,18 +4,11 @@ use crate::tick::{BlockEntityState, TickState};
 use mc_data::block_entity_kinds::BlockEntityKind;
 use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::{ItemStack, items::ItemRegistry};
+use mc_inventory::shulker::is_block;
 use mc_nbt::Tag;
 
 fn key(pos: BlockPos) -> (i32, i32, i32) {
     (pos.x, pos.y, pos.z)
-}
-pub(crate) fn is_block(path: &str) -> bool {
-    BlockEntityKind::for_block(path) == Some(BlockEntityKind::ShulkerBox)
-}
-pub(crate) fn is_item(items: &ItemRegistry, stack: &ItemStack) -> bool {
-    items
-        .name_of(stack.item_id)
-        .is_some_and(|id| is_block(id.path()))
 }
 fn at(state: &TickState, pos: BlockPos) -> bool {
     state

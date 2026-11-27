@@ -126,7 +126,7 @@ fn wal_inventory_recovery(size: usize, duplicate: Option<&str>) {
             save_error.contains("duplicate owned custody field"),
             "{save_error}"
         );
-    } else if size == crate::inventory::PLAYER_SLOTS {
+    } else if size == mc_inventory::PLAYER_SLOTS {
         let recovered = recovered.unwrap();
         let players = &recovered.dimensions[&Dimension::Overworld].players;
         assert_eq!(players[&owner.to_string()].inventory[0].count, 7);

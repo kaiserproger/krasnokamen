@@ -18,7 +18,7 @@
 //!   count residue.
 //!
 //! `PROPTEST_CASES=3000 cargo test -p mc-core --lib
-//! inventory::conservation_tests -- --nocapture` runs the long form and prints
+//! inventory_conservation_tests -- --nocapture` runs the long form and prints
 //! the per-operation coverage table; the default is 64 cases.
 
 use std::collections::BTreeMap;
@@ -30,13 +30,12 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::TestRunner;
 
-use crate::boundary::{
-    BlockPos, ClickMode, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput,
-};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput};
 use crate::horde_bench::flat_world;
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, run_tick};
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
 
 /// Block row the players stand on: the flat world's grass top is y=63.
 const FLOOR_Y: i32 = 64;
@@ -674,7 +673,7 @@ impl Rig {
         stack
     }
 
-    fn rules(&self) -> crate::inventory::ItemRules<'_> {
+    fn rules(&self) -> mc_inventory::ItemRules<'_> {
         self.state.registry.item_rules()
     }
 
@@ -684,7 +683,7 @@ impl Rig {
         let items = &self.state.registry.items;
         let rules = self.rules();
         let mut inside = Vec::new();
-        if crate::shulker::is_item(items, stack) {
+        if mc_inventory::shulker::is_item(items, stack) {
             let fields = mc_data::item_nbt::stack_to_fields(items, stack)
                 .map_err(|error| format!("shulker item unreadable: {error}"))?;
             if let Some(Tag::Compound(components)) = mc_data::item_nbt::field(&fields, "components")
@@ -704,9 +703,10 @@ impl Rig {
                 }
             }
         }
-        if super::bundle::is_bundle(&rules, stack) {
+        if mc_inventory::bundle::is_bundle(&rules, stack) {
             inside.extend(
-                super::bundle::read(&rules, stack).ok_or_else(|| "bundle unreadable".to_owned())?,
+                mc_inventory::bundle::read(&rules, stack)
+                    .ok_or_else(|| "bundle unreadable".to_owned())?,
             );
         }
         Ok(inside)
@@ -838,7 +838,7 @@ impl Rig {
             .join(", ")
     }
 
-    fn menu(&self, who: usize) -> &crate::inventory::Menu {
+    fn menu(&self, who: usize) -> &mc_inventory::Menu {
         let player = &self.state.players[&self.players[who].1];
         player.open.as_ref().unwrap_or(&player.inventory_menu)
     }

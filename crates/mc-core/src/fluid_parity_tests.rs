@@ -130,7 +130,7 @@ fn offhand_bucket_wash_does_not_mine_with_main_hand() {
         .raw_id as u32;
     let inventory = &mut state.players.get_mut(&player).unwrap().inventory;
     inventory.slots[0] = sword.clone();
-    inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(water_bucket, 1);
+    inventory.slots[mc_inventory::OFF_HAND] = mc_data::ItemStack::new(water_bucket, 1);
     run_tick(
         &mut state,
         &[PlayerInput::UseItemOn {
@@ -148,7 +148,7 @@ fn offhand_bucket_wash_does_not_mine_with_main_hand() {
     );
     let player = &state.players[&player];
     assert_eq!(
-        player.inventory.slots[crate::inventory::OFF_HAND].item_id,
+        player.inventory.slots[mc_inventory::OFF_HAND].item_id,
         empty_bucket
     );
     assert_eq!(

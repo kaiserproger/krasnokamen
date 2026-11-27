@@ -13,6 +13,7 @@ mod views;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_stack::ItemStack;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
 use uuid::Uuid;
@@ -478,18 +479,6 @@ pub enum DigAction {
     Start,
     Cancel,
     Finish,
-}
-
-/// Vanilla container click modes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum ClickMode {
-    Pickup,
-    QuickMove,
-    Swap,
-    Clone,
-    Throw,
-    QuickCraft,
-    PickupAll,
 }
 
 /// Inputs accepted for one tick, in arrival order per connection.

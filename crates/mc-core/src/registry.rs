@@ -130,7 +130,7 @@ pub struct RegistryTables {
     pub shears_item: Option<u32>,
     /// Battle kit and body identities, resolved once with the stable registry.
     pub(crate) battle_ids: crate::battle::ids::Ids,
-    /// Item facts (stack sizes, food, use durations) for [`ItemRules`](crate::inventory::ItemRules).
+    /// Item facts (stack sizes, food, use durations) for [`ItemRules`](mc_inventory::ItemRules).
     pub item_facts: mc_data::item_components::ItemFactsTable,
     /// Canonical vanilla tags, shared with village processors and biome gates.
     pub tags: Arc<mc_data::tags::TagsData>,
@@ -141,7 +141,7 @@ pub struct RegistryTables {
     pub(crate) advancement_blocks: Vec<std::sync::OnceLock<serde_json::Value>>,
     pub(crate) advancement_reward_loot:
         std::collections::BTreeMap<String, mc_data::loot::chest_26_1_2::ChestLootTable>,
-    pub enchantments: crate::inventory::enchanting::EnchantmentCatalog,
+    pub enchantments: mc_inventory::enchanting::EnchantmentCatalog,
     /// Immutable catalogs loaded from the same selected vanilla directory.
     pub entity_loot: Arc<mc_data::loot::entity_26_1_2::EntityLootCatalog>,
     pub entity_loot_lookups: Arc<mc_data::loot::entity_26_1_2::VanillaEntityLootLookups>,
@@ -270,10 +270,10 @@ impl CoreRegistry {
             ));
     }
 
-    /// [`ItemRules`](crate::inventory::ItemRules) over immutable startup data.
+    /// [`ItemRules`](mc_inventory::ItemRules) over immutable startup data.
     #[must_use]
-    pub fn item_rules(&self) -> crate::inventory::ItemRules<'_> {
-        crate::inventory::ItemRules {
+    pub fn item_rules(&self) -> mc_inventory::ItemRules<'_> {
+        mc_inventory::ItemRules {
             items: &self.items,
             facts: &self.item_facts,
             tags: &self.tags,
@@ -622,7 +622,7 @@ impl CoreRegistry {
             items.id_of(&Identifier::parse("minecraft:shears").expect("item id parses"));
         let battle_ids =
             crate::battle::ids::Ids::load(&items, &entity_types).map_err(CoreError::Registry)?;
-        let enchantments = crate::inventory::enchanting::EnchantmentCatalog::load(root)
+        let enchantments = mc_inventory::enchanting::EnchantmentCatalog::load(root)
             .map_err(CoreError::Registry)?;
         let advancements = Arc::new(match vanilla_data_dir {
             Some(dir) => mc_data::advancements::AdvancementTree::load(dir)
@@ -934,6 +934,10 @@ impl ResolvedStates {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "registry_inventory_tests.rs"]
+mod inventory_tests;
 
 #[cfg(test)]
 mod tests {

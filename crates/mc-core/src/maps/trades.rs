@@ -113,7 +113,7 @@ fn has_offer(state: &TickState, merchant: EntityId, spec: Spec) -> bool {
         .and_then(|slot| state.entities.row(slot).villager.as_ref())
         .is_some_and(|v| {
             v.offers.iter().any(|offer| {
-                super::map_id(&offer.result)
+                mc_inventory::cartography::map_id(&offer.result)
                     .and_then(|id| state.maps.records.get(&id))
                     .is_some_and(|map| {
                         map.decorations.values().any(|d| {

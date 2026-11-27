@@ -5,19 +5,19 @@
 //! click into new slot values, a new cursor, and items to drop. Click rules
 //! follow vanilla `AbstractContainerMenu.doClick` so that the client's own
 //! prediction of a click matches the server result.
+//!
+//! A crate below `mc-core` (ADR 0021): it names no core type; the tick owns
+//! sessions, custody floors and publication and calls these rules.
 
 pub mod anvil;
-pub(crate) mod bundle;
+pub mod bundle;
 #[cfg(test)]
 mod bundle_tests;
+pub mod cartography;
 mod click;
 #[cfg(test)]
 mod click_tests;
-#[cfg(test)]
-mod conservation_tests;
 mod craft_stations;
-#[cfg(test)]
-mod craft_stations_tests;
 mod crafting;
 #[cfg(test)]
 mod crafting_tests;
@@ -29,7 +29,10 @@ pub mod grindstone;
 mod recipe_book;
 #[cfg(test)]
 mod recipe_book_tests;
+pub mod shulker;
 mod stations;
+#[cfg(test)]
+mod test_data;
 
 pub use click::ClickOutcome;
 
@@ -48,6 +51,18 @@ const CONTAINER_MAX_STACK: i32 = 99;
 pub const PLAYER_SLOTS: usize = 41;
 pub const OFF_HAND: usize = 40;
 
+/// Vanilla container click modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ClickMode {
+    Pickup,
+    QuickMove,
+    Swap,
+    Clone,
+    Throw,
+    QuickCraft,
+    PickupAll,
+}
+
 /// Immutable item data the rules read; built once at startup.
 #[derive(Clone, Copy)]
 pub struct ItemRules<'a> {
@@ -55,20 +70,6 @@ pub struct ItemRules<'a> {
     pub facts: &'a ItemFactsTable,
     pub tags: &'a TagsData,
     pub recipes: &'a [Recipe],
-}
-
-impl crate::block_drops::BlockDropItems for ItemRules<'_> {
-    fn items(&self) -> &ItemRegistry {
-        self.items
-    }
-
-    fn facts(&self) -> &ItemFactsTable {
-        self.facts
-    }
-
-    fn tags(&self) -> &TagsData {
-        self.tags
-    }
 }
 
 impl ItemRules<'_> {
@@ -162,7 +163,7 @@ impl Default for PlayerInventory {
 }
 
 impl PlayerInventory {
-    pub(crate) fn can_add(&self, rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
+    pub fn can_add(&self, rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
         !stack.is_empty()
             && (self
                 .slot_with_space(stack, rules.max_stack(stack).min(CONTAINER_MAX_STACK))
@@ -179,7 +180,7 @@ impl PlayerInventory {
         self.add_tracking(rules, stack, |_| {});
     }
 
-    pub(crate) fn add_tracking(
+    pub fn add_tracking(
         &mut self,
         rules: &ItemRules<'_>,
         stack: &mut ItemStack,
@@ -469,7 +470,7 @@ pub struct Menu {
     /// inventory on close.
     pub grid: Vec<ItemStack>,
     pub result: ItemStack,
-    pub(crate) crafter_disabled: u16,
+    pub crafter_disabled: u16,
     quick_craft: QuickCraft,
     pub station: stations::StationState,
     /// Merchant identity/selection are transient; payment slots are returned
@@ -512,7 +513,7 @@ impl Menu {
 
     /// Recompute only recipe-backed virtual outputs after atomic catalog
     /// publication. Inputs, cursor and inventory custody are untouched.
-    pub(crate) fn reload_recipes(&mut self, rules: &ItemRules<'_>) -> bool {
+    pub fn reload_recipes(&mut self, rules: &ItemRules<'_>) -> bool {
         let result = match self.kind {
             MenuKind::Player | MenuKind::CraftingTable => crafting::grid_result(rules, &self.grid),
             MenuKind::Stonecutter => {

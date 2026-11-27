@@ -1138,7 +1138,7 @@ async fn sneaking_offhand_and_other_editor_sign_fallthroughs_remain_real_builds(
             let item = stack(&state, "dirt", 3);
             let inventory = &mut state.players.get_mut(&actor).unwrap().inventory;
             inventory.slots[0] = mc_data::ItemStack::EMPTY;
-            inventory.slots[crate::inventory::OFF_HAND] = item;
+            inventory.slots[mc_inventory::OFF_HAND] = item;
             Hand::Off
         } else {
             Hand::Main

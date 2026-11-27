@@ -705,7 +705,7 @@ pub fn interact(
     }
     let held_slot = match hand {
         Hand::Main => usize::from(player.inventory.selected.min(8)),
-        Hand::Off => crate::inventory::OFF_HAND,
+        Hand::Off => mc_inventory::OFF_HAND,
     };
     let held = player.inventory.slots[held_slot].clone();
     let creative = player.creative();

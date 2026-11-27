@@ -1,7 +1,8 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{BlockPos, ClickMode, ConnectionId, Hand, PlayerChange, PlayerInput};
-use crate::inventory::MenuKind;
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
 use mc_data::{Identifier, ItemStack};
+use mc_inventory::ClickMode;
+use mc_inventory::MenuKind;
 
 fn stack(state: &crate::tick::TickState, item: &str, count: i32) -> ItemStack {
     ItemStack::new(

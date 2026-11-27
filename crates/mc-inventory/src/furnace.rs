@@ -126,7 +126,7 @@ impl FurnaceState {
 
     /// Advance between fuel/item boundaries, rechecking output custody and
     /// the actual recipe after every boundary. Unlit tails cool normally.
-    pub(crate) fn catch_up(
+    pub fn catch_up(
         &mut self,
         rules: &ItemRules<'_>,
         kind: CookingKind,
@@ -216,7 +216,7 @@ fn cook_time(recipe: &Recipe) -> i32 {
     .max(1)
 }
 
-pub(crate) fn is_fuel(rules: &ItemRules<'_>, kind: CookingKind, stack: &ItemStack) -> bool {
+pub fn is_fuel(rules: &ItemRules<'_>, kind: CookingKind, stack: &ItemStack) -> bool {
     !stack.is_empty() && furnace_fuel_ticks(rules.tags, kind, stack.item_id).is_some()
 }
 
@@ -224,7 +224,7 @@ pub(super) fn can_smelt(rules: &ItemRules<'_>, kind: CookingKind, stack: &ItemSt
     cooking_recipe(rules, kind, stack).is_some()
 }
 
-pub(crate) fn is_empty_bucket(rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
+pub fn is_empty_bucket(rules: &ItemRules<'_>, stack: &ItemStack) -> bool {
     rules
         .items
         .name_of(stack.item_id)

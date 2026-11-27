@@ -381,7 +381,7 @@ pub(crate) fn initialize_appearance(
         );
     }
     if record.kind == ProjectileKind::Trident {
-        let loyalty = crate::enchantments::level(&record.stack, "loyalty").min(127) as i8;
+        let loyalty = mc_inventory::enchanting::level(&record.stack, "loyalty").min(127) as i8;
         set_extra(
             state,
             slot,

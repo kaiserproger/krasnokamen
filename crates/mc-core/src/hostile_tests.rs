@@ -616,11 +616,7 @@ fn hostile_gap_manual_creeper_ignition_survives_target_departure() {
     use crate::boundary::Hand;
     for (name, hand, index) in [
         ("minecraft:flint_and_steel", Hand::Main, 0),
-        (
-            "minecraft:fire_charge",
-            Hand::Off,
-            crate::inventory::OFF_HAND,
-        ),
+        ("minecraft:fire_charge", Hand::Off, mc_inventory::OFF_HAND),
     ] {
         let (mut state, player, centre) = setup(2.0);
         let item = state

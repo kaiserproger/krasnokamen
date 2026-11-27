@@ -137,7 +137,7 @@ impl Menu {
 }
 
 impl ItemRules<'_> {
-    pub(crate) fn brewing_input_allowed(&self, slot: usize, stack: &ItemStack) -> bool {
+    pub fn brewing_input_allowed(&self, slot: usize, stack: &ItemStack) -> bool {
         if stack.is_empty() {
             return true;
         }

@@ -3,14 +3,13 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{
-    BlockPos, ClickMode, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput,
-};
-use crate::inventory::MenuKind;
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::MenuKind;
 
 /// Platform height: far above the generated terrain.
 const Y: i32 = 200;

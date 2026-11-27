@@ -16,6 +16,20 @@ pub trait BlockDropItems {
     fn tags(&self) -> &TagsData;
 }
 
+impl BlockDropItems for mc_inventory::ItemRules<'_> {
+    fn items(&self) -> &mc_data::items::ItemRegistry {
+        self.items
+    }
+
+    fn facts(&self) -> &mc_data::item_components::ItemFactsTable {
+        self.facts
+    }
+
+    fn tags(&self) -> &TagsData {
+        self.tags
+    }
+}
+
 /// Immutable block data the drops read; built once at startup.
 #[derive(Clone, Copy)]
 pub struct BlockDropRules<'a> {

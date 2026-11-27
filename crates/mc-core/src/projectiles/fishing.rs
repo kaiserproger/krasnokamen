@@ -110,7 +110,7 @@ pub(crate) fn use_item(state: &mut TickState, actor: EntityId, hand: Hand) -> bo
     };
     let mut record = ProjectileState::new(ProjectileKind::FishingHook, Some(owner), held.clone());
     record.data = ProjectileData::Fishing(FishingState::new(
-        crate::enchantments::level(&held, "lure"),
+        mc_inventory::enchanting::level(&held, "lure"),
         owner.as_u128() as u64 ^ state.tick,
     ));
     if let Some(id) = super::launch(state, record, origin, velocity) {
@@ -161,7 +161,7 @@ fn reel(state: &mut TickState, actor: EntityId, held_slot: usize, rod: &ItemStac
                 matches!(biome.path(), "jungle" | "sparse_jungle" | "bamboo_jungle")
             });
         let effects = &state.players[&actor].active_effects;
-        let luck = crate::enchantments::level(rod, "luck_of_the_sea").min(255) as i32
+        let luck = mc_inventory::enchanting::level(rod, "luck_of_the_sea").min(255) as i32
             + effects.level(crate::effects::EffectId::Luck) as i32
             - effects.level(crate::effects::EffectId::Unluck) as i32;
         loot(&state.registry, luck, open, jungle, seed)
@@ -323,7 +323,7 @@ pub(crate) fn step(
             && !player.vitals.is_dead()
             && [
                 usize::from(player.inventory.selected.min(8)),
-                crate::inventory::OFF_HAND,
+                mc_inventory::OFF_HAND,
             ]
             .into_iter()
             .any(|slot| {

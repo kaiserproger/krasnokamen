@@ -489,7 +489,7 @@ fn parity_piercing_bypasses_shield_without_wear_and_arrows_rebound() {
 #[test]
 fn fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void() {
     use crate::effects::{ActiveEffect, EffectId};
-    for index in [0, crate::inventory::OFF_HAND] {
+    for index in [0, mc_inventory::OFF_HAND] {
         let (mut state, player, _) = flat_player_fixture();
         let totem = state
             .registry
@@ -545,7 +545,7 @@ fn fix_mobs_totem_checks_main_hand_first_and_never_searches_backpack() {
         actor.inventory.slots[9] = mc_data::ItemStack::new(totem, 1);
         if held {
             actor.inventory.slots[0] = mc_data::ItemStack::new(totem, 1);
-            actor.inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(totem, 1);
+            actor.inventory.slots[mc_inventory::OFF_HAND] = mc_data::ItemStack::new(totem, 1);
         }
         state
             .gamerules
@@ -557,7 +557,7 @@ fn fix_mobs_totem_checks_main_hand_first_and_never_searches_backpack() {
         assert_eq!(actor.inventory.slots[9].count, 1);
         if held {
             assert!(actor.inventory.slots[0].is_empty());
-            assert_eq!(actor.inventory.slots[crate::inventory::OFF_HAND].count, 1);
+            assert_eq!(actor.inventory.slots[mc_inventory::OFF_HAND].count, 1);
         }
     }
 }
@@ -567,7 +567,7 @@ fn death_protection_component_rescues_any_held_item_without_default_totem_effect
     use crate::command_items::ItemArgument;
     use crate::effects::{ActiveEffect, EffectId};
     for item in ["stick", "totem_of_undying"] {
-        for hand in [0, crate::inventory::OFF_HAND] {
+        for hand in [0, mc_inventory::OFF_HAND] {
             let (mut state, player, _) = flat_player_fixture();
             let argument =
                 ItemArgument::parse(&format!("{item}[death_protection={{death_effects:[]}}]"))
@@ -861,7 +861,7 @@ fn death_protection_removal_skips_main_hand_and_can_use_offhand_default() {
         let actor = state.players.get_mut(&player).unwrap();
         actor.inventory.slots[0] = removed;
         if offhand {
-            actor.inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(totem, 1);
+            actor.inventory.slots[mc_inventory::OFF_HAND] = mc_data::ItemStack::new(totem, 1);
         }
         state
             .gamerules
@@ -871,7 +871,7 @@ fn death_protection_removal_skips_main_hand_and_can_use_offhand_default() {
         assert_eq!(deaths.is_empty(), offhand);
         let actor = &state.players[&player];
         assert_eq!(actor.inventory.slots[0].count, 1);
-        assert!(actor.inventory.slots[crate::inventory::OFF_HAND].is_empty());
+        assert!(actor.inventory.slots[mc_inventory::OFF_HAND].is_empty());
         if offhand {
             assert_eq!(actor.vitals.health, 1.0);
             assert!(

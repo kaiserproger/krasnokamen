@@ -1,9 +1,10 @@
 //! Workstation transitions combine menu results and player XP atomically.
 
 use super::{PlayerEffects, PlayerState, contents_change};
-use crate::boundary::{ClickMode, PlayerChange};
-use crate::inventory::enchanting::{EnchantmentCatalog, apply_offer, next_seed};
-use crate::inventory::{ItemRules, MenuKind};
+use crate::boundary::PlayerChange;
+use mc_inventory::ClickMode;
+use mc_inventory::enchanting::{EnchantmentCatalog, apply_offer, next_seed};
+use mc_inventory::{ItemRules, MenuKind};
 
 impl PlayerState {
     pub fn initialize_station(

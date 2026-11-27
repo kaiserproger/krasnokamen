@@ -9,7 +9,7 @@ use mc_data::{Identifier, ItemEnchantment, ItemStack};
 use mc_world::BlockRegistry;
 
 use super::{BlockDropRules, block_drops};
-use crate::inventory::ItemRules;
+use mc_inventory::ItemRules;
 
 const STONE: u32 = 1;
 const COBBLESTONE: u32 = 2;

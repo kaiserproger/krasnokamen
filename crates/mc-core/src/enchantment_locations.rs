@@ -1,9 +1,10 @@
 //! Terrain-dependent equipment effects through canonical block intents and durable ticks.
 use crate::boundary::BlockPos;
-use crate::enchantments::{level, random};
+use crate::enchantments::random;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_inventory::enchanting::level;
 
 pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
     // Player equipment is authoritative here. Enumerate its owners rather than

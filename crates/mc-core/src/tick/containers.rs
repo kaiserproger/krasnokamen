@@ -166,12 +166,12 @@ pub(super) fn container_menu_for(
     x: i32,
     y: i32,
     z: i32,
-) -> Option<(crate::inventory::MenuKind, String, usize)> {
+) -> Option<(mc_inventory::MenuKind, String, usize)> {
     let current = state.world.block_at(x, y, z)?;
     let menu = container_kind_for_state(state, current)?;
     if container_cells(state, (x, y, z)).len() == 2 {
         return Some((
-            crate::inventory::MenuKind::Chest { rows: 6 },
+            mc_inventory::MenuKind::Chest { rows: 6 },
             "Large Chest".to_owned(),
             54,
         ));
@@ -229,7 +229,7 @@ pub(crate) fn debug_menu_snapshot(
             crate::vehicles::container_slots_for_player(state, entity)
                 .ok_or("vehicle menu storage is unavailable")?,
         )
-    } else if let crate::inventory::MenuKind::Mount { entity: mount, .. } = menu.kind {
+    } else if let mc_inventory::MenuKind::Mount { entity: mount, .. } = menu.kind {
         let slot = state
             .entities
             .slot_of(mount)
@@ -273,7 +273,7 @@ pub(crate) fn debug_menu_snapshot(
     };
     let slots = (0..menu.kind.slot_count())
         .map(|index| {
-            use crate::inventory::SlotRef;
+            use mc_inventory::SlotRef;
             let item = match menu.kind.slot(index) {
                 Some(SlotRef::Result) => &menu.result,
                 Some(SlotRef::Grid(i)) => &menu.grid[i],
@@ -442,7 +442,7 @@ pub(super) fn store_container_slots(
             state.world.mark_block_entity_dirty(position);
         } else {
             for (target, source) in record.slots.iter_mut().zip(mine) {
-                crate::inventory::bundle::copy_selection(target, source);
+                mc_inventory::bundle::copy_selection(target, source);
             }
         }
     }
@@ -452,7 +452,7 @@ pub(super) fn store_container_slots(
 pub(super) fn container_kind_for_state(
     state: &TickState,
     state_id: u32,
-) -> Option<(crate::inventory::MenuKind, String, usize)> {
+) -> Option<(mc_inventory::MenuKind, String, usize)> {
     let block_state = state
         .registry
         .blocks
@@ -463,33 +463,29 @@ pub(super) fn container_kind_for_state(
     }
     if mc_placement::copper::chest(block_state.block.id.path()) {
         return Some((
-            crate::inventory::MenuKind::Chest { rows: 3 },
+            mc_inventory::MenuKind::Chest { rows: 3 },
             "Copper Chest".into(),
             27,
         ));
     }
-    if crate::shulker::is_block(block_state.block.id.path()) {
-        return Some((
-            crate::inventory::MenuKind::ShulkerBox,
-            "Shulker Box".into(),
-            27,
-        ));
+    if mc_inventory::shulker::is_block(block_state.block.id.path()) {
+        return Some((mc_inventory::MenuKind::ShulkerBox, "Shulker Box".into(), 27));
     }
     match id {
         "minecraft:chest" | "minecraft:trapped_chest" => Some((
-            crate::inventory::MenuKind::Chest { rows: 3 },
+            mc_inventory::MenuKind::Chest { rows: 3 },
             "Chest".to_owned(),
             27,
         )),
-        "minecraft:hopper" => Some((crate::inventory::MenuKind::Hopper, "Hopper".into(), 5)),
-        "minecraft:crafter" => Some((crate::inventory::MenuKind::Crafter, "Crafter".into(), 9)),
+        "minecraft:hopper" => Some((mc_inventory::MenuKind::Hopper, "Hopper".into(), 5)),
+        "minecraft:crafter" => Some((mc_inventory::MenuKind::Crafter, "Crafter".into(), 9)),
         "minecraft:brewing_stand" => Some((
-            crate::inventory::MenuKind::BrewingStand,
+            mc_inventory::MenuKind::BrewingStand,
             "Brewing Stand".into(),
             5,
         )),
         "minecraft:dispenser" | "minecraft:dropper" => Some((
-            crate::inventory::MenuKind::Dispenser,
+            mc_inventory::MenuKind::Dispenser,
             if id == "minecraft:dropper" {
                 "Dropper"
             } else {
@@ -499,43 +495,41 @@ pub(super) fn container_kind_for_state(
             9,
         )),
         "minecraft:barrel" => Some((
-            crate::inventory::MenuKind::Chest { rows: 3 },
+            mc_inventory::MenuKind::Chest { rows: 3 },
             "Barrel".to_owned(),
             27,
         )),
         "minecraft:crafting_table" => Some((
-            crate::inventory::MenuKind::CraftingTable,
+            mc_inventory::MenuKind::CraftingTable,
             "Crafting Table".to_owned(),
             // Grid/result custody belongs to this player's Menu, not the block.
             0,
         )),
-        "minecraft:beacon" => Some((crate::inventory::MenuKind::Beacon, "Beacon".into(), 0)),
-        "minecraft:lectern" => Some((crate::inventory::MenuKind::Lectern, "Lectern".into(), 1)),
-        "minecraft:enchanting_table" => Some((
-            crate::inventory::MenuKind::EnchantingTable,
-            "Enchant".into(),
-            0,
-        )),
+        "minecraft:beacon" => Some((mc_inventory::MenuKind::Beacon, "Beacon".into(), 0)),
+        "minecraft:lectern" => Some((mc_inventory::MenuKind::Lectern, "Lectern".into(), 1)),
+        "minecraft:enchanting_table" => {
+            Some((mc_inventory::MenuKind::EnchantingTable, "Enchant".into(), 0))
+        }
         "minecraft:anvil" | "minecraft:chipped_anvil" | "minecraft:damaged_anvil" => {
-            Some((crate::inventory::MenuKind::Anvil, "Repair & Name".into(), 0))
+            Some((mc_inventory::MenuKind::Anvil, "Repair & Name".into(), 0))
         }
         "minecraft:grindstone" => Some((
-            crate::inventory::MenuKind::Grindstone,
+            mc_inventory::MenuKind::Grindstone,
             "Repair & Disenchant".into(),
             0,
         )),
         "minecraft:furnace" => Some((
-            crate::inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Furnace),
+            mc_inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Furnace),
             "Furnace".to_owned(),
             3,
         )),
         "minecraft:smoker" => Some((
-            crate::inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Smoker),
+            mc_inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Smoker),
             "Smoker".to_owned(),
             3,
         )),
         "minecraft:blast_furnace" => Some((
-            crate::inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::BlastFurnace),
+            mc_inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::BlastFurnace),
             "Blast Furnace".to_owned(),
             3,
         )),

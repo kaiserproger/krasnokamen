@@ -352,7 +352,7 @@ fn mount_inventory_equipment_cargo_and_ridden_open_share_native_custody() {
         version,
         44,
         0,
-        crate::boundary::ClickMode::QuickMove,
+        mc_inventory::ClickMode::QuickMove,
         &mut ChangeSet::default(),
     );
     assert!(state.players[&actor].inventory.slots[0].is_empty());
@@ -378,7 +378,7 @@ fn mount_inventory_equipment_cargo_and_ridden_open_share_native_custody() {
         version,
         44,
         0,
-        crate::boundary::ClickMode::QuickMove,
+        mc_inventory::ClickMode::QuickMove,
         &mut ChangeSet::default(),
     );
     assert!(state.entities.row(target_slot).loot.saddle.is_some());
@@ -390,7 +390,7 @@ fn mount_inventory_equipment_cargo_and_ridden_open_share_native_custody() {
         version,
         2,
         0,
-        crate::boundary::ClickMode::QuickMove,
+        mc_inventory::ClickMode::QuickMove,
         &mut ChangeSet::default(),
     );
     assert!(state.entities.row(target_slot).entity_life.mount.cargo[0].is_empty());
@@ -667,7 +667,7 @@ fn control_requires_tame_saddle_and_correct_stick_in_either_hand() {
         .items
         .id_of(&Identifier::parse("minecraft:carrot_on_a_stick").unwrap())
         .unwrap();
-    state.players.get_mut(&actor).unwrap().inventory.slots[crate::inventory::OFF_HAND] =
+    state.players.get_mut(&actor).unwrap().inventory.slots[mc_inventory::OFF_HAND] =
         ItemStack::new(stick, 1);
     assert!(controllable(&state, p, actor));
     dismount(&mut state, actor);

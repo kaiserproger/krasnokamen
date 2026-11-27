@@ -319,13 +319,13 @@ fn ranged_decode_bow_prefers_offhand_ammo_to_inventory_arrows() {
     let (mut state, mut decoder, actor) = fixture();
     equip(&mut state, &mut decoder, actor, "minecraft:bow");
     let offhand = stack(&state, "minecraft:arrow", 2);
-    state.players.get_mut(&actor).unwrap().inventory.slots[mc_core::inventory::OFF_HAND] = offhand;
+    state.players.get_mut(&actor).unwrap().inventory.slots[mc_inventory::OFF_HAND] = offhand;
     start(&mut state, &mut decoder, InteractionHand::MainHand);
     hold(&mut state, 25);
     release(&mut state, &mut decoder);
     assert_eq!(owned(&state, actor, ProjectileKind::Arrow).len(), 1);
     assert_eq!(
-        state.players[&actor].inventory.slots[mc_core::inventory::OFF_HAND].count,
+        state.players[&actor].inventory.slots[mc_inventory::OFF_HAND].count,
         1
     );
     assert_eq!(state.players[&actor].inventory.slots[0].count, 4);

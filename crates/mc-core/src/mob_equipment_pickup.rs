@@ -2,9 +2,9 @@
 //! drops and appearance post-images are published in the same tick/WAL batch.
 use crate::boundary::{ChangeSet, ChunkPos, EntityEvent};
 use crate::entities::{EntityKind, EntitySlot};
-use crate::inventory::ItemRules;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_inventory::ItemRules;
 use rustc_hash::FxHashSet as HashSet;
 use std::sync::Arc;
 

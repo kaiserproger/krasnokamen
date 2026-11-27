@@ -1,10 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
 use super::*;
-use crate::boundary::{ChunkPos, ClickMode, DigAction, Hand, PlayerInput};
+use crate::boundary::{ChunkPos, DigAction, Hand, PlayerInput};
 use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_inventory::ClickMode;
 
 const POS: BlockPos = BlockPos { x: 0, y: 201, z: 0 };
 const KEY: (i32, i32, i32) = (0, 201, 0);
@@ -519,7 +520,7 @@ fn shift_click_close_disconnect_and_rejoin_keep_single_shared_custody() {
     open(&mut state);
     assert_eq!(
         state.players[&entity].open.as_ref().unwrap().kind,
-        crate::inventory::MenuKind::BrewingStand
+        mc_inventory::MenuKind::BrewingStand
     );
     click(&mut state, entity, 32, ClickMode::QuickMove);
     click(&mut state, entity, 33, ClickMode::QuickMove);

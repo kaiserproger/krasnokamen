@@ -2804,9 +2804,10 @@ fn shutdown_checkpoint_prunes_all_covered_batches() {
 /// observed WAL durability point); the parent reopens and asserts recovery.
 #[test]
 fn custody_survives_checkpoint_crash() {
-    use crate::boundary::{ClickMode, ConnectionId, PlayerInput};
+    use crate::boundary::{ConnectionId, PlayerInput};
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_inventory::ClickMode;
     use std::io::{BufRead as _, Write as _};
 
     fn custody_complete(entries: &[crate::journal::JournalEntry], names: &[String]) -> bool {
@@ -4157,7 +4158,8 @@ fn furnace_charcoal_cooks_and_updates_every_open_viewer() {
 
 #[test]
 fn furnace_result_pickup_and_shift_click_award_experience_once() {
-    use crate::boundary::{BlockPos, ClickMode, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use mc_inventory::ClickMode;
     for mode in [ClickMode::Pickup, ClickMode::QuickMove] {
         let mut state = test_state();
         let entity = join(&mut state, 206, "smelter");
@@ -4429,8 +4431,9 @@ fn breaking_filled_chest_drops_contents_and_clears_storage() {
 /// state-id; a stale click from the second viewer resyncs.
 #[test]
 fn shared_chest_second_viewer_syncs_and_stale_click_resyncs() {
+    use crate::boundary::PlayerChange;
     use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
-    use crate::boundary::{ClickMode, PlayerChange};
+    use mc_inventory::ClickMode;
     let mut state = test_state();
     let registry = test_registry();
     let chest_block = registry
@@ -4975,10 +4978,11 @@ fn settle(
 /// no resurrection and a fresh chest starts empty.
 #[test]
 fn container_break_drops_survive_restart_without_resurrection() {
-    use crate::boundary::{BlockPos, ClickMode, ConnectionId, DigAction, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
     use crate::boundary::{PlayerChange, TickOutput};
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_inventory::ClickMode;
     let dir = std::env::temp_dir().join(format!(
         "mc-core-chestbreak-{}-{:?}",
         std::process::id(),
@@ -5876,7 +5880,7 @@ fn predicted_table_use_waits_for_accepted_placement() {
     );
     assert_eq!(
         state.players[&player].open.as_ref().unwrap().kind,
-        crate::inventory::MenuKind::CraftingTable
+        mc_inventory::MenuKind::CraftingTable
     );
     let planks = state
         .registry
@@ -5896,7 +5900,7 @@ fn predicted_table_use_waits_for_accepted_placement() {
                 state_id,
                 slot,
                 button: 0,
-                mode: crate::boundary::ClickMode::Pickup,
+                mode: mc_inventory::ClickMode::Pickup,
             }],
         );
         assert!(
@@ -6474,7 +6478,7 @@ fn accepted_melee_wears_and_breaks_armor_and_syncs_the_inventory() {
 #[test]
 fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
     use crate::boundary::{EntityEvent, Hand, PlayerChange};
-    use crate::inventory::OFF_HAND;
+    use mc_inventory::OFF_HAND;
     for (hand, elapsed, front, blocked) in [
         (Hand::Off, 5, true, true),
         (Hand::Main, 5, true, true),
@@ -6660,7 +6664,7 @@ fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
         let rules = state.registry.item_rules();
         let actor = state.players.get_mut(&player).unwrap();
         actor.inventory.slots[0] = mc_data::ItemStack::new(shield, 1);
-        actor.inventory.slots[crate::inventory::OFF_HAND] = mc_data::ItemStack::new(shield, 1);
+        actor.inventory.slots[mc_inventory::OFF_HAND] = mc_data::ItemStack::new(shield, 1);
         if breaks {
             actor.inventory.slots[0].damage = Some(335);
         }
@@ -7084,7 +7088,7 @@ fn coal_break_experience_is_zero_to_two_and_silk_touch_suppresses_it() {
             ..Default::default()
         },
     )]);
-    let rules = crate::inventory::ItemRules {
+    let rules = mc_inventory::ItemRules {
         facts: &facts,
         ..registry.item_rules()
     };
@@ -7324,8 +7328,9 @@ fn accepted_coal_break_spawns_orbs_and_silk_touch_spawns_none() {
 
 #[test]
 fn workstation_wire_inputs_own_inputs_and_commit_station_outputs() {
-    use crate::boundary::{BlockPos, ClickMode, Hand, PlayerChange};
-    use crate::inventory::MenuKind;
+    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use mc_inventory::ClickMode;
+    use mc_inventory::MenuKind;
     for (block, kind, menu_type) in [
         ("minecraft:enchanting_table", MenuKind::EnchantingTable, 13),
         ("minecraft:anvil", MenuKind::Anvil, 8),

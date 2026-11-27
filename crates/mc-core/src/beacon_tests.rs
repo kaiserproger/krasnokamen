@@ -194,7 +194,7 @@ fn pay(state: &mut TickState, entity: EntityId) {
             state_id,
             slot: 1,
             button: 0,
-            mode: crate::boundary::ClickMode::QuickMove,
+            mode: mc_inventory::ClickMode::QuickMove,
         }],
     );
 }

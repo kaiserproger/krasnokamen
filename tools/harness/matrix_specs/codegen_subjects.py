@@ -10,6 +10,7 @@ SOL = Path(__file__).resolve().parents[3]
 CORE = SOL / "crates/mc-core/src"
 EDGE = SOL / "crates/mc-edge/src"
 DATA = SOL / "crates/mc-data/src"
+INVENTORY = SOL / "crates/mc-inventory/src"
 
 
 def read(p):
@@ -464,8 +465,8 @@ def build():
         for s in cl])
     return {"roots": roots, "kinds": kinds, "effects": effects, "rules": rules, "living": living, "nonliving": nonliving,
             "professions": profs, "settlement_help": helps, "settlement_eco": eco,
-            "menu_kinds": enum_variants(CORE / "inventory.rs", "MenuKind"),
-            "click_modes": enum_variants(CORE / "boundary.rs", "ClickMode"),
+            "menu_kinds": enum_variants(INVENTORY / "lib.rs", "MenuKind"),
+            "click_modes": enum_variants(INVENTORY / "lib.rs", "ClickMode"),
             "player_inputs": enum_variants(CORE / "boundary.rs", "PlayerInput"),
             "goal_kinds": enum_variants(CORE / "blueprint.rs", "GoalKind"),
             "dimensions": enum_variants(CORE / "dimensions.rs", "Dimension"),

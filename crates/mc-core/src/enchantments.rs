@@ -1,19 +1,10 @@
 //! Gameplay hooks for equipment enchantments; item components remain the authority.
 use mc_data::ItemStack;
-
-pub(crate) fn level(stack: &ItemStack, name: &str) -> u32 {
-    stack
-        .enchantments
-        .iter()
-        .filter(|entry| entry.id.namespace() == "minecraft" && entry.id.path() == name)
-        .map(|entry| entry.level.max(0) as u32)
-        .max()
-        .unwrap_or(0)
-}
+use mc_inventory::enchanting::level;
 
 /// Deterministic persisted gameplay draws, separate from the enchanting offer seed.
 pub(crate) fn random(seed: &mut i32) -> f64 {
-    *seed = crate::inventory::enchanting::next_seed(*seed);
+    *seed = mc_inventory::enchanting::next_seed(*seed);
     f64::from((*seed as u32) >> 8) / 16_777_216.0
 }
 

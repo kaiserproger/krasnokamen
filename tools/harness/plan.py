@@ -108,8 +108,8 @@ PROTOCOL_GLOBS = (
 # release their stacks (tick/merge.rs removes container block entities and spawns
 # their items). Minimal list: custody also lives outside these names.
 CUSTODY_GLOBS = (
-    "crates/mc-core/src/inventory.rs",
-    "crates/mc-core/src/inventory/**",
+    "crates/mc-inventory/**",
+    "crates/mc-core/src/inventory_conservation_tests.rs",
     "crates/mc-core/src/chests*",
     "crates/mc-core/src/chiseled_shelf*",
     "crates/mc-core/src/ender_chest*",
@@ -831,12 +831,14 @@ def _expand_protocol_tests(ctx: Context, rule: Rule, hits: list[str]) -> None:
 
 
 def _expand_custody_tests(ctx: Context, rule: Rule, hits: list[str]) -> None:
-    core = _crates(hits, ("mc-core",)).get("mc-core")
-    if core:
+    # The core conservation property drives mc-inventory's click rules through the tick.
+    hit_crates = _crates(hits, ("mc-core", "mc-inventory"))
+    paths = tuple(hit_crates.get("mc-core", []) + hit_crates.get("mc-inventory", []))
+    if paths:
         ctx.plan.add(
             f"python3 -m tools.harness run test -p mc-core --lib {' '.join(CUSTODY_FILTERS)}",
-            why=f"{rule.source}: {rule.why}; inventory::conservation_tests item totals never change",
-            paths=tuple(core))
+            why=f"{rule.source}: {rule.why}; inventory_conservation_tests item totals never change",
+            paths=paths)
 
 
 def _expand_no_gate(ctx: Context, rule: Rule, hits: list[str], kind: str) -> None:

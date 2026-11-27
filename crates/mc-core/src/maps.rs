@@ -8,6 +8,7 @@ use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
 use mc_domain::EntityId;
+use mc_inventory::cartography::set_map_id;
 use serde::{Deserialize, Serialize};
 
 pub(crate) mod banner;
@@ -150,30 +151,6 @@ impl Maps {
             ..Self::default()
         })
     }
-}
-
-pub fn map_id(stack: &ItemStack) -> Option<i32> {
-    let component = stack
-        .extended()
-        .preserved_components
-        .iter()
-        .find(|c| c.name == "minecraft:map_id")?;
-    let mut bytes = component.value.as_slice();
-    match mc_nbt::read_network_value(&mut bytes).ok()? {
-        mc_nbt::Tag::Int(id) if id >= 0 && bytes.is_empty() => Some(id),
-        _ => None,
-    }
-}
-pub fn set_map_id(stack: &mut ItemStack, id: i32) {
-    let mut value = Vec::new();
-    mc_nbt::write_network_value(&mut value, &mc_nbt::Tag::Int(id)).expect("map id NBT");
-    let components = &mut stack.extended_mut().preserved_components;
-    components.retain(|c| c.name.trim_start_matches('!') != "minecraft:map_id");
-    components.push(mc_data::item_stack::PreservedItemComponent {
-        name: "minecraft:map_id".into(),
-        value,
-        baseline: None,
-    });
 }
 
 pub fn filled_map(state: &TickState, id: i32) -> Result<ItemStack, String> {

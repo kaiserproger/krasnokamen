@@ -109,7 +109,7 @@ fn slime_chunk(seed: i64, x: i32, z: i32) -> bool {
         .wrapping_add(i64::from(z.wrapping_mul(z)).wrapping_mul(0x4307a7))
         .wrapping_add(i64::from(z.wrapping_mul(0x5f24f)))
         ^ 0x3ad8025f;
-    crate::inventory::enchanting::LegacyRandom::new(seed).next_int(10) == 0
+    mc_inventory::enchanting::LegacyRandom::new(seed).next_int(10) == 0
 }
 
 pub(super) fn slime_allowed(

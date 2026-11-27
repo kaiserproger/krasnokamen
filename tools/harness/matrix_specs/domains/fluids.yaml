@@ -345,4 +345,4 @@ subjects:
     server_gap_evidence:
       - scenarios/subjects3.py:121
       - crates/mc-core/src/fluids.rs (no sponge absorption dispatch)
-      - crates/mc-core/src/inventory/furnace.rs:278-284 (wet sponge drying only)
+      - crates/mc-inventory/src/furnace.rs:278-284 (wet sponge drying only)

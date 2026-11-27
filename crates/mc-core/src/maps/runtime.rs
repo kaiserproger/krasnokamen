@@ -1,7 +1,8 @@
-use super::{SavedMap, decoration_id, map_id};
+use super::{SavedMap, decoration_id};
 use crate::boundary::{ConnectionId, PlayerChange};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_inventory::cartography::map_id;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -317,7 +318,7 @@ pub(crate) fn tick(state: &mut TickState) {
         for (index, held) in player.inventory.slots.iter().enumerate() {
             if let Some(id) = map_id(held) {
                 if index == usize::from(player.inventory.selected)
-                    || index == crate::inventory::OFF_HAND
+                    || index == mc_inventory::OFF_HAND
                 {
                     explorers.entry(id).or_default().push((pos[0], pos[2]));
                 }
