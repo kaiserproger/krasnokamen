@@ -293,32 +293,6 @@ fn tail_after(
     Ok(rest.to_owned())
 }
 
-/// Player targets of a command, or vanilla's `argument.entity.notfound.player`.
-fn target_players(
-    state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
-    executor: EntityId,
-    target: &crate::commands::Target,
-) -> Option<Vec<EntityId>> {
-    let targets = match crate::command_execution::player_targets(state, executor, target) {
-        Ok(targets) => targets,
-        Err(message) => {
-            error_text(state, connection, message);
-            return None;
-        }
-    };
-    if targets.is_empty() {
-        crate::command_execution::feedback(
-            state,
-            connection,
-            "argument.entity.notfound.player",
-            Vec::new(),
-        );
-        return None;
-    }
-    Some(targets)
-}
-
 /// `/tellraw`: resolve the component once per target player (entity override =
 /// that player, mirroring vanilla's per-player `getResolvedComponent`) and
 /// deliver it as system chat. Vanilla sends no feedback to the sender.
@@ -329,7 +303,9 @@ pub(crate) fn execute_tellraw(
     target: &crate::commands::Target,
     message: &mc_nbt::Tag,
 ) -> crate::command_execution::CommandResult {
-    let Some(targets) = target_players(state, connection, executor, target) else {
+    let Some(targets) =
+        crate::command_execution::player_targets_checked(state, connection, executor, target)
+    else {
         return crate::command_execution::CommandResult::Failed;
     };
     let count = targets.len() as i32;
@@ -337,7 +313,7 @@ pub(crate) fn execute_tellraw(
         let resolved = match resolve_component(state, target, message) {
             Ok(tag) => tag,
             Err(message) => {
-                error_text(state, connection, message);
+                crate::command_execution::error(state, connection, message);
                 return crate::command_execution::CommandResult::Failed;
             }
         };
@@ -362,7 +338,9 @@ pub(crate) fn execute_title(
     target: &crate::commands::Target,
     action: &TitleAction,
 ) -> crate::command_execution::CommandResult {
-    let Some(targets) = target_players(state, connection, executor, target) else {
+    let Some(targets) =
+        crate::command_execution::player_targets_checked(state, connection, executor, target)
+    else {
         return crate::command_execution::CommandResult::Failed;
     };
     match action {
@@ -384,7 +362,7 @@ pub(crate) fn execute_title(
                 let resolved = match resolve_component(state, *target, component) {
                     Ok(tag) => tag,
                     Err(message) => {
-                        error_text(state, connection, message);
+                        crate::command_execution::error(state, connection, message);
                         return crate::command_execution::CommandResult::Failed;
                     }
                 };
@@ -458,10 +436,6 @@ fn title_feedback(
         );
     }
 }
-fn error_text(state: &mut TickState, connection: crate::boundary::ConnectionId, message: String) {
-    state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
-}
-
 #[cfg(test)]
 #[path = "command_text_tests.rs"]
 mod tests;
