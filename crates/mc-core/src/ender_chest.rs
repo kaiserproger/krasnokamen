@@ -1,9 +1,10 @@
 //! Personal chest custody lives in the player's retained EnderItems image,
 //! not in the placed block. Decode only for admission/menu events, never ticks.
-use crate::boundary::{BlockPos, ChangeSet, ClickMode, ConnectionId, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, ClickMode, ConnectionId};
 use crate::config::CoreError;
 use crate::tick::TickState;
 use mc_data::{ItemStack, item_nbt};
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
 use std::sync::Arc;
 

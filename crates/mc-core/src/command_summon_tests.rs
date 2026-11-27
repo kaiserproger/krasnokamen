@@ -1233,7 +1233,7 @@ fn item_summon_with_age_minus_32768_sets_the_never_clock() {
 /// the vanilla short, and the pickup delay 32767.
 fn plain_item_record(
     state: &TickState,
-    id: crate::boundary::EntityId,
+    id: mc_domain::EntityId,
 ) -> mc_data::entity_nbt::VanillaEntity {
     let uuid = state.entities.row(state.entities.slot_of(id).unwrap()).uuid;
     let (_, chunks, _) = crate::core::checkpoint_data_for(state, state.tick);

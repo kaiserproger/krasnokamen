@@ -7,10 +7,11 @@ use std::sync::Arc;
 use mc_data::{Identifier, ItemStack};
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{EntityId, Hand};
+use crate::boundary::Hand;
 use crate::entities::{ColdRow, EntityKind};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::{TickState, spawn_item_entity};
+use mc_domain::EntityId;
 
 #[path = "entity_life_breeding.rs"]
 pub(crate) mod breeding;

@@ -5,8 +5,8 @@ fn fixture(
     range: f64,
 ) -> (
     TickState,
-    crate::boundary::EntityId,
-    crate::boundary::EntityId,
+    mc_domain::EntityId,
+    mc_domain::EntityId,
     [f64; 3],
 ) {
     let (mut state, player, pos) = crate::hostile_tests::setup(range);

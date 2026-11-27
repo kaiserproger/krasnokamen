@@ -8,12 +8,13 @@ mod summons;
 mod wither;
 
 use crate::blueprint::GoalKind;
-use crate::boundary::{EntityDataValue, EntityEvent, EntityId};
+use crate::boundary::{EntityDataValue, EntityEvent};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

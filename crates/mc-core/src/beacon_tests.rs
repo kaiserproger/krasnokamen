@@ -1,8 +1,9 @@
-use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{BlockPos, ChunkPos, ConnectionId, PlayerInput};
 use crate::effects::EffectId;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };

@@ -1,8 +1,9 @@
 //! Ephemeral global player roster and reliable broadcasts across local worlds.
 use super::Dimension;
-use crate::boundary::{ConnectionId, EntityId, PlayerChange, TickOutput};
+use crate::boundary::{ConnectionId, PlayerChange, TickOutput};
 use crate::commands::Weather;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

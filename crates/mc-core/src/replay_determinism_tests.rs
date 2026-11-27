@@ -8,11 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
 use crate::entities::EntitySlot;
 use crate::tick::{TickState, run_tick};
 use crate::tick_tests::full_registry;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 const TOTAL_TICKS: u64 = 350;
 const VARIANT_TICK: u64 = 50;

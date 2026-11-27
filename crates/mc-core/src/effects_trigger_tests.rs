@@ -1,10 +1,11 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{EntityId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntityKind;
 use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_data::Identifier;
+use mc_domain::EntityId;
 
 fn mob(state: &mut TickState, name: &str, pos: [f64; 3]) -> EntityId {
     let kind = state

@@ -1,7 +1,8 @@
 //! Placement/neighbor-driven sponge absorption (26.1.2 SpongeBlock).
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_world::BlockStateId;
 
 const STEPS: [[i32; 3]; 6] = [

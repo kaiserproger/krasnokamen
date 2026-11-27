@@ -1,9 +1,10 @@
 //! Cartography output is planned without allocating; taking it commits map+items.
 use super::{SavedMap, map_id, set_map_id};
-use crate::boundary::{ChangeSet, ClickMode, EntityId};
+use crate::boundary::{ChangeSet, ClickMode};
 use crate::inventory::{ItemRules, MenuKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 pub(crate) fn allowed(rules: &ItemRules<'_>, slot: usize, stack: &ItemStack) -> bool {

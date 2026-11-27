@@ -12,15 +12,14 @@
 //! per-connection queues (never skipped; overflow disconnects).
 
 use mc_physics::mth;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use mc_data::statistics::StatType;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::sync::Arc;
 
 use crate::boundary::{
-    BlockPos, ChangeSet, ChunkPos, ConnectionId, DigAction, EntityAppearance, EntityEvent,
-    EntityId, Hand, PlayerChange, PlayerInput, TickOutput, TickTimes, WorldSnapshot,
+    BlockPos, ChangeSet, ChunkPos, ConnectionId, DigAction, EntityAppearance, EntityEvent, Hand,
+    PlayerChange, PlayerInput, TickOutput, TickTimes, WorldSnapshot,
 };
 use crate::entities::{
     Body, ColdFields, EntityKind, EntitySlot, EntityStore, MOTION_ALIVE, MOTION_EFFECTS,
@@ -30,6 +29,7 @@ use crate::entities::{
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim, sort_intents};
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 mod auth;
 pub(crate) use auth::unlock_session;
@@ -1063,7 +1063,7 @@ mod cold_menu_residency_tests {
             .0
     }
 
-    fn fixture() -> (TickState, crate::boundary::EntityId) {
+    fn fixture() -> (TickState, mc_domain::EntityId) {
         let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
         let world = ChunkWorld::new(
             42,

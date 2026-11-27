@@ -155,7 +155,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
     let mut live = live_state();
     live.tick = recovered.tick;
     crate::core::restore_entity(&mut live, 7, recovered).unwrap();
-    let slot = live.entities.slot_of(crate::boundary::EntityId(7)).unwrap();
+    let slot = live.entities.slot_of(mc_domain::EntityId(7)).unwrap();
     assert_eq!(live.entities.pos(slot), pos);
     assert_eq!(live.entities.vel(slot), vel);
     assert_eq!(
@@ -615,7 +615,7 @@ fn initial_skeleton_arrow_restore_keeps_stuck_age_and_no_ammo() {
     ));
     let mut live = live_state();
     crate::core::restore_entity(&mut live, 7, &record).unwrap();
-    let slot = live.entities.slot_of(crate::boundary::EntityId(7)).unwrap();
+    let slot = live.entities.slot_of(mc_domain::EntityId(7)).unwrap();
     let restored = live.entities.row(slot).projectile.as_ref().unwrap();
     assert!(restored.stuck);
     assert_eq!(restored.age, 733);
@@ -624,11 +624,7 @@ fn initial_skeleton_arrow_restore_keeps_stuck_age_and_no_ammo() {
     record.pos[0] = f64::NAN;
     let error = crate::core::restore_entity(&mut live, 8, &record).unwrap_err();
     assert!(error.to_string().contains("non-finite position"));
-    assert!(
-        live.entities
-            .slot_of(crate::boundary::EntityId(8))
-            .is_none()
-    );
+    assert!(live.entities.slot_of(mc_domain::EntityId(8)).is_none());
 }
 
 #[test]
@@ -727,7 +723,7 @@ fn crossbow_launch_custody_and_confirmed_kills_round_trip_without_inference() {
     assert!(validate_state(&arrow).is_err());
 }
 
-fn landed_battle_arrow() -> (crate::tick::TickState, crate::boundary::EntityId, u64) {
+fn landed_battle_arrow() -> (crate::tick::TickState, mc_domain::EntityId, u64) {
     let (mut state, _, centre) = super::super::flight_tests::setup();
     let kind = state
         .registry
@@ -1109,12 +1105,9 @@ fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() 
         );
         let mut restored = live_state();
         crate::core::restore_entity(&mut restored, 7, saved).unwrap();
-        let row = restored.entities.row(
-            restored
-                .entities
-                .slot_of(crate::boundary::EntityId(7))
-                .unwrap(),
-        );
+        let row = restored
+            .entities
+            .row(restored.entities.slot_of(mc_domain::EntityId(7)).unwrap());
         let record = row.projectile.as_deref().unwrap();
         assert_eq!(record.ground_age(row.age), expected);
         assert_eq!(

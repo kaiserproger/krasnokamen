@@ -180,7 +180,8 @@ class MemRunReservationTests(unittest.TestCase):
         (root / 'targets' / 'slot-a').mkdir(parents=True)
         self.env = os.environ.copy()
         self.env.update(CARGO_TARGET_DIR=str(root / 'targets' / 'slot-a'),
-                        KRASNOKAMEN_SLOT_TARGETS=str(root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0')
+                        KRASNOKAMEN_SLOT_TARGETS=str(root / 'targets'),
+                        KRASNOKAMEN_DISK_GC_BELOW_GB='0', KRASNOKAMEN_DISK_REFUSE_BELOW_GB='0')
         self.state = root / 'state'
 
     def run_true(self):

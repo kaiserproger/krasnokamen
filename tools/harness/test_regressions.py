@@ -2299,21 +2299,18 @@ class LedgerToolTests(unittest.TestCase):
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
 
-    def test_promote_outside_mem_run_is_refused_before_the_control_lock(self):
+    def test_promote_outside_the_mem_run_scope_is_refused_before_the_control_lock(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name) / 'wt' / 'Promoter'
         root.mkdir(parents=True)
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('KRASNOKAMEN_BUILD_TOKEN', None)
-            # The suite itself runs under mem-run (D127 removed the build tokens), so the scope
-            # marker has to be cleared too or this refusal can never be observed.
-            os.environ.pop('MEMRUN_DIR', None)
+            os.environ.pop('KRASNOKAMEN_HARNESS_CPU_SCOPE', None)
             with self.assertRaisesRegex(ledger.Refused, 'must run under mem-run'):
                 with ledger._control_lock(root):
                     pass
         self.assertFalse((root.parent / 'ledger-control.lock').exists())
-        with patch.dict(os.environ, {'MEMRUN_DIR': '/tmp/solaris-mem-slots'}):
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):
             with ledger._control_lock(root):
                 self.assertTrue((root.parent / 'ledger-control.lock').exists())
 
@@ -2537,7 +2534,7 @@ class LedgerToolTests(unittest.TestCase):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
-        with patch.dict(os.environ, {'KRASNOKAMEN_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
+        with patch.dict(os.environ, {'KRASNOKAMEN_HARNESS_CPU_SCOPE': '1'}):  # under wt/ a promote needs the mem-run scope
             self.promote(root, runner, dry_run=True)
             self.promote(root, runner, dry_run=True)
         # Same path every run: cargo reuses the build artifacts instead of growing the target dir.

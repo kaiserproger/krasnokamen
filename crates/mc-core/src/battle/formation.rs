@@ -3,8 +3,8 @@
 //! Decisions are staggered at 10 ticks; motion and membership liveness are not.
 
 use super::morale::{Morale, Pressure, nerve};
-use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
+use mc_domain::EntityId;
 use mc_physics::mth;
 use rustc_hash::FxHashMap;
 

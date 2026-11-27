@@ -1,10 +1,11 @@
 use mc_data::ItemStack;
 use mc_physics::mth;
 
-use crate::boundary::{ChangeSet, ConnectionId, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{TickState, apply_player_effects, within_entity_reach};
+use mc_domain::EntityId;
 
 pub(in crate::tick) fn attack(
     state: &mut TickState,

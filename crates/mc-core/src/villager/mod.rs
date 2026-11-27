@@ -410,7 +410,7 @@ pub struct VillagerState {
     pub(crate) seat: Option<BlockPos>,
     pub courtship_until: Option<u64>,
     #[serde(with = "persistence::entity_id_option")]
-    pub partner: Option<crate::boundary::EntityId>,
+    pub partner: Option<mc_domain::EntityId>,
     /// Transient navigation and reactive brain memories, owned by the tick.
     #[serde(skip)]
     pub(crate) navigation_path: Vec<BlockPos>,

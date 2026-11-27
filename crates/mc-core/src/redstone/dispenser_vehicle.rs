@@ -9,7 +9,7 @@ pub(super) fn place(
     pos: BlockPos,
     target: BlockPos,
     index: usize,
-    spawned: &mut Vec<crate::boundary::EntityId>,
+    spawned: &mut Vec<mc_domain::EntityId>,
 ) -> bool {
     let held = state.block_entities[&(pos.x, pos.y, pos.z)].slots[index].clone();
     let Some(item) = state.registry.items.name_of(held.item_id) else {

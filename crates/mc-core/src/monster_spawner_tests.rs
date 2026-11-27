@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 
 fn fixture(name: &str) -> (TickState, EntityId, Key) {
     let (mut state, player, pos) = crate::hostile_tests::setup(10.0);

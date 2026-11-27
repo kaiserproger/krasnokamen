@@ -1,6 +1,7 @@
 //! Settled neighbor updates and native falling entities on the tick owner.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub(crate) fn run(
     state: &mut TickState,

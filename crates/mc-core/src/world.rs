@@ -341,7 +341,7 @@ impl SectionMatchCache {
 /// Slot-indexed users must also match `entity` after store compaction.
 #[derive(Clone, Copy)]
 pub(crate) struct ContactStamp<const N: usize = 0> {
-    pub(crate) entity: crate::boundary::EntityId,
+    pub(crate) entity: mc_domain::EntityId,
     pub(crate) position: [f64; 3],
     pub(crate) shape: [f64; 2],
     pub(crate) min: (i32, i32, i32),

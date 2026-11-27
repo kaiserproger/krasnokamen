@@ -1,9 +1,10 @@
 //! Generic native NPC identity, physical controls and route authority.
 //! Domain records retain ownership and receipts; bodies and cargo stay native.
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_script::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

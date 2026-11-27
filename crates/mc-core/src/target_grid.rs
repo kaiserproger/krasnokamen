@@ -15,7 +15,7 @@
 
 use rustc_hash::FxHashMap as HashMap;
 
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 
 /// One target: entity id and feet position.
 pub(crate) type Target = (EntityId, [f64; 3]);

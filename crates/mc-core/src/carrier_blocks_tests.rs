@@ -7,10 +7,11 @@ use mc_data::item_components::{CustomItemDefinition, ItemFacts};
 use mc_data::{Identifier, ItemStack};
 use mc_loader::CarrierBlockDeclaration;
 
-use crate::boundary::{BlockPos, ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
 use crate::carrier_blocks::CarrierBlocks;
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::{TickState, run_tick};
+use mc_domain::EntityId;
 
 const MONITOR: &str = "computer:monitor";
 const CARRIER: &str = "minecraft:gray_glazed_terracotta";

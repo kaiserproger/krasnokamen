@@ -110,7 +110,7 @@ fn fixture() -> TickState {
     TickState::new(registry, world, 2, 512)
 }
 
-fn join(state: &mut TickState) -> crate::boundary::EntityId {
+fn join(state: &mut TickState) -> mc_domain::EntityId {
     run_tick(
         state,
         &[PlayerInput::Join {

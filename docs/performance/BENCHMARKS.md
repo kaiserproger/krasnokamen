@@ -1,7 +1,7 @@
 # Benchmarks: weak hardware, core scaling, worldgen, VPS
 
-**Draft prerelease:** measurements describe a workload, binary and host, not a
-performance guarantee, capacity promise or vanilla-parity result.
+Measurements describe a workload, binary and host, not a performance guarantee,
+capacity promise or vanilla-parity result.
 Every published number comes from one documented command, a release build and
 a fixed seed, with `result.json`, `result.md` and a hardware record.
 `tools/bench` selects matrix cells; it delegates server/fixture/bot lifecycle to
@@ -215,19 +215,36 @@ open-loop, not response-paced:
 
 `build`: creative, fixed day 6000, 43–56-block walking legs with sprint/jump,
 break/place/chat. `fight`: survival/respawn, fixed night 18000, natural hostiles
-hurt walking bots; **bots do not attack**. The schedule's edit offers are not
-proof of survival edits; [PLAYER_CAPACITY](PLAYER_CAPACITY.md) owns admission
-and completion accounting.
+hurt walking bots; **bots do not attack**, and survival edits are not driven, so
+the schedule's edit offers are not proof of survival edits.
 
 Active `wall_us` excludes pacing sleep; TPS counts completed ticks over the
 window. Defaults: sustained TPS ≥19.5 in 5 s bins, p99 ≤50 ms, max ≤250 ms,
 server RSS ≤3072 MiB, no disconnects. Overrides: `--min-tps`,
 `--sustained-seconds`, `--max-tick-p99-ms`, `--max-tick-max-ms`, `--max-rss-mb`.
 A lost connection ends the window at its last completed tick (`partial`);
-short partial windows are weak evidence.
+short partial windows make p99 and sustained TPS weak evidence.
 
 Output: `<out>/summary.json`, `<out>/rung-N/result.json`, raw samples/logs.
-Old runs are not current capacity evidence: measure the build being discussed.
+No capacity number is published: a capacity claim needs a fresh ladder run on
+the build being discussed, with lane, envelope and binaries recorded.
+
+**How the bots account for work.** Assisted bots land only on received
+walkable full-height support and check their received ground again before
+Ready; missing ground fails readiness. For an edit offer a bot inspects four
+candidate directions; it never replays missed slots or counts packet writes as
+completed edits. Final open-loop reports carry per-bot `edit_windows` (offered,
+admitted, `writes_completed`, observed `completed`, dropped) and
+`edit_unavailable` (dead or respawning, edits disabled, not creative, no
+eligible candidate, cell already pending); capacity and late drops are counted
+apart. Completion means a matching received block update, not exclusive
+attribution or a full-chunk readback; movement has no completion oracle. Read
+each bot as well as the totals: aggregate throughput can hide a starved client.
+
+The lane isolates CPUs, not L3, memory bandwidth or the shared disk: record host
+load at the start and end of every rung. A single run carries no variance
+estimate. A perf capture that does not overlap a stall cannot blame a symbol
+for it; time the capture to the event and keep the call graph.
 
 ## Smoke checks (pipeline proof, not numbers)
 

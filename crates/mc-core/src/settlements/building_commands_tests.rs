@@ -75,7 +75,7 @@ fn containing_prefers_closest_anchor_then_smallest_id() {
     assert_eq!(containing(&state, anchor), Some(near));
     let outside = player(&mut state, [200.0, 201.0, 0.0]);
     assert_eq!(containing(&state, outside), None);
-    let ghost = crate::boundary::EntityId(-1);
+    let ghost = mc_domain::EntityId(-1);
     assert_eq!(containing(&state, ghost), None);
 }
 

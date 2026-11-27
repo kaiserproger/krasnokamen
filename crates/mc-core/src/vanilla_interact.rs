@@ -1,7 +1,8 @@
 //! Native vanilla block uses which do not open a screen.
-use crate::boundary::{BlockPos, ChunkPos, EntityId, Hand};
+use crate::boundary::{BlockPos, ChunkPos, Hand};
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_world::BlockStateId;
 
 pub(crate) fn axe(state: &mut TickState, actor: EntityId, hand: Hand, pos: BlockPos) -> bool {

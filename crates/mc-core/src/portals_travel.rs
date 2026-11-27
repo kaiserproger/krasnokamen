@@ -1,10 +1,11 @@
 //! All portal custody changes run after local commits, before the shared WAL.
 use super::named;
 use super::nether::{self, Frame};
-use crate::boundary::{BlockPos, ChangeSet, EntityId};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::dimensions::{Dimension, travel};
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_physics::mth::{self, floor_i32};
 use std::collections::BTreeMap;
 

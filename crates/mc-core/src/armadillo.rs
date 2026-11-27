@@ -2,10 +2,11 @@
 use mc_data::ItemStack;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{EntityId, Hand};
+use crate::boundary::Hand;
 use crate::entities::EntityKind;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 const SCARE_DISTANCE: f64 = 7.0;
 const SCARE_DISTANCE_V: f64 = 2.0;
@@ -13,7 +14,7 @@ const CHECK_INTERVAL: u64 = 10;
 
 /// Deterministic stagger for the scute countdown (vanilla
 /// pickNextScuteDropTime is 6000 + nextInt(6000) ticks).
-fn scute_period(id: crate::boundary::EntityId, drops: u32) -> u32 {
+fn scute_period(id: mc_domain::EntityId, drops: u32) -> u32 {
     let mut h = (id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (drops as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     h ^= h >> 30;
