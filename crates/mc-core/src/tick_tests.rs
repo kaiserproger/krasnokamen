@@ -6614,6 +6614,7 @@ fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damag
     use mc_domain::Hand;
     use crate::intent::DamageSource;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     for (kind, velocity, blocked) in [
         (DamageKind::Projectile, [0.0, -1.0], true),
         (DamageKind::Projectile, [0.0, 1.0], false),
@@ -6676,6 +6677,7 @@ fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
     use mc_domain::Hand;
     use crate::intent::DamageSource;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     for breaks in [false, true] {
         let (mut state, player, pos) = flat_player_fixture();
         let slot = state.entities.slot_of(player).unwrap();

@@ -11,6 +11,7 @@ use mc_data::loot::entity_26_1_2::{
 };
 use mc_data::loot::{LootContextItem, LootEnchantments};
 use mc_data::{Identifier, ItemStack};
+use mc_survival::{DamageKind, Difficulty};
 use std::sync::Arc;
 
 fn id(name: &str) -> Identifier {
