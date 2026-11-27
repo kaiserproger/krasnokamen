@@ -93,11 +93,3 @@ failure diagnosis"; this page is the method and the causes seen so far.
 - On failure read the server log (the edge logs peer, stage and reason for each
   close) and the client log for client-side rejects; `prepared` is not a pass and
   every timeout is a failure.
-
-## Retired: settlements live-gate matrix (2026-10)
-
-The 13-gate settlements matrix (commerce, production, caravan, war) in the
-plugin repository's integration tests ran against the v1 core. Those tests
-were archived when v1 was retired (ADR 0014, 2026-10-15) and their file and
-symbol pointers no longer exist. Durable lessons from that work are folded into
-the sections above.
