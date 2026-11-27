@@ -1243,7 +1243,7 @@ fn double_chest_partner() -> [i32; 3] {
         state
             .world
             .set_block(partner[0], partner[1], partner[2], right);
-        let paired = crate::chests::storage_partner(
+        let paired = mc_placement::chests::storage_partner(
             &state.registry.blocks,
             crate::boundary::BlockPos { x: 1, y: Y, z: 1 },
             &|p| state.world.block_at(p.x, p.y, p.z),

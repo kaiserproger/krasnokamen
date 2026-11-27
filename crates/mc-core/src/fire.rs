@@ -6,8 +6,8 @@ use mc_world::{BlockRegistry, BlockState, BlockStateId, ScheduledBlockTick};
 
 use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
 use crate::config::CoreError;
-use crate::placement::Face;
 use crate::tick::TickState;
+use mc_placement::Face;
 
 const NEIGHBOURS: [[i32; 3]; 6] = [
     [0, -1, 0],

@@ -254,7 +254,7 @@ fn source_ray_respects_torch_outline_and_rejects_existing_source_pour() {
             player,
             Hand::Main,
             wall,
-            crate::placement::Face::North,
+            mc_placement::Face::North,
             &held
         )
         .is_none()

@@ -235,7 +235,8 @@ pub(crate) fn after_blocks(state: &mut TickState, writes: &mut Vec<(BlockPos, u3
         };
         let waxed = body_block.block.id.path().starts_with("waxed_");
         let chest_id =
-            Identifier::parse(crate::copper::name("copper_chest", weather, waxed)).expect("id");
+            Identifier::parse(mc_placement::copper::name("copper_chest", weather, waxed))
+                .expect("id");
         let Some(chest) = state.registry.blocks.by_name_and_props(
             &chest_id,
             &[
@@ -312,7 +313,8 @@ pub(crate) fn tick(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
         .filter_map(|&(x, y, z)| {
             let pos = BlockPos { x, y, z };
             let name = block(state, pos)?.block.id.path();
-            (crate::copper::chest(name) || matches!(name, "chest" | "trapped_chest")).then_some(pos)
+            (mc_placement::copper::chest(name) || matches!(name, "chest" | "trapped_chest"))
+                .then_some(pos)
         })
         .collect();
     let mut removed = Vec::new();
@@ -394,7 +396,7 @@ pub(crate) fn tick(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
                     return false;
                 };
                 if source {
-                    crate::copper::chest(name)
+                    mc_placement::copper::chest(name)
                         && state
                             .block_entities
                             .get(&key(*cell))
@@ -482,7 +484,7 @@ pub(crate) fn tick(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
     }
 }
 fn destination(state: &TickState, pos: BlockPos, carried: &ItemStack) -> Option<(BlockPos, usize)> {
-    let cells = crate::chests::storage_cells(&state.registry.blocks, pos, &|p| {
+    let cells = mc_placement::chests::storage_cells(&state.registry.blocks, pos, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     });
     let empty = cells.iter().all(|p| {

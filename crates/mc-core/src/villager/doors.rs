@@ -45,7 +45,7 @@ fn set_open(state: &mut TickState, pos: BlockPos, open: bool, changes: &mut Chan
     if door(state, pos).is_none_or(|(_, current)| current == open) {
         return;
     }
-    if let Some(cells) = crate::placement::use_block(&state.registry.blocks, pos, 0.0, &|p| {
+    if let Some(cells) = mc_placement::use_block(&state.registry.blocks, pos, 0.0, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     }) {
         for (position, block) in cells {

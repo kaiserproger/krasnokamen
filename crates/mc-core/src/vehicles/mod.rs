@@ -238,7 +238,7 @@ pub(crate) fn use_on(
     let Some(type_id) = state.registry.entity_types.id_of(item) else {
         return true;
     };
-    let offset = crate::placement::Face::from_code(face).offset();
+    let offset = mc_placement::Face::from_code(face).offset();
     let pos = if kind == VehicleKind::Minecart {
         let Some(rail) = motion::rail_at(state, clicked) else {
             return true;

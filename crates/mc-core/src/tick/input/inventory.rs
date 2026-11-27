@@ -153,7 +153,7 @@ fn block_pick_item(state: &TickState, block: u32) -> Option<mc_data::ItemStack> 
         return item_named(state, planting);
     }
     item_named(state, path).or_else(|| {
-        crate::placement::standing_name(path).and_then(|standing| item_named(state, &standing))
+        mc_placement::standing_name(path).and_then(|standing| item_named(state, &standing))
     })
 }
 

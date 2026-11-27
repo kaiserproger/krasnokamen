@@ -16,8 +16,8 @@ use mc_world::{BlockRegistry, BlockState, BlockStateId};
 
 use crate::boundary::{BlockPos, EntityId, Hand};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
-use crate::placement::Face;
 use crate::tick::TickState;
+use mc_placement::Face;
 
 const FACES: [Face; 6] = [
     Face::Down,

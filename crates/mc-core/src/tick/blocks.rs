@@ -11,7 +11,7 @@ pub(crate) fn run(
     crate::falling::run(state, writes, spawned, removed);
     // Stair transitions also react to breaks, fluid wash and piston edits.
     // shape_updates stages its changes until all required reads succeed.
-    if crate::placement::shape_updates(&state.registry.blocks, writes, &|pos| {
+    if mc_placement::shape_updates(&state.registry.blocks, writes, &|pos| {
         state.world.block_at(pos.x, pos.y, pos.z)
     })
     .is_some()

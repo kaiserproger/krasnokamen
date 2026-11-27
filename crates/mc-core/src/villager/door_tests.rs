@@ -391,7 +391,7 @@ fn interrupted_route_closes_only_the_door_the_resident_opened() {
 
     // A door a player left open is not toggled on the way in, but the villager
     // remembers it like vanilla `InteractWithDoor` and closes it after passing.
-    let cells = crate::placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
+    let cells = mc_placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();
@@ -499,7 +499,7 @@ fn opening_door_preserves_own_and_neighbour_routes_before_and_after_fold() {
         route_changed(&state, &neighbour),
         "a real pending obstacle must still invalidate"
     );
-    let cells = crate::placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
+    let cells = mc_placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();
@@ -580,7 +580,7 @@ fn overlay_sampled_shapes_expire_even_when_door_toggles_cancel_before_fold() {
     let mut geometry = MotionGeometryCache::default();
     assert!(geometry.begin(&state, &v, 0.3, 1.95));
     assert!(geometry.standing(&state, &v, door, true).is_some());
-    let cells = crate::placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
+    let cells = mc_placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();

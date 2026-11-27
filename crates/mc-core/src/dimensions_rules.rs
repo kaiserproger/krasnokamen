@@ -34,7 +34,7 @@ pub(crate) fn use_block(
         ..Default::default()
     };
     let kind = if bed {
-        let Some((other, _)) = crate::placement::other_half(&state.registry.blocks, pos, current)
+        let Some((other, _)) = mc_placement::other_half(&state.registry.blocks, pos, current)
         else {
             return true;
         };

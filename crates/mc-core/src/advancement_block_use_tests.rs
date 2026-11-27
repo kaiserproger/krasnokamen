@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::bees::tests::{POS, item, joined, place, state};
 use crate::boundary::{ChangeSet, EntityId, Hand};
-use crate::placement::Face;
 use crate::tick::TickState;
+use mc_placement::Face;
 
 fn fixture(block: &str, held: &str) -> (TickState, EntityId) {
     let mut state = state(None);

@@ -461,7 +461,7 @@ pub(crate) fn bed_pair(
     if poi_kind(registry, id) != Some(PoiKind::Home) {
         return None;
     }
-    let (foot, _) = crate::placement::other_half(&registry.blocks, pos, id)?;
+    let (foot, _) = mc_placement::other_half(&registry.blocks, pos, id)?;
     let other = world.block_at(foot.x, foot.y, foot.z)?;
     let other = registry.blocks.by_id(mc_world::BlockStateId(other))?;
     let facing = head.properties.iter().find(|(key, _)| key == "facing");
@@ -2025,7 +2025,7 @@ impl PoiCtx<'_> {
         // repaired foot in the neighboring chunk cannot reuse an invalid verdict.
         let foot = home
             .then(|| {
-                crate::placement::other_half(&self.registry.blocks, pos, block.unwrap()).map(
+                mc_placement::other_half(&self.registry.blocks, pos, block.unwrap()).map(
                     |(foot, _)| ChunkPos {
                         x: foot.x.div_euclid(16),
                         z: foot.z.div_euclid(16),

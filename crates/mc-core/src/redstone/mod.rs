@@ -59,7 +59,7 @@ fn chest_viewers(state: &TickState, pos: BlockPos) -> u8 {
     if at(state, pos).is_none_or(|block| block.block.id.path() != "trapped_chest") {
         return 0;
     }
-    let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
+    let partner = mc_placement::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
         state.world.block_at(cell.x, cell.y, cell.z)
     })
     .map(|(_, cell)| (cell.x, cell.y, cell.z));
@@ -591,7 +591,7 @@ fn refresh_signals(state: &mut TickState, writes: &[(BlockPos, u32)], wake: &mut
         let (x, y, z) = dirty[index];
         let pos = BlockPos { x, y, z };
         if let Some((_, partner)) =
-            crate::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
+            mc_placement::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
                 state.world.block_at(cell.x, cell.y, cell.z)
             })
         {

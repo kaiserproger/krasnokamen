@@ -43,7 +43,9 @@ mod cauldron_wash;
 #[cfg(test)]
 #[path = "cauldron_wash_tests.rs"]
 mod cauldron_wash_tests;
-mod chests;
+#[cfg(test)]
+#[path = "chests_tests.rs"]
+mod chests_tests;
 pub mod chiseled_shelf;
 mod chorus;
 pub mod chunk_loader;
@@ -169,7 +171,6 @@ mod parrot;
 mod physical_attacks;
 mod physical_defense;
 mod piglin;
-pub mod placement;
 pub(crate) mod plants;
 pub mod player;
 pub mod plugin;
@@ -258,6 +259,8 @@ mod merge_tests;
 mod natural_spawn_tests;
 #[cfg(test)]
 mod pause_when_empty_tests;
+#[cfg(test)]
+mod placement_support_tests;
 #[cfg(test)]
 mod quirk_parity_tests;
 #[cfg(test)]
