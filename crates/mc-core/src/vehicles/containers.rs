@@ -1,10 +1,11 @@
-use crate::boundary::{BlockPos, ChangeSet, ClickMode, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, ClickMode};
 use crate::entities::{EntityKind, EntitySlot, StackRow};
 use crate::tick::TickState;
 use mc_data::{
     ItemStack,
     inventory_semantics_26_1_2::{can_stack, decrement_stack},
 };
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

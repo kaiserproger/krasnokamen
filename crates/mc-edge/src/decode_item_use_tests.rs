@@ -1,6 +1,6 @@
 //! Held-item use exercises native packet decoding and the complete core tick.
 use super::{DecodeState, decode_play_frame_for};
-use mc_core::boundary::{ConnectionId, EntityId, PlayerInput, TickOutput};
+use mc_core::boundary::{ConnectionId, PlayerInput, TickOutput};
 use mc_core::config::CoreConfig;
 use mc_core::effects::{ActiveEffect, EffectId};
 use mc_core::projectiles::ProjectileKind;
@@ -8,6 +8,7 @@ use mc_core::registry::CoreRegistry;
 use mc_core::tick::{TickState, run_tick};
 use mc_core::world::ChunkWorld;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{
     Direction, InteractionHand, PlayerActionKind, ServerboundPlayerAction,

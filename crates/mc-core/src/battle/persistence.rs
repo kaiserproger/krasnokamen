@@ -8,11 +8,11 @@
 use super::{BattleState, EnemyTarget, ground::Escape};
 use crate::{
     CoreError,
-    boundary::EntityId,
     dimensions::Dimension,
     journal::{JournalEntry, Replay},
     tick::TickState,
 };
+use mc_domain::EntityId;
 use mc_world::native::NativeDomainRecord;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

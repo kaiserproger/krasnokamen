@@ -10,13 +10,14 @@ use std::sync::Arc;
 use mc_physics::BlockMaterial;
 
 use crate::blueprint::{GoalKind, MobBlueprint};
-use crate::boundary::{EntityDataValue, EntityId, ExplosionEvent};
+use crate::boundary::{EntityDataValue, ExplosionEvent};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::natural_spawn::Rng;
 use crate::survival::Difficulty;
 use crate::target_grid::TargetGrid;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// A skeleton backs off from a target closer than this (vanilla
 /// `RangedBowAttackGoal` strafes back inside a quarter of its squared radius).

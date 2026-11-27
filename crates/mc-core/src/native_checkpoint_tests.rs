@@ -568,7 +568,7 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
         assert!(entity.appearance.custom_name_visible);
         assert!(entity.state.controls.no_gravity);
         let (mut view, _, _) = crate::hostile_tests::setup(8.0);
-        let view_id = crate::boundary::EntityId(999_999);
+        let view_id = mc_domain::EntityId(999_999);
         crate::core::restore_entity(&mut view, view_id.0, entity).unwrap();
         let Tag::Compound(fields) = crate::command_data::entity(&view, view_id).unwrap() else {
             panic!("entity data must be a compound");
@@ -679,7 +679,7 @@ pub(crate) fn roundtrip_player(
 
 fn roundtrip_native_entity(
     state: &mut crate::tick::TickState,
-    id: crate::boundary::EntityId,
+    id: mc_domain::EntityId,
 ) -> mc_data::entity_nbt::VanillaEntity {
     let (_, chunks, _) = crate::core::checkpoint_data_for(state, state.tick);
     let entity = chunks

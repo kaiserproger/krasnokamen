@@ -6,9 +6,10 @@ use mc_data::inventory_semantics_26_1_2::{can_stack, decrement_stack};
 use mc_data::statistics::StatType;
 
 use super::{ProjectileData, ProjectileKind, ProjectileState, weapons};
-use crate::boundary::{ConnectionId, EntityId, Hand};
+use crate::boundary::{ConnectionId, Hand};
 use crate::dimensions::Dimension;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Debug)]
 pub(crate) struct EyeUse {

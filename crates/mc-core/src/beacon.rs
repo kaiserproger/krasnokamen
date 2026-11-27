@@ -1,9 +1,10 @@
 //! Beacon structure, selection and area effects owned by the native tick.
 //! Opaque BE post-images follow conduit.rs so selections reach the WAL/checkpoint.
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, PlayerChange};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::inventory::MenuKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 
 fn named(state: &TickState, pos: BlockPos, name: &str) -> bool {

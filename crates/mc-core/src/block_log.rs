@@ -23,12 +23,13 @@ use mc_data::ItemStack;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ChunkPos, ConnectionId, PlayerChange};
 use crate::command_args::CommandError;
 use crate::config::{BlockLogSettings, CoreError};
 use crate::dimensions::Dimension;
 use crate::entities::EntityKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Block-entity pre-image restored together with a rolled-back block.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

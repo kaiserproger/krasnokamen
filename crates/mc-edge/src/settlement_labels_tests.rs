@@ -6,10 +6,10 @@
 use super::*;
 use crate::plan::{ChunkPacketCache, PlannedPacket, ViewerState, plan_viewer};
 use mc_core::boundary::{
-    ChangeSet, ChunkPos, ConnectionId, EntityAppearance, EntityId, SnapshotChunk, TickOutput,
-    WorldSnapshot,
+    ChangeSet, ChunkPos, ConnectionId, EntityAppearance, SnapshotChunk, TickOutput, WorldSnapshot,
 };
 use mc_core::dimensions::Dimension;
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{AddEntity, ClientboundSetEntityData, RemoveEntities};

@@ -1,9 +1,10 @@
 //! Mount menus borrow equipment and cargo from the entity, never from a menu snapshot.
-use crate::boundary::{ChangeSet, ClickMode, EntityId, PlayerChange};
+use crate::boundary::{ChangeSet, ClickMode, PlayerChange};
 use crate::entities::EntitySlot;
 use crate::inventory::{MenuKind, MountArmor};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 pub(crate) fn kind(state: &TickState, slot: EntitySlot) -> Option<MenuKind> {

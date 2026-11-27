@@ -1847,6 +1847,9 @@ dependencies = [
 [[package]]
 name = "mc-domain"
 version = "1.0.0-rc.5"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "mc-edge"
@@ -1861,6 +1864,7 @@ dependencies = [
  "getrandom 0.3.4",
  "mc-core",
  "mc-data",
+ "mc-domain",
  "mc-loader",
  "mc-nbt",
  "mc-plugin-host",
@@ -2062,6 +2066,7 @@ dependencies = [
  "flate2",
  "mc-core",
  "mc-data",
+ "mc-domain",
  "mc-nbt",
  "mc-plugin-host",
  "mc-world",

@@ -6,8 +6,9 @@
 //! queued chunk is dropped and the older chunk then lands over it.
 
 use super::*;
-use mc_core::boundary::{BlockPos, EntityId, PlayerChange, SnapshotChunk, WorldSnapshot};
+use mc_core::boundary::{BlockPos, PlayerChange, SnapshotChunk, WorldSnapshot};
 use mc_data::block_entity_kinds::BlockEntityKind;
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_world::chunk::{Chunk, ChunkPos, LightSection, SectionLight};
 

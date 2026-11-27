@@ -1,6 +1,6 @@
 # ADR 0019: proximity voice chat
 
-Status: accepted design; draft implementation (native relay + Simple Voice Chat compatibility), real-client QA pending.
+Status: accepted design; draft implementation (native relay + Simple Voice Chat compatibility). Real-client gate `screens-voice-qa` passed on 2026-11-26 (see Validation).
 
 ## Decision
 
@@ -104,14 +104,17 @@ Opus is forwarded byte for byte; there is no transcoding (both are 48 kHz mono
 ## Validation status
 
 Unit tests (`svc_tests.rs`: handshake bodies, AES vectors cross-checked with the SDK encoding, datagram framing, state packets; `voice_tests.rs`: native<->SVC bridging) and relay tests cover range, dimension, self-exclusion, listening,
-pose requirement, limits, wire decode and disabled mode. Real-client audio QA
-(two native clients, microphone, speakers) is pending.
+pose requirement, limits, wire decode and disabled mode. The real-client gate
+`screens-voice-qa` (2026-11-26, `wt/D123FinalCore/.analysis/validation/20261126T220225-screens-voice-qa-36dmz8v_/`)
+passed its voice verdicts with Fabric clients running the SVC mod and native
+clients: SVC proximity Fabric–Fabric and Fabric–native, SVC group Fabric–Fabric,
+no group audio for a native outsider, and native voice reset on a server
+without voice. NeoForge with SVC has not been run.
 
 `svc_service_tests.rs` runs the whole SVC path in-process: plugin-channel
 handshake, a UDP client that writes datagrams exactly like the mod (encrypted
 Authenticate/ConnectionCheck/Mic), SVC<->SVC, SVC<->native bridging, end-of-speech,
 range, forged-secret, disabled-client and disconnect cases. The AES-GCM and
 byte-layout vectors come from a JDK program mirroring SVC's `Secret`/`toBytes`
-code. A real Fabric/NeoForge client with the SVC mod against this server has not
-been run; the protocol 20 layouts were also checked against the
+code; the protocol 20 layouts were also checked against the
 `voicechat-fabric-2.6.27+26.3.jar` release.

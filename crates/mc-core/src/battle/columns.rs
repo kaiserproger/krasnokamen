@@ -6,8 +6,8 @@ use super::{
     EnemyTarget, Frame, PopulationCache, UnitCounters,
     formation::{FormationRuntime, SoldierSample},
 };
-use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
+use mc_domain::EntityId;
 
 /// Cold-row facts, valid only until the next native wire mutation. The slot is
 /// merely an identity-checked lookup hint, including for dead retained bodies.

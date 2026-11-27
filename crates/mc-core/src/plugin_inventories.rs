@@ -1571,10 +1571,7 @@ fn exhausted_image(state: &TickState, endpoint: &Endpoint) -> bool {
             image.is_some_and(|image| image.revision == u64::MAX)
         })
 }
-pub(crate) fn has_reservations_for_player(
-    state: &TickState,
-    entity: crate::boundary::EntityId,
-) -> bool {
+pub(crate) fn has_reservations_for_player(state: &TickState, entity: mc_domain::EntityId) -> bool {
     let Some(connection) = state.connections.entity_connection(entity) else {
         return false;
     };
@@ -1612,7 +1609,7 @@ fn has_source(state: &TickState, source: &str) -> bool {
 }
 /// Death/removal unlocks remaining stock in the same tick as its native drops.
 /// Accounting records the unspent hold as returned, never mints a replacement.
-pub(crate) fn invalidate_player(state: &mut TickState, entity: crate::boundary::EntityId) {
+pub(crate) fn invalidate_player(state: &mut TickState, entity: mc_domain::EntityId) {
     let Some(connection) = state.connections.entity_connection(entity) else {
         return;
     };

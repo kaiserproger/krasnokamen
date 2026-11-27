@@ -1,9 +1,10 @@
 //! Hanging displays: native entity custody, with no idle per-tick work.
-use crate::boundary::{BlockPos, ChangeSet, EntityDataValue, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, EntityDataValue, Hand};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::placement::Face;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 // Local 26.1.2 javap: Entity declares 0..7, HangingEntity direction 8,

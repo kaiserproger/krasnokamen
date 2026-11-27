@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{EntityId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn state() -> (TickState, EntityId) {

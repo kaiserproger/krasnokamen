@@ -80,7 +80,7 @@ pub(crate) fn blocks_damage(
     state: &crate::tick::TickState,
     slot: crate::entities::EntitySlot,
     kind: crate::survival::DamageKind,
-    attacker: Option<crate::boundary::EntityId>,
+    attacker: Option<mc_domain::EntityId>,
 ) -> bool {
     state.entities.row(slot).controls.invulnerable
         && !kind.bypasses_invulnerability()

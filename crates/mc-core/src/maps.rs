@@ -2,11 +2,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::boundary::{ChangeSet, EntityId, Hand};
+use crate::boundary::{ChangeSet, Hand};
 use crate::config::CoreError;
 use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 
 pub(crate) mod banner;

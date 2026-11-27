@@ -132,14 +132,10 @@ fn sound(state: &mut super::TickState, position: [f64; 3], event: Sound) {
 }
 
 /// Apply in list order between damage pieces, not after the damage batch.
-pub(super) fn apply(
-    state: &mut super::TickState,
-    id: crate::boundary::EntityId,
-    rescue: &mut Rescue,
-) {
+pub(super) fn apply(state: &mut super::TickState, id: mc_domain::EntityId, rescue: &mut Rescue) {
     fn flush(
         state: &mut super::TickState,
-        id: crate::boundary::EntityId,
+        id: mc_domain::EntityId,
         changes: &mut Vec<PlayerChange>,
     ) {
         if let Some(connection) = state.connections.entity_connection(id) {

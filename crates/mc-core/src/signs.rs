@@ -4,8 +4,9 @@ use mc_nbt::{ListTag, Tag};
 use mc_physics::mth;
 use mc_world::BlockState;
 
-use crate::boundary::{BlockPos, ConnectionId, EntityId, Hand, PlayerChange};
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Editor {

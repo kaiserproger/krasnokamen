@@ -301,7 +301,7 @@ async fn simultaneous_joins_both_resolve() {
     let rx_b = registry.wait_join(b);
     // Pump routes A's Joined: fires A's waiter, stashes for fast path.
     let joined_a = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(11),
+        entity: mc_domain::EntityId(11),
         position: [1.0, 2.0, 3.0],
         rotation: [0.0, 0.0],
         game_mode: 0u8,
@@ -312,7 +312,7 @@ async fn simultaneous_joins_both_resolve() {
     assert!(registry.take_join(b).is_none());
     // Pump routes B's Joined.
     let joined_b = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(22),
+        entity: mc_domain::EntityId(22),
         position: [4.0, 5.0, 6.0],
         rotation: [0.0, 0.0],
         game_mode: 1u8,
@@ -333,7 +333,7 @@ async fn late_waiter_sees_stash() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let joined = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(7),
+        entity: mc_domain::EntityId(7),
         position: [8.0, 80.0, 8.0],
         rotation: [0.0, 0.0],
         game_mode: 0u8,
@@ -353,7 +353,7 @@ fn pending_reliable_keeps_burst_order() {
     let id = registry.joining_id();
     let burst = vec![
         PlayerChange::Joined {
-            entity: mc_core::boundary::EntityId(41),
+            entity: mc_domain::EntityId(41),
             dimension: Default::default(),
             position: [8.0, 64.0, 8.0],
             yaw: 0.0,
@@ -432,7 +432,7 @@ fn stashed_join_survives_repeated_takes() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let joined = JoinedSpawn {
-        entity: mc_core::boundary::EntityId(99),
+        entity: mc_domain::EntityId(99),
         position: [1.0, 2.0, 3.0],
         rotation: [0.0, 0.0],
         game_mode: 1u8,
@@ -453,7 +453,7 @@ fn join_replay_skips_stale_joined_sync() {
     let id = ConnectionId(3);
     let stashed = vec![
         PlayerChange::Joined {
-            entity: mc_core::boundary::EntityId(41),
+            entity: mc_domain::EntityId(41),
             dimension: Default::default(),
             position: [8.0, 80.0, 8.0],
             yaw: 0.0,
@@ -479,8 +479,7 @@ fn join_replay_skips_stale_joined_sync() {
         .skip(1)
         .collect();
     assert_eq!(tail.len(), 2);
-    let mut viewer =
-        crate::plan::ViewerState::new(id, mc_core::boundary::EntityId(41), [8.0, 80.0, 8.0]);
+    let mut viewer = crate::plan::ViewerState::new(id, mc_domain::EntityId(41), [8.0, 80.0, 8.0]);
     use mc_protocol::packets::Packet as _;
     use mc_protocol::packets::play::{
         ClientboundContainerSetContent, ClientboundSetHealth, SynchronizePlayerPosition,

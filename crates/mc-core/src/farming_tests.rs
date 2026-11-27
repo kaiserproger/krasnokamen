@@ -5,9 +5,10 @@ use std::sync::Arc;
 
 use mc_world::BlockStateId;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 
 /// Platform height; its top face is `Y + 1`.
 pub(crate) const Y: i32 = 200;

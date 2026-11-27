@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::settlements::migration::return_tests::{fixture, house, resident, town};
 use crate::tick_budget::Kind;
 use crate::villager::Activity;
+use mc_domain::EntityId;
 
 fn run(state: &mut TickState, id: EntityId, useful: bool) -> bool {
     let slot = state.entities.slot_of(id).unwrap();

@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
 use crate::config::CoreConfig;
 use crate::core::{Core, apply_spawn_request, apply_ticket, recover_tick_state};
 use crate::entities::EntitySlot;
@@ -16,6 +16,7 @@ use crate::input_log::{
     TickRecord,
 };
 use crate::tick::{TickState, run_tick};
+use mc_domain::EntityId;
 
 const PASSWORD: &str = "hunter2-test-password";
 

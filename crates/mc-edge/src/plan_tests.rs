@@ -2,9 +2,10 @@
 
 use super::*;
 use mc_core::boundary::{
-    BlockChange, ChangeSet, ConnectionId, EntityAppearance, EntityEvent as BoundaryEvent, EntityId,
+    BlockChange, ChangeSet, ConnectionId, EntityAppearance, EntityEvent as BoundaryEvent,
     EntityView, Hand, PlayerChange, TickOutput, WorldSnapshot,
 };
+use mc_domain::EntityId;
 use mc_protocol::packets::play::{
     ClientboundOpenScreen, ClientboundSystemChat, SetEntityMotion, pack_block_pos,
 };

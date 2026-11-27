@@ -8,12 +8,13 @@
 //! Sensor projection is resident-neighbor work; committed POI rescans follow
 //! pushed chunk revisions after one bootstrap pass.
 use super::SettlementId;
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos};
 use crate::entities::EntitySlot;
 use crate::registry::CoreRegistry;
 use crate::tick::TickState;
 use crate::tick_budget::{Consumer, Kind};
 use crate::villager::{VillagerProfession as Profession, VillagerState};
+use mc_domain::EntityId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap, VecDeque};

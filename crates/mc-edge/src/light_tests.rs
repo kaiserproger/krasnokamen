@@ -4,8 +4,9 @@ use super::*;
 use std::sync::{Arc, LazyLock};
 
 use mc_core::boundary::{
-    BlockChange, ChangeSet, EntityId, PlayerChange, SnapshotChunk, TickOutput, WorldSnapshot,
+    BlockChange, ChangeSet, PlayerChange, SnapshotChunk, TickOutput, WorldSnapshot,
 };
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{BlockUpdate, ForgetLevelChunk, LevelChunkWithLight};

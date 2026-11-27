@@ -1,9 +1,10 @@
 //! The unlocked-session mirror the edge reads: its projection, and the
 //! change stamp that lets the tick skip it on an unchanged tick.
 
-use crate::boundary::{ConnectionId, EntityId};
+use crate::boundary::ConnectionId;
 use crate::core::session_mirror::{stamp, unlocked_sessions};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn fixture() -> TickState {

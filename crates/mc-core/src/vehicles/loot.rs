@@ -71,7 +71,7 @@ pub(super) fn materialize(state: &mut TickState, slot: EntitySlot) {
 pub(super) fn materialize_for_player(
     state: &mut TickState,
     slot: EntitySlot,
-    player: crate::boundary::EntityId,
+    player: mc_domain::EntityId,
 ) {
     let loot_table = state
         .entities

@@ -404,7 +404,7 @@ fn settlement_consumer_stale_id_refuses_after_remove_and_recreate() {
     assert!(state.settlements.find("town").is_some());
 }
 
-fn uuid_to_entity(state: &TickState, uuid: uuid::Uuid) -> crate::boundary::EntityId {
+fn uuid_to_entity(state: &TickState, uuid: uuid::Uuid) -> mc_domain::EntityId {
     let slot = state.entities.slot_of_uuid(uuid).expect("spawned resident");
     state.entities.body(slot).id
 }

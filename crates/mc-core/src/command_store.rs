@@ -1,7 +1,7 @@
 //! Execute result callbacks over outcomes produced by native command owners.
-use crate::boundary::EntityId;
 use crate::command_context::Context;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Clone)]
 pub(crate) struct Store {

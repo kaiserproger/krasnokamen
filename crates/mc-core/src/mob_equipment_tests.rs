@@ -1,10 +1,10 @@
 use super::*;
-use crate::boundary::EntityId;
 use crate::registry::CoreRegistry;
 use mc_data::loot::LootEnchantments;
 use mc_data::loot::entity_26_1_2::{
     EntityDeathCause, EntityLootAttack, EntityLootEntity, EntityLootPlayerAttribution,
 };
+use mc_domain::EntityId;
 
 fn state() -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());

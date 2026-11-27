@@ -379,7 +379,7 @@ fn replacement_connection_does_not_receive_completion_or_function_continuation()
         .unwrap();
     state.connections.insert(
         ConnectionId(1),
-        crate::boundary::EntityId(i32::MAX - 1),
+        mc_domain::EntityId(i32::MAX - 1),
         uuid::Uuid::new_v4(),
         "replacement".into(),
     );

@@ -1,8 +1,9 @@
 //! Retained UUID/fence leash anchors with snapshot-convergent links.
-use crate::boundary::{BlockPos, ChangeSet, EntityId};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

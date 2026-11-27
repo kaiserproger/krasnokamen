@@ -1,7 +1,7 @@
 """A cancelled scope must end even when a descendant ignores SIGTERM (#G5, CS341).
 
 Real scope, real guardian: a targeted TERM to the wrapper used to leave it in `wait` forever,
-holding the scope and its build token, because only the direct child got the signal.
+holding the scope, because only the direct child got the signal.
 """
 import os
 import select
@@ -107,12 +107,9 @@ class CancelledScopeTests(unittest.TestCase):
             shutil.copy(HERE / name, root)
         (root / 'targets' / 'slot-a').mkdir(parents=True)
         env = {**os.environ, 'CARGO_TARGET_DIR': str(root / 'targets' / 'slot-a'),
-               'KRASNOKAMEN_SLOT_TARGETS': str(root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0',
+               'KRASNOKAMEN_SLOT_TARGETS': str(root / 'targets'),
+               'KRASNOKAMEN_DISK_GC_BELOW_GB': '0', 'KRASNOKAMEN_DISK_REFUSE_BELOW_GB': '0',
                'KRASNOKAMEN_MEMRUN_CANCEL_GRACE': '1'}
-        # The sandbox must take its OWN build token: nested reuse would make a promote's token look
-        # like this scope's, and the token assertions below would test the outer runner.
-        for name in ('KRASNOKAMEN_BUILD_TOKEN', 'KRASNOKAMEN_BUILD_TOKEN_PID', 'KRASNOKAMEN_BUILD_LANE'):
-            env.pop(name, None)
         return root, runner, env
 
     def start(self, runner, env, *, child, compile=False):
@@ -164,7 +161,7 @@ class CancelledScopeTests(unittest.TestCase):
         except (AssertionError, subprocess.TimeoutExpired):
             self.scope_kill(cg)
             self.fail('the cancelled scope never ended: a TERM-ignoring descendant held the '
-                      'wrapper, the scope and its build token (pre-fix behaviour)')
+                      'wrapper and the scope (pre-fix behaviour)')
         self.assertNotEqual(proc.returncode, 0, 'a cancelled command is not a successful run')
         for pid in (grandchild, child):
             if pid == '-':
@@ -209,22 +206,19 @@ class CancelledScopeTests(unittest.TestCase):
         self.assertEqual(log.read_text().strip(), '1',
                          'the direct child got the cancellation TERM exactly once')
 
-    def test_the_token_is_held_during_the_scope_and_free_after_a_cancellation(self):
+    def test_a_cargo_scope_takes_no_token_and_ends_on_cancellation(self):
+        # Owner D127 removed build tokens: a cargo-classified command starts with no token lock,
+        # and a cancellation still ends it (the mechanism that used to be proved on a token).
         root, runner, env = self.sandbox()
         proc, grandchild, child, wrapper, cg = self.start(runner, env, child=IGNORING, compile=True)
-        token = root / 'state' / 'tokens' / 'token-1.lock'
-        self.assertTrue(token.exists(), 'a compile scope must create its build token')
-        self.assertNotEqual(subprocess.run(['flock', '-n', str(token), 'true']).returncode, 0,
-                            'a compile scope must hold a build token while it runs')
+        self.assertFalse((root / 'state' / 'tokens').exists(), 'no build token may be created')
         os.kill(int(wrapper), signal.SIGTERM)
         try:
             proc.wait(timeout=45)
             wait_scope_empty(cg)
         except subprocess.TimeoutExpired:
             self.scope_kill(cg)
-            self.fail('the cancelled compile scope never ended')
-        self.assertEqual(subprocess.run(['flock', '-w', '10', str(token), 'true']).returncode, 0,
-                         'the build token was not returned after the scope emptied')
+            self.fail('the cancelled cargo scope never ended')
 
 
 if __name__ == '__main__':

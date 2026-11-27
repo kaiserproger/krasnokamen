@@ -327,11 +327,7 @@ fn deployed_plan_has_same_geometry_without_duplicate_actor_stamina() {
 fn id(name: &str) -> Identifier {
     Identifier::parse(name).unwrap()
 }
-fn fixture() -> (
-    TickState,
-    crate::boundary::EntityId,
-    crate::boundary::EntityId,
-) {
+fn fixture() -> (TickState, mc_domain::EntityId, mc_domain::EntityId) {
     let mut registry = crate::registry::CoreRegistry::load(None).unwrap();
     let definitions = [
         ("example:mail", mail(), 480, Some("chest")),
