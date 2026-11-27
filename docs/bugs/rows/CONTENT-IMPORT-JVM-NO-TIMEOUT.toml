@@ -50,8 +50,7 @@ back to the unbounded `command.output().await`, the helper stays) fails
 of waiting for the JVM: Elapsed(())", 10 s bound) in artifact 20261126T144026-test-rp218e_n, with the
 other 18 content_import tests green on the control.
 
-Still missing for promotion (a `command` row): the original command rerun on the fixed build with its
-receipt in `source`, i.e. one real `krasnokamen content import --version <v> --download` whose datagen
-child is SIGSTOPped while the step runs, showing the bounded refusal instead of a hang. Not run here:
-it downloads a licensed bundle and writes the shared content caches the worktrees hard-link."""
+Command proof (fixed tree): with datagen stopped after launch, the original derive
+path exits non-zero after its 900 s deadline. The run used local `--from` bundles
+and a private cache, not `--download`; see the command and receipt in `source`."""
 promotion = "docs/bugs/promotions/CONTENT-IMPORT-JVM-NO-TIMEOUT.json"
