@@ -1,8 +1,9 @@
 //! Trial potion triggers at admitted damage and the once-only death transition.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::effects::EffectId;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 fn has(state: &TickState, slot: EntitySlot, effect: EffectId) -> bool {
     let body = state.entities.body(slot);

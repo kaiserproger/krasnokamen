@@ -8,11 +8,11 @@ use mc_data::ItemStack;
 use mc_data::statistics::StatType;
 
 use super::{ProjectileKind, ProjectileState};
-use crate::boundary::{EntityId, Hand, PlayerChange};
+use crate::boundary::{EntityDataValue, Hand, PlayerChange};
 use crate::enchantments::level;
 use crate::inventory::OFF_HAND;
 use crate::tick::TickState;
-use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 
 #[cfg(test)]
 #[path = "weapons_charge_tests.rs"]

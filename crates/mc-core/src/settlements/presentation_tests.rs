@@ -18,7 +18,8 @@ fn names_are_uuid_stable_and_use_all_uuid_bytes() {
 
 #[test]
 fn authenticated_owner_name_is_cached_round_trips_and_does_not_dirty_idle_ticks() {
-    use crate::boundary::{ConnectionId, EntityId};
+    use crate::boundary::ConnectionId;
+    use mc_domain::EntityId;
     let mut state = test_state();
     let owner = uuid::Uuid::from_u128(42);
     let id = state
@@ -100,7 +101,7 @@ fn summary_counts_living_members_and_actual_jobs() {
     );
 }
 
-fn state_id(state: &TickState, slot: crate::entities::EntitySlot) -> crate::boundary::EntityId {
+fn state_id(state: &TickState, slot: crate::entities::EntitySlot) -> mc_domain::EntityId {
     state.entities.body(slot).id
 }
 

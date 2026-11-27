@@ -140,7 +140,7 @@ fn label(chunk: ChunkPos) -> String {
 
 fn column_block(
     state: &TickState,
-    executor: crate::boundary::EntityId,
+    executor: mc_domain::EntityId,
     column: [Coord; 2],
 ) -> Result<[i32; 2], Reply> {
     let (base, _) = crate::command_console::pose(state, executor)
@@ -159,7 +159,7 @@ fn column_block(
 
 pub(crate) fn execute(
     state: &mut TickState,
-    executor: crate::boundary::EntityId,
+    executor: mc_domain::EntityId,
     command: &ForceLoadCommand,
 ) -> Reply {
     run(state, executor, command).unwrap_or_else(|reply| reply)
@@ -167,7 +167,7 @@ pub(crate) fn execute(
 
 fn run(
     state: &mut TickState,
-    executor: crate::boundary::EntityId,
+    executor: mc_domain::EntityId,
     command: &ForceLoadCommand,
 ) -> Result<Reply, Reply> {
     let dimension = state.dimension.name().to_owned();

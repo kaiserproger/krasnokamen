@@ -11,13 +11,13 @@ use uuid::Uuid;
 use super::{
     ProjectileData, ProjectileKind, ProjectileState, damage, launch, owner_id, remove, touch,
 };
-use crate::boundary::{BlockPos, EntityId, ExplosionEvent, PlayerChange};
+use crate::boundary::{BlockPos, EntityDataValue, ExplosionEvent, PlayerChange};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::EntityKind;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
-use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CloudState {

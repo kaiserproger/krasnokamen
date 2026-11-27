@@ -1,8 +1,9 @@
 //! Dispenser beehive/bee-nest harvesting: bottles and shears.
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 
 /// Harvest a full hive at `target` with the dispenser's bottle/shears.
 /// Returns true when the held item was consumed by a harvest (or refused

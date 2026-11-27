@@ -1,5 +1,5 @@
 //! Native contextual mob death, retained attributes, equipment and on-hit effects.
-use crate::boundary::EntityId;
+use crate::boundary::EntityDataValue;
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::intent::DamageSource;
 use crate::inventory::ItemRules;
@@ -11,6 +11,7 @@ use mc_data::loot::entity_26_1_2::{
 };
 use mc_data::loot::{LootContextItem, LootEnchantments};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

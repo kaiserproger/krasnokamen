@@ -23,8 +23,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{BlockPos, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::config::CoreError;
+use mc_domain::EntityId;
 mod player_nbt;
 pub use player_nbt::*;
 mod replay;

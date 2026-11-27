@@ -97,8 +97,8 @@ there is no second dependency or thread-pool specification in this document.
 No Bedrock support, binary execution of Forge/Fabric/NeoForge server mods, or
 custom launcher requirement. Players use a legitimate Minecraft installation
 and the documented launcher/Loader setup. Mojang inputs stay local; licensing
-and data provenance are governed by [ADR 0001](decisions/0001-vanilla-data-as-runtime-input.md)
-and protocol evidence by [ADR 0002](decisions/0002-vanilla-protocol-metadata-as-reference.md).
+and data provenance are governed by decision [C1](../DECISIONS.md#content-and-protocol)
+and protocol evidence by [C2](../DECISIONS.md#content-and-protocol).
 
 ## Acceptance evidence
 

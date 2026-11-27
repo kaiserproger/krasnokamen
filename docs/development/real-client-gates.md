@@ -1,203 +1,79 @@
 # Real-client gates in practice
 
-What counts as evidence is fixed elsewhere: [AGENTS.md](../../AGENTS.md)
-(actual-client gates, release server binary, breaker), the
+What counts as evidence is fixed elsewhere: the [evidence decisions](../../DECISIONS.md#evidence)
+(actual-client gates, release server, breaker), the
 [bug regression contract](../bugs/README.md), the
-[break-it QA protocol](../QA_AGENT_PROTOCOL.md) (gate hygiene, negative
-controls, variance) and [AGENT_TOOLING.md](../AGENT_TOOLING.md) (harness
-commands, receipts, Java/Loader client variables). This page is the working
-recipe and the traps for graphical and native-client gates. Profile and scenario
-lists come from `python3 -m tools.harness list` and `explain`, not from here.
+[QA protocol](../QA_AGENT_PROTOCOL.md) (gate hygiene, negative controls,
+variance) and [agent tooling](../AGENT_TOOLING.md) (harness commands, receipts,
+Java/Loader client variables). This page is the working recipe and the traps
+for graphical and native-client gates.
 
-## Civilization gate: operator fixture and street stands
-
-`civilization-seed-qa` prepares the operator entry for its primary player
-(`prepare_operator_fixture`, level 4) because its founding fixture certifies the
-storage it deposits into with explicit bounds — `settlement building certify
-storage <min> <max>`, an operator-only capability. The ordinary in-game
-"Проверить здесь" path (certify the room the player stands in) is therefore not
-what this gate exercises (review N6, 2026-11-24). `spawn_protection = 0` in the
-fixture config keeps the op entry from changing spawn protection, and the claim
-still runs as an ordinary player command. The gate also needs
-`KRASNOKAMEN_SNAPSHOT_BINARY` (the `player-scale-bots` bots pin) for the birth
-checkpoint, and its street work is laid on terrain that can lie more than
-`SITE_BAND` below the bell, so a street cell's stand is searched around the
-cell's own level (`layout::stand`), not around the anchor.
-
-## Mixed Fabric interaction
-
-`loader-fabric-mixed-interaction` uses the `loader-live` lifecycle and an
-explicit release server and plugin directory. It launches agent-run Fabric
-26.3 and 26.1.2 clients in one fresh world; both observe the other's UUID,
-exchange fresh chat, and hand a diamond from one observed inventory to the
-other with the ordinary drop key. Screenshots need visual review. Set
-`A8_NEGATIVE_CONTROL=no-drop` to check that the recipient inventory oracle
-fails. Each run requires server-log admission records binding the clients'
-names and distinct connection IDs to protocols 777 and 775 respectively.
-`A8_NEGATIVE_CONTROL=same-version` launches both clients as 26.3 and must
-fail at the protocol admission assertion on the real server log.
-This does not exercise 26.2 gameplay or replace the freeze-pin recheck.
-
-## Optional packs and unloaded-eye regression scenes
-
-`native-v2-p2-optional-pack` follows the native client's documented automatic
-HTTP(S) pack policy, not its former unconditional decline. The fixture offers
-an unavailable loopback URL: the wire observer must see the same UUID in
-`Accepted` (3), then `FailedDownload` (2), both before Play. Ordered chat and
-an actual-window capture prove that an optional download failure did not end
-the join. It does not prove successful pack installation or required-pack policy;
-`CLIENT-SERVER-RESOURCE-PACK-PUSH-DECLINED` remains a separate product row.
-
-`native-unloaded-eye` is registered as `harness:scene-shot:native-unloaded-eye`.
-Run it with `--client native --windowed`. Its canonical scene and loopback proxy
-port the client repository's unloaded-eye reproducer: unchanged server packets
-are forwarded in order, then held immediately after the far teleport while the
-client observes and captures missing destination terrain. The proving assertion
-is `unloaded_eye_session_survives`, after the already-established Play session
-receives the teleport, not the initial join check. It also requires null eye
-medium while unloaded, advancing GPU-completed actual-window frames, and the
-water medium after terrain arrives. Teardown releases the held stream even
-when an assertion fails. Pins, tree identity and control/restore receipts are
-still required for ledger promotion.
-
-## Registered gait and late battle capture regressions
-
-`native-gait-spider` and `java-gait-sidecar` run the canonical
-`gait_phase_scene.json`, using respectively `--client native --windowed` and
-`--client java --windowed`. Java uses the plain 26.3 endpoint. Both require
-same-frame zombie/spider walk phases; the native gate additionally rejects
-death-tinted zombie pixels in the spider's fixed camera ROI while requiring
-visible spider-body pixels. This is a fixture-specific obstruction check.
-
-`java-battle-end-camera` runs `java-battle-functional --client java --platform
-neoforge` with seed 46 and a 150-second take. Set `KRASNOKAMEN_SERVER_BINARY`
-to the candidate's non-incremental release pin, `KRASNOKAMEN_CLIENT_BINARY`
-to the pinned recorder, and `KRASNOKAMEN_BATTLE_RECORDER_DATA`,
-`KRASNOKAMEN_BATTLE_WORLD`, `KRASNOKAMEN_BATTLE_PACK_ROOT` and
-`KRASNOKAMEN_BATTLE_HIT_COUNTER` to the existing battle inputs. Loader's
-`--late-capture` waits for `completion.ready`, captures the real camera while
-the server remains live, then releases `completion.done`. A regular battle
-pass without this assertion is not proof of the late-capture regression.
-
-## Battle crash recovery with real Horizon clients
-
-`python3 -m tools.harness run scenario <id>` for `battle-kit-census`,
-`battle-crash-handoff` and `battle-auth-hydration` (profile
-`battle-crash-recovery`; ledger refs `harness:battle-crash-recovery:<id>`). The
-server comes only from `KRASNOKAMEN_SERVER_BINARY` (a pin directory with its
-`manifest.json`; the two runner scenarios need `tools/dev/pin-release
---no-incremental`, since `tools/battle/run-battle.py` refuses incremental pins,
-also under `ledger probe --client`); the other inputs fail closed:
-`KRASNOKAMEN_BATTLE_WORLD` and
-`KRASNOKAMEN_BATTLE_WORLD_SEED` (a stopped native battle world and its seed),
-`KRASNOKAMEN_BATTLE_HORIZON_CLIENT`, `KRASNOKAMEN_BATTLE_HORIZON_CTL`,
-`KRASNOKAMEN_BATTLE_HORIZON_RESOURCES` (the Horizon client pin), and for the two
-runner scenarios `KRASNOKAMEN_CLIENT_BINARY` plus `KRASNOKAMEN_BATTLE_RECORDER_DATA`
-(the recorder). The auth scenario deploys `krasnokamen-auth` from the plugins
-sibling. Each run is a field-1k 1500/side battle with PovRed holding a rank and
-CamSpec spectating him, and an actual SIGKILL.
-If a runner scenario fails or its cleanup fails, `battle-failure-diagnostics.json`
-records the original traceback, process statuses before and after cleanup and
-secondary cleanup errors. A broken control pipe during cleanup must not replace
-the original failure; a cleanup failure without an earlier error still fails.
-
-
-- `battle-kit-census`: PovRed drops his spear, then SIGKILL -> recovery ->
-  rejoin, death -> respawn and disconnect -> reconnect. A hot `backup` at each
-  phase and the stopped SIGKILL image (hashed, census and verdict recorded before
-  recovery reopens the world) are read through derived copies (`restore` or
-  hash-checked copy, `world compact` for the redb repair, `world export-anvil`):
-  every player record, every entity of every dimension and every block entity.
-  Compact may change only `native/state.redb` of the copy (both hashes
-  recorded). A second hash-checked copy of each image goes through production
-  recovery instead (server opened on fresh ports, stopped before any player can
-  join, exported clean); both exports must agree on every kit item's holder,
-  UUID, dimension, slot, id, count and components, an item entity only aging,
-  never past the ticks since its durable WAL birth record (the reopen may repay
-  simulation debt), or the census is incomplete. The crash
-  export's checkpoint/replay ticks must match the real recovery's own WAL (it
-  reopens with exactly that tail and journals first at `replay_tick + 1`).
-  Kit units in custody never exceed the issued kit; a piece that leaves custody
-  needs a `RemoveEntity` in the archived WAL; WAL gaps, identity reuse or a clock
-  running backwards make the census incomplete, which is never a pass. A removal
-  control on a derived census copy must be caught. Live `clear @a` and radius-64
-  counts are auxiliary only.
-- `battle-crash-handoff`: SIGKILL before `battle setup`, then SIGKILL staged
-  before start: the runner keeps `crash-handoff.json`, the crash copy and its WAL
-  archive; recovery starts from them; the clients rejoin; the staged battle
-  resumes with both roles and strikes. The runner race is timing-dependent.
-- `battle-auth-hydration`: no recorder (it cannot log in). Holder and spectator
-  `/register` through the real client; PovRed drops one kit piece (the census's
-  observed item entity); after the SIGKILL both rejoin locked: no kit on the
-  holder, no camera, while the durable battle image keeps the hold and the saved
-  camera. `/login` through Horizon's `command` tool re-arms the holder exactly
-  once with the rest of the kit (the dropped piece stays on the ground, held plus
-  dropped equals the issued kit in every durable image) and binds the camera; a
-  re-entry issues nothing twice; the same crash census runs, its removal control
-  on the dropped item entity; no generated password appears in any artifact.
-
-Limits: one kit, one holder and one spectator; Horizon clients only; wear is
-reported, not asserted. `ledger promote` needs a receipt from the promoted tree's
-own server (`tools/harness/ledger.py`), not a development pin.
+Per-scenario facts are not copied here: `python3 -m tools.harness explain <id>`
+prints each registered scenario's fixture, sources, what it proves and what it
+does not, and the check rationale sits in the docstrings of
+`tools/harness/backends/scene_shot_checks.py` and the owning backend.
 
 ## Prerequisites
 
-Everything below is reproducible from public sources, except where a line says
-**owner-local**. Sibling repositories: the native client
-([krasnokamen-client](https://github.com/kaiserproger/krasnokamen-client)), the Loader
-([krasnokamen-loader](https://github.com/kaiserproger/krasnokamen-loader)) and the first-party
-plugins ([krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins)),
-checked out beside this repository unless an environment variable says otherwise.
+Everything below is reproducible from public sources except lines marked
+**owner-local**. Sibling repositories, checked out beside this one unless an
+environment variable says otherwise: the native client
+([krasnokamen-client](https://github.com/kaiserproger/krasnokamen-client)), the
+Loader ([krasnokamen-loader](https://github.com/kaiserproger/krasnokamen-loader))
+and the first-party plugins
+([krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins)).
 
 ### 1. Build the release server and the native client
 
-Release binaries come from `tools/dev/pin-release`, one pin per tree (owner,
-2026-11-15: the runner refuses an ad-hoc `cargo build --release`, and a pin of the
-same tree and build parameters is reused rather than rebuilt):
+Gates use release binaries: a debug server drops to 2–9 TPS while a joining
+player's chunks generate, so timing-sensitive checks (bow draw, eating,
+cooldowns) fail on it.
 
-- Server: `tools/dev/pin-release <core tree>` prints
-  `KRASNOKAMEN_SERVER_BINARY=<pin>/krasnokamen`
-  (the harness reads it from `KRASNOKAMEN_SERVER_BINARY`; debug servers drop to 2-9
-  TPS while chunks generate, so timing-sensitive gates need release).
-- Client (in the client checkout): `tools/dev/pin-release <client tree> --client`.
-  On Linux it links ALSA and needs the distro development packages (the client's
-  release workflow installs `pkg-config libasound2-dev libudev-dev
+- **Owner host:** pin, never build ad hoc (the runner refuses a bare
+  `cargo build --release`, owner 2026-11-15).
+  `<work>/solaris/tools/dev/pin-release <tree>` builds once per tree (HEAD plus
+  the hash of uncommitted changes), copies the binary to
+  `<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints
+  `KRASNOKAMEN_SERVER_BINARY=<pin>/krasnokamen` and reuses an existing pin for
+  the same tree and build parameters; `--client` does the same for the client
+  checkout (`KRASNOKAMEN_CLIENT_BINARY=<pin>/krasnokamen-client`). Pins are
+  immutable; builds are incremental unless `--no-incremental` (performance
+  windows and `tools/battle/run-battle.py` need non-incremental). The harness
+  refuses binaries inside pooled `targets/slot-*`. A negative-control tree needs
+  its own pin. `regressions-client`, `ledger probe` and `ledger promote` check
+  the pin's manifest, checksum and ledger registration against the tested tree
+  and print the exact `pin-release <tree>` command when it is missing.
+- **Elsewhere:** `cargo build --release --locked -p mc-edge --bin krasnokamen`;
+  the client builds in its own repository.
+- The client links ALSA on Linux and needs the distro development packages its
+  release workflow installs (`pkg-config libasound2-dev libudev-dev
   libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev
-  libxrandr-dev libgl1-mesa-dev libvulkan-dev cmake`). The windowed gates also
-  need a Vulkan 1.1+ driver; Mesa `lavapipe` software Vulkan works, slowly.
-- **ALSA sysroot (owner-local workaround).** The owner's machine has no root
-  install of the ALSA headers, so the client checkout carries an ignored
-  `.analysis/build-support/usr/lib/x86_64-linux-gnu` (an unpacked ALSA 1.2.11
-  development package: `libasound.so*`, `pkgconfig/alsa.pc`, plus a
-  `libxkbcommon.so` link). With root, install the packages above and skip it.
-  Without root, unpack the distro's `libasound2-dev` (and `libxkbcommon-dev`)
-  packages into a directory yourself and point both variables at its `lib`
-  directory: `PKG_CONFIG_PATH=$B/pkgconfig LIBRARY_PATH=$B`, with
-  `B=<sysroot>/usr/lib/x86_64-linux-gnu`. Missing `PKG_CONFIG_PATH` makes
-  `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
-  binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
-  On the shared host pin it instead of building ad hoc (the runner refuses a
-  bare `cargo build --release`, owner 2026-11-15):
-  `<work>/solaris/tools/dev/pin-release <client tree> --client`, with the sysroot
-  environment exported; it prints `KRASNOKAMEN_CLIENT_BINARY=<pin>/krasnokamen-client`
-  and reuses that pin for the same tree and environment.
+  libxrandr-dev libgl1-mesa-dev libvulkan-dev cmake`). Windowed gates need a
+  Vulkan 1.1+ driver; Mesa `lavapipe` works, slowly.
+- **ALSA sysroot (owner-local workaround).** Without root, unpack the distro's
+  `libasound2-dev` (and `libxkbcommon-dev`) into a directory and export
+  `PKG_CONFIG_PATH=$B/pkgconfig LIBRARY_PATH=$B` with
+  `B=<sysroot>/usr/lib/x86_64-linux-gnu` before building or pinning; the owner's
+  copy is the client checkout's ignored `.analysis/build-support/`. Missing
+  `PKG_CONFIG_PATH` makes `alsa-sys` panic, missing `LIBRARY_PATH` fails linking
+  `-lasound`. Check the binary's mtime afterwards: an early-exiting wrapped build
+  leaves the old binary.
 
 ### 2. Build the client data root from public sources
 
-The client refuses to start without a complete data root. Let the launcher
-produce it, from a release build of the client repository:
+The client refuses to start without a complete data root. A release build of
+the launcher produces it:
 
 ```sh
 krasnokamen-launcher --headless-bootstrap --data-dir <root>      # needs internet access
 ```
 
-`--headless-bootstrap` is the whole first-run install without a window (also
-usable in CI or on a server); `--force` reinstalls and `--manifest URL` overrides
-the content manifest baked into the launcher. It downloads the Krasnokamen facts
-bundle (data tables only) and, from Mojang's own endpoints, the 26.3 `client.jar`
-and the asset objects, then unpacks the textures, models and fonts. No Mojang
-account is involved and no Mojang bytes are in Git. The resulting layout
-(`launcher/src/paths.rs` and the client README in the client repository):
+`--headless-bootstrap` is the whole first-run install without a window;
+`--force` reinstalls, `--manifest URL` overrides the baked-in content manifest.
+It downloads the Krasnokamen facts bundle and, from Mojang's endpoints, the 26.3
+`client.jar` and asset objects, and unpacks textures, models and fonts; no
+Mojang account is involved and no Mojang bytes enter Git. Layout
+(`launcher/src/paths.rs` in the client repository):
 
 ```text
 <root>/facts/                     Krasnokamen facts tables
@@ -208,157 +84,84 @@ account is involved and no Mojang bytes are in Git. The resulting layout
 <root>/cache/  installed.json     launcher state
 ```
 
-`<root>` defaults to `$XDG_DATA_HOME/krasnokamen-client` (`~/.local/share/krasnokamen-client`).
-Without internet access the client's own alternative is `krasnokamen-client setup
---from-dist DIST --assets ASSETS`, which links a locally prepared bundle and an
-asset cache. The owner's `<work>/qa-armada/template-data` is only a launcher
-output kept on the owner's disk; recreate it with the command above.
-The complete content bundle (a full server cache, for singleplayer only) and the
-facts publishing flow are the client repository's business, not a gate
-prerequisite.
+`<root>` defaults to `$XDG_DATA_HOME/krasnokamen-client`. Offline, the client's
+alternative is `krasnokamen-client setup --from-dist DIST --assets ASSETS`. The
+owner's `<work>/qa-armada/template-data` is only a kept launcher output. The
+singleplayer content bundle and facts publishing belong to the client
+repository, not to gate prerequisites.
 
 ### 3. Environment block
 
-Keep these in one env file per gate wave and source it; never retype paths.
+Keep one env file per gate wave and source it; never retype paths.
 
 ```sh
-export KRASNOKAMEN_SERVER_BINARY=<core>/target/release/krasnokamen   # release build
-export KRASNOKAMEN_CLIENT_ROOT=<client checkout>                    # default: krasnokamen-client beside the main checkout
-export KRASNOKAMEN_CLIENT_BINARY=<client>/target/release/krasnokamen-client
-# The data root from step 2:
+export KRASNOKAMEN_SERVER_BINARY=<pin>/krasnokamen
+export KRASNOKAMEN_CLIENT_BINARY=<pin>/krasnokamen-client
+export KRASNOKAMEN_CLIENT_ROOT=<client checkout>                    # default: beside the main checkout
 export KRASNOKAMEN_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
 export KRASNOKAMEN_CLIENT_RESOURCE_ROOT=<root>/resources
 export KRASNOKAMEN_CLIENT_ASSET_ROOT=<root>/assets
 export KRASNOKAMEN_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
-# Sibling repositories, only to select a checkout other than the one beside the main checkout
-# (worktrees resolve it too: runtime.sibling_root):
-# Java probes and survival: point at canonical content with adjacent protocol caches:
-export KRASNOKAMEN_SERVER_VANILLA_DATA_DIR=<content-root>/26.3
-export KRASNOKAMEN_LOADER_ROOT=<krasnokamen-loader checkout>            # Java/Loader clients; default: beside the main checkout
-export KRASNOKAMEN_DEFAULT_PLUGINS_ROOT=<krasnokamen-default-plugins>   # standard-pack and plugin gates; same default
+export KRASNOKAMEN_SERVER_VANILLA_DATA_DIR=<content-root>/26.3      # Java probes/survival: canonical content with adjacent caches
+export KRASNOKAMEN_LOADER_ROOT=<krasnokamen-loader checkout>        # only to select another checkout
+export KRASNOKAMEN_DEFAULT_PLUGINS_ROOT=<krasnokamen-default-plugins> # standard-pack and plugin gates; same default
 ```
 
-For an exact modded Java endpoint, set both `KRASNOKAMEN_JAVA_VERSION` and
-`KRASNOKAMEN_JAVA_PLATFORM`. Supported pairs are 26.1.2/Fabric (API 0.155.2),
-26.1.2/NeoForge, 26.2/NeoForge and 26.3/Fabric or NeoForge. The launch selects
-the matching `:loader-<platform>:runClientMcp` task and pinned Gradle properties;
-missing, conflicting or unsupported selectors fail before launch, with no
-neighbor-version fallback. `KRASNOKAMEN_CLIENT_JAR` must identify the matching
-local vanilla client jar for the development agent build. Plain vanilla
-`vanilla_command` separately accepts exact 26.1.2, 26.2 and 26.3 metadata.
-Explicit selectors never switch the caller's task/composition: use the matching
-Loader profile/platform. Combining them with the legacy no-Loader agent task or
-a different Loader platform fails before spawning Gradle. Java matrix groups use
-the same ordinary runtime launch as other Java gates, always after their private
-Xvfb starts; there is no separate Fabric preparation process or manifest contract.
-The old manifest only avoided one Gradle process per client; it supplied no
-additional client capability. Its exporter existed on Loader's unmerged
-`bots-runjava` branch (`2bc292e`), not on the main line used by the harness.
+Sibling discovery (`tools/harness/runtime.py::sibling_root`) resolves beside the
+main checkout, also from worktrees.
 
-`screens-voice-qa --client native --windowed --parts 2` selects endpoints per
-leg: screens uses 26.3/Fabric; voice derives its version from the checked SVC
-artifact's baseline (26.1.2/Fabric, the owner's PrismLauncher case). An explicit
-conflicting Java selector is rejected, not silently replaced. The SVC jar must
-be provisioned at the harness's pinned artifact path (or `KRASNOKAMEN_SVC_JAR`);
-the publisher size and both hashes are checked before staging it.
-The voice fixture explicitly binds SVC's group action to `G` in each client's
-`options.txt`; the pinned mod leaves that action unbound by default.
-The native reconnect check records cleared voice registration, server support,
-listening and microphone HUD immediately after disconnect. On the next non-voice
-server it requires support/listening/HUD to remain off; a fresh client capability
-advertisement (`registered=true`) in Play is not stale server voice state.
-The screen manifest check waits for completed Loader acknowledgement, then records
-whether `computer:monitor` was admitted. Missing content after that terminal
-handshake is a false verdict, not a wait for an impossible later registration.
-
-Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
-to the existing sibling `loader-gradle-home` on the owner host; an explicitly
-selected home is preserved. Keep build completion separate from owned MCP
-readiness and scenario deadlines: the Loader's cold build uses the
-[event-only readiness contract](../AGENT_TOOLING.md#harness-entrypoint), not a
-guessed fixed startup delay. Do not discard a warm build cache with each game home.
-Gradle init scripts separate build outputs by checkout path, Minecraft version
-and launch platform. The matching `--project-cache-dir` also isolates task
-history and Loom launch metadata: separate output paths alone do not prevent
-Gradle from deleting the previous endpoint's live classes as stale outputs.
-On the owner host both live under `<work>/targets/loader-builds`; elsewhere they
-use the checkout's ignored `.analysis/harness-builds`. Existing outputs are
-neither deleted nor moved.
-
-*Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
-other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or
-`KRASNOKAMEN_CLIENT_BINARY` inside a slot. Pin instead:
-`<work>/solaris/tools/dev/pin-release <worktree> [--client]` builds once per
-tree (HEAD plus the hash of uncommitted changes), copies the binary to
-`<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
-`KRASNOKAMEN_SERVER_BINARY=` (or `KRASNOKAMEN_CLIENT_BINARY=`) line and reuses an
-existing pin without building. Pins are immutable; the build is incremental by
-default, `--no-incremental` makes the full build performance windows require.
-`regressions-client` also consumes these pins: its manifest, checksum and ledger
-registration must match the tested tree. It never builds a release server and
-refuses missing/mismatched pins with the exact `pin-release <tree>` command.
-The negative-control tree needs its own pin.
-
-- A headless native run (`--client native`) needs `KRASNOKAMEN_CLIENT_DATA_DIR`
-  with its block and registry reports. `--windowed` additionally needs
-  `KRASNOKAMEN_CLIENT_RESOURCE_ROOT`, `KRASNOKAMEN_CLIENT_ASSET_ROOT` and
-  `KRASNOKAMEN_CLIENT_ASSET_INDEX`, including the assets directory, objects and a
-  nonempty asset index. Missing or incomplete paths fail before launch.
-  Real-client runs require executable `KRASNOKAMEN_SERVER_BINARY` and native runs
-  also require `KRASNOKAMEN_CLIENT_BINARY`; paths under owner-host pooled
-  `targets/slot-*` are refused. Pin copies outside the pool and use those paths.
-  Unlisted profiles are rejected for native; see
-  [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
-  Headless native profiles create a temporary writable XDG root with links to
-  the template containing `data/vanilla`, `facts` and `resources/assets`;
-  it is removed after the profile exits. Every client run of `ledger probe`,
-  `ledger promote` and `run regressions` gets the same kind of private root, windowed
-  too: links to the caller's content directories, or to the `KRASNOKAMEN_CLIENT_DATA_DIR`
-  template when the caller's root has no `facts`; no settings or caches.
-- A single wrong path (for example an item properties file under the wrong repo)
-  leaves the client on a white "loading content" screen forever without naming
-  the file; diff the env against the last green gate line by line.
-- The client's own data folder is `$XDG_DATA_HOME/krasnokamen-client`. Give each gate
-  a fresh `XDG_DATA_HOME` whose `krasnokamen-client/` **symlinks** (never copies; 650 MB
-  per run filled the disk) `facts assets data resources mojang`. A shared XDG
-  leaks `client-settings.json` between gates (an FOV assertion broke that way).
-  Without it the client looks under `~/.local/share/krasnokamen-client` (a dangling
-  `facts` symlink there) and exits before MCP is ready. `scene-shot` does this
-  itself (symlinks those four plus `assets`, copies the rest, forces fov 70).
+- A headless native run needs `KRASNOKAMEN_CLIENT_DATA_DIR` with its block and
+  registry reports; `--windowed` also needs the resource root, asset root and a
+  nonempty asset index with objects. Missing or incomplete paths fail before
+  launch. Native profiles not on the allow-list are rejected
+  ([harness entrypoint](../AGENT_TOOLING.md#harness-entrypoint)).
+- Native profiles, and every client run of `ledger probe`, `ledger promote` and
+  `run regressions`, create a temporary private XDG root whose
+  `krasnokamen-client/` links (never copies) the template's content (`facts`,
+  `assets`, `data`, `resources`, `mojang`), with no settings or caches, and
+  remove it afterwards. Do the same by hand for ad-hoc runs: copying cost 650 MB
+  per run and filled the disk, and a shared root leaks `client-settings.json`
+  between gates (an FOV assertion broke that way). Without it the client looks
+  under `~/.local/share/krasnokamen-client` and exits before MCP is ready.
+- One wrong path (an item properties file under the wrong repository) leaves the
+  client on a white "loading content" screen forever without naming the file:
+  diff the env against the last green gate line by line.
 - The singleplayer scenarios (`native-world-first-start-interrupted`,
-  `native-sp-relaunch-lease-race`) need `KRASNOKAMEN_SERVER_BINARY` naming the release
-  server and an imported 26.3 content cache at `<core>/data/vanilla`
-  (`krasnokamen content import --version 26.3 --download --cache data/vanilla`,
-  see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
-  private client data root as `servers/content/26.3`.
-- Run each graphical gate through the scene slot so at most two run on the
-  host and the gate's scope outranks tests and builds for CPU:
-  `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
-  python3 -m tools.harness run <profile> --client native --windowed`.
-  Use two slots for now (owner, 2026-11-15: start new gates only below load
-  ~32 on the 16-thread host): six slots plus builds reached load 134 (CPU PSI
-  75%) and four still reached load 70 (PSI 54%). A CPU-rendered native client
-  under Xvfb takes 140-170% CPU, and screen, voice and Java battle scenes run two
-  or three clients, so starved gates failed by timeout. A gate that times out or
-  misses frames while the host is overloaded is not evidence: rerun it at normal
-  load. One graphical run per agent at a time.
+  `native-sp-relaunch-lease-race`) also need an imported 26.3 cache at
+  `<core>/data/vanilla` ([OPERATING](../OPERATING.md#vanilla-content-cache)),
+  which they copy into the private client root as `servers/content/26.3`.
+
+**Modded Java endpoints.** Set both `KRASNOKAMEN_JAVA_VERSION` and
+`KRASNOKAMEN_JAVA_PLATFORM`; supported pairs are 26.1.2/Fabric (API 0.155.2),
+26.1.2/NeoForge, 26.2/NeoForge and 26.3/Fabric or NeoForge. The launch picks the
+matching `:loader-<platform>:runClientMcp` task and pinned Gradle properties;
+missing, conflicting or unsupported selectors fail before Gradle starts, with no
+neighbour-version fallback, and never switch the caller's task (use the matching
+Loader profile/platform). `KRASNOKAMEN_CLIENT_JAR` must be the matching local
+vanilla client jar. Plain vanilla `vanilla_command` accepts exact 26.1.2, 26.2
+and 26.3 metadata. Java matrix groups use the same launch after their private
+Xvfb starts.
+
+**Gradle.** Java launches keep private game homes but reuse `GRADLE_USER_HOME`
+(owner host: the sibling `loader-gradle-home`; an explicit home is kept). Init
+scripts separate build outputs, and a matching `--project-cache-dir` separates
+task history and Loom metadata, per checkout, Minecraft version and platform
+(owner host `<work>/targets/loader-builds`, elsewhere the checkout's ignored
+`.analysis/harness-builds`); separate output paths alone let Gradle delete the
+previous endpoint's live classes as stale. Build completion is not launch
+readiness: the Loader's cold build follows the
+[event-only readiness contract](../AGENT_TOOLING.md#harness-entrypoint).
 
 ### 4. Which gates need owner-held access
 
-No harness gate needs a Mojang or Microsoft account: the native client uses the
-`offline-test` profile (official authentication is not implemented) and the
-Java/Loader client uses offline identities. The `KRASNOKAMEN_CLIENT_MCP_TOKEN` and
-the bridge secrets are per-run random values you generate. What only the owner
-holds:
-
-- the public test server (`KRASNOKAMEN_TEST_HOST`, SSH, `krasnokamen-auth` passwords,
-  `KRASNOKAMEN_SOAK_AUTH`): [test server operations](test-server-ops.md), the
-  headless join smoke below against that host, `tools/dev/test-server/soak.py`;
-- the Windows VM login: [Windows and macOS client QA](windows-and-macos-client-qa.md);
-- release publication (`gh`, tags, GitHub secrets):
-  [releases](release-and-tags.md).
-
-Never write any of these values, addresses or paths into tracked files.
+No gate needs a Mojang or Microsoft account: the native client uses the
+`offline-test` profile and Java clients use offline identities; MCP tokens and
+bridge secrets are per-run random values you generate. Only the owner holds the
+public test server (`KRASNOKAMEN_TEST_HOST`, SSH, `krasnokamen-auth` passwords,
+`KRASNOKAMEN_SOAK_AUTH`; [test server operations](test-server-ops.md)), the
+Windows VM login ([Windows and macOS client QA](windows-and-macos-client-qa.md))
+and release publication ([releases](release-and-tags.md)). Never write these
+values, addresses or paths into tracked files.
 
 ## Evidence classes
 
@@ -368,32 +171,30 @@ Keep them separate in every report:
   headless native run records `details.headless=true` and proves received state
   only.
 - **Graphical:** native `--windowed` under the harness Xvfb with retained frames
-  and pixel predicates, plus a human look at least one screenshot. Comparing
-  light arrays or other internal state does not prove rendering.
-  `present_requested` does not prove physical monitor scanout.
-- **Java client:** proves vanilla-client compatibility for the path it ran; it is
-  diagnostic for native-client rendering claims. Each retained release uses
-  its own automatically imported endpoint cache and adjacent translation route.
+  and pixel predicates, plus a human look at at least one screenshot. Comparing
+  light arrays or other internal state does not prove rendering;
+  `present_requested` does not prove monitor scanout; changed pixels do not prove
+  model parity.
+- **Java client:** proves vanilla-client compatibility for the path it ran and is
+  diagnostic for native rendering claims. Each retained release uses its own
+  imported endpoint cache and adjacent translation route.
 
-Match the original actor, candidate and failed scenario. An operator or an
-independent observer does not prove a non-operator's private inventory/UI path.
-A read-only instrumentation extension must disclose its diff and cannot silently
-change input, rendering or network behaviour. For crowd/FPS claims retain
-received counts, actual submitted bodies and drawn-frame evidence under the
+Match the original actor, candidate and failed scenario: an operator or an
+independent observer does not prove a non-operator's private inventory or UI
+path. A read-only instrumentation extension discloses its diff and never changes
+input, rendering or network behaviour. Crowd/FPS claims retain received counts,
+submitted bodies and drawn-frame evidence under the
 [performance methodology](performance-windows-and-profiling.md#comparing-builds);
-headless receipt counts and a closer diagnostic fixture do not replace the
-failed primary scene.
+headless counts or a closer diagnostic fixture do not replace the failed scene.
 
-Setup is not the assertion: await a fresh ordered command reply, then the actual
-loaded blocks, authoritative inventory or reached player position the action
-requires. A forceload/teleport acknowledgement is not resident terrain or arrival.
+Setup is not the assertion: await a fresh ordered command reply, then the
+loaded blocks, authoritative inventory or reached position the action needs. A
+forceload/teleport acknowledgement is not resident terrain or arrival.
 Distinguish requested, server-accepted, collision-resolved and client-received
-positions before diagnosing corrections as rubber-banding; correction count
-alone does not establish it.
-
-Native `minecraft_click_container_slot` bypasses hit-testing; GUI-scale or layout
-proofs need a physical XTest click (pattern: `_scroll` in
-`tools/harness/backends/native_p4.py`).
+positions before calling corrections rubber-banding; a correction count alone
+does not establish it. Native `minecraft_click_container_slot` bypasses
+hit-testing: GUI-scale or layout proofs need a physical XTest click (pattern:
+`_scroll` in `tools/harness/backends/native_p4.py`).
 
 ## Isolation (owner rules, 2026-10-23/24)
 
@@ -401,843 +202,386 @@ proofs need a physical XTest click (pattern: `_scroll` in
   (never `:0`/`:1`) with `WAYLAND_DISPLAY` unset; the harness forces X11
   (`SDL_VIDEODRIVER`/`GDK_BACKEND=x11`) and scene-shot fails if `client.log` says
   `video driver: wayland`. Browser/noVNC viewers need their own proven headless
-  isolation (QA protocol, breaker procedure).
-- **Never the owner's microphone or speakers** (he is often in a call). Minimum:
-  `ALSOFT_DRIVERS=null` for every agent-launched Java/Minecraft client (QA
-  protocol). Stronger isolation used for bot fleets and QA hunts: a private null
-  ALSA config (`pcm.!default { type null }`, `ctl.!default { type null }`) via
+  isolation ([breaker procedure](../QA_AGENT_PROTOCOL.md#breaker-procedure)).
+- **Never the owner's microphone or speakers.** Every agent-launched Java client
+  gets the harness's null audio ([Java launch](../AGENT_TOOLING.md#harness-entrypoint)).
+  Bot fleets and QA hunts use the same: a private null ALSA config
+  (`pcm.!default { type null }`, `ctl.!default { type null }`) through
   `ALSA_CONFIG_PATH`, `PIPEWIRE_REMOTE=/nonexistent`,
-  `PULSE_SERVER=unix:/nonexistent`, private `XDG_RUNTIME_DIR`; verify with
-  `wpctl status` that no new stream appeared. A null output sink alone isolates
-  only output, not capture. Harness audio gates record a virtual null-sink
-  monitor, never the microphone; the desktop mic indicator during such runs is
-  expected.
-  The private graph waits for PipeWire's socket event and readable registry
-  before starting WirePlumber, then requires its `sm-settings` metadata before
-  starting any client. Socket, registry and session-manager readiness failures
-  abort preflight; daemon logs are retained in the audio receipt directory.
-  Runtime directories default to `/tmp`, independently of `TMPDIR`. An explicit
-  `SA_SCRATCH` must keep the generated runtime path within 80 bytes; longer
-  paths fail before starting daemons rather than exceeding Unix socket limits.
-  Java defaults remain OpenAL null. An explicitly requested `sound_sink` is
-  audible only after the same hardware-free preflight verifies the private
-  Pulse socket, ALSA config, silent input and the named output sink; it cannot
-  select a host device. This exception is required for real screen/voice audio
-  measurement and records the graph and playback sink in the client receipt.
-  Native audible runs also need the ALSA Pulse plugin (`libasound2-plugins` on
-  Ubuntu). A user-local extraction can be selected with `ALSA_PLUGIN_DIR`;
-  missing `libasound_module_pcm_pulse.so` is not evidence of silent playback.
+  `PULSE_SERVER=unix:/nonexistent`, a private `XDG_RUNTIME_DIR`; verify with
+  `wpctl status` that no stream appeared. A null output sink alone isolates
+  output, not capture. Audio gates record a virtual null-sink monitor, never the
+  microphone (the desktop mic indicator during such runs is expected).
+- **Private audio graph** (`tools/harness/screen_audio_graph.sh`): waits for
+  PipeWire's socket event and readable registry before WirePlumber, then for its
+  `sm-settings` metadata before any client; readiness failures abort preflight
+  with daemon logs in the audio receipt directory. Runtime directories default
+  to `/tmp` regardless of `TMPDIR`; an explicit `SA_SCRATCH` must keep the
+  runtime path within 80 bytes (Unix socket limit). An explicitly requested
+  `sound_sink` is audible only after the same preflight verifies the private
+  Pulse socket, ALSA config, silent input and named sink; it cannot select a host
+  device and is recorded in the client receipt. Native audible runs need the ALSA
+  Pulse plugin (`libasound2-plugins`, or `ALSA_PLUGIN_DIR` for a user-local
+  extraction); a missing `libasound_module_pcm_pulse.so` is not evidence of
+  silent playback.
 - Private ports, data roots and worlds per run; kill only processes you started,
   by PID.
 
+## Running a gate
+
+- On the owner host run each graphical gate through the scene slot, which holds
+  one of two shared slots and raises the gate's CPU weight above tests and
+  builds: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run <profile> --client native --windowed`.
+  A CPU-rendered native client under Xvfb takes 140–170 % CPU and screen, voice
+  and Java battle scenes run two or three clients: a gate that times out or
+  misses frames on an overloaded host is not evidence; rerun it at normal load.
+  One graphical run per agent at a time; a `-x` window goes inside the slot
+  (`scene-slot.sh mem-run.sh -x …`), never the reverse.
+- **Environment flakes are hypotheses, not exceptions.** Keep the first failed
+  receipt, record load, cgroup/CPU pressure, renderer/backend and failure phase,
+  and rerun once in a corrected environment only when that adds evidence.
+  `Parent device is lost`, a missing frame or `stale_dimension_epoch` is not
+  exonerated by its wording. Xvfb/software rendering and capture overhead belong
+  to the recorded backend: compare like with like and never subtract a historical
+  `xcb_put_image` estimate to manufacture physical-display FPS.
+- **Promotion.** A client-visible row closes only through `ledger promote` with
+  a registered `harness:<profile>:<scenario>` check that fails at the row's own
+  assertion on a control tree with only that fix reversed; controls, client
+  fixes (`client:<sha>` with control/restore receipts of pinned clients) and
+  backfills follow the [ledger contract](../bugs/README.md#the-fixed-rule-single-home).
+  Commits from before the 26.3 cutover speak protocol 775 and fail at login,
+  which is not a control; a unit or synthetic test is a regression guard, never
+  the closing evidence for a client-visible bug.
+
 ## Native scenario rules
 
-- Native runs the client headless (`play --headless`) against the harness-started
-  server over an ephemeral loopback MCP endpoint: no Java, no Xvfb. Descriptor
-  readiness uses inotify complete-write events and process pidfd, followed by
-  authenticated MCP initialization; scenario readiness uses MCP state events,
-  never sleeps. Each run uses an isolated descriptor/token directory under the
-  client's `.analysis/harness-runs/`; the 0600 bearer token and private nonce are
-  not receipted.
-- The `survival` server uses an isolated seed-81 world with no plugins by default,
-  no operators and hostile spawning disabled. The generic harness fallback builds
-  the current debug server; it does not satisfy real-client gate requirements.
-  For these gates pass the pinned `--release --locked` server through
-  `KRASNOKAMEN_SERVER_BINARY` as required by AGENTS.md (path and SHA-256 are receipted).
-  `--plugins-dir PATH` (an existing directory used directly as `[plugins].directory`)
-  is accepted by the profiles that allow it and supplies no plugin-specific
-  scenarios or unlock proofs.
-- `--windowed` owns Xvfb and launches `play --windowed`. After success,
-  `screenshots/native-final.png` and its JSON receipt retain an actual-window scene
-  target with frame id, scene/state/resource revisions and GPU completion; missing
-  capture evidence fails the run. The default stays functional headless and makes
-  no visual claim.
-- Operator fixtures use the vanilla `ops.json` beside the isolated server config
-  (level 4, offline identities recorded in the receipt). Headless survival has no
-  operator grant; windowed survival grants its one test identity for the
-  separately labelled playthrough death fixture only, after ordinary
-  mining/pickup/placement acceptance.
-- The respawn path uses the bounded event-driven Play wait. An immediate
-  `in_play=false` right after the Death-screen Respawn click is not itself a
-  disconnect, but there is no protocol respawn fallback: a failed UI request, Play
-  timeout or missing restored health fails the gate.
+- Native runs the client headless (`play --headless`) against the
+  harness-started server over an ephemeral loopback MCP endpoint (no Java, no
+  Xvfb). Descriptor readiness uses inotify complete-write events and the process
+  pidfd, then authenticated MCP initialization; scenario readiness uses MCP state
+  events, never sleeps. Each run's descriptor/token directory lives under the
+  client's `.analysis/harness-runs/`; the 0600 bearer token and nonce are not
+  receipted.
+- `--windowed` owns Xvfb, launches `play --windowed` and, after success, retains
+  `screenshots/native-final.png` with a JSON receipt (frame id,
+  scene/state/resource revisions, GPU completion); missing capture evidence
+  fails the run. Headless runs make no visual claim; `--windowed` adds the final
+  capture, not pixel parity.
+- `survival` uses an isolated seed-81 world with no plugins, no operators and
+  hostile spawning disabled. The generic fallback builds a debug server, which
+  does not satisfy real-client gates: pass the pinned release server through
+  `KRASNOKAMEN_SERVER_BINARY` (path and SHA-256 are receipted). `--plugins-dir`
+  becomes `[plugins].directory` and supplies no plugin-specific scenarios.
+- Operator fixtures use vanilla `ops.json` beside the isolated config (level 4,
+  offline identities recorded). Headless survival grants no operator; windowed
+  survival grants its one identity only for the labelled death fixture, after
+  ordinary mining/pickup/placement acceptance.
+- Respawn uses the bounded event-driven Play wait. `in_play=false` right after
+  the Respawn click is not a disconnect, but there is no protocol respawn
+  fallback: a failed UI request, Play timeout or missing restored health fails.
 - Rendered name/text/colour/glow, piglin admiration, merchant offers and similar
-  visual items need screenshot review; inventory debit or menu admission alone is
-  not visual acceptance. Action/renderer gaps fail closed.
-- Headless native scenario families are received-state evidence only;
-  `--windowed` adds the shared final capture, not full pixel parity. `explain <id>`
-  lists a scenario's exact fixtures and fences.
-- `native-v2-chest-drag-disconnect` physically drags one log inside a chest
-  menu, checks authoritative cursor custody, disconnects without closing the
-  menu, and checks the player inventory and chest after rejoining. The fixture
-  uses an operator grant and an empty inventory; it does not cover overflow.
-- Singleplayer recovery:
-  `run scenario native-world-first-start-interrupted --client native --windowed`
-  interrupts the server only after both the first-start marker and database exist;
-  `run scenario native-sp-relaunch-lease-race --client native --windowed` suspends
-  the old server until the new one logs its lease wait. They create private client
-  data and worlds, use a private Xvfb, and do not cover the lease timeout branch or
-  Windows. For the first-start negative control only,
-  `KRASNOKAMEN_FIRST_START_RECOVERY_BINARY` can select an older server for the
-  recovery attempt after the fixed server created and interrupted the world.
-- `java-v2-p5-parity`, `java-v2-p5-towns` and `loader-v2-settlements-smoke` run the
-  real Java/Loader clients under private Xvfb against a frozen candidate
-  (`KRASNOKAMEN_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
-  build a server.
-
-- `native-v2-ledger-painting` places one painting and observes its removal
-  after its fixture support is removed.
-- `native-v2-ledger-axe` uses a fixture axe to strip a log, scrape oxidized
-  copper and unwax weathered copper, observing each received block state.
-- `native-v2-ledger-sponge` places a sponge beside one water source and observes
-  the wet sponge and absorbed source through the graphical client's received blocks.
-- `native-v2-ledger-setblock-snbt` opens a fixture chest created with `/setblock`
-  SNBT and withdraws the seven diamonds received in its first slot.
-- `native-v2-ledger-crafting-pickup` opens a crafting table and checks that its
-  menu remains open and 16 planks are on the cursor after the first pickup.
-  This does not exercise disconnect custody.
+  visuals need screenshot review; inventory debit or menu admission is not
+  visual acceptance. Action or renderer gaps fail closed.
+- Java/Loader v2 gates (`java-v2-p5-parity`, `java-v2-p5-towns`,
+  `loader-v2-settlements-smoke`) run real clients under private Xvfb against a
+  frozen candidate (`KRASNOKAMEN_SERVER_BINARY` or `--server-bin`, plus
+  `--plugins-dir`) and never build a server.
 
 ## Scene shots
 
-`python3 -m tools.harness run scene-shot --client native --windowed` runs a
-scripted capture. Set `KRASNOKAMEN_SERVER_BINARY`, `KRASNOKAMEN_CLIENT_BINARY`, the native
-env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
-each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
-`wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
-`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `require_entities`, `timed_entities`,
-`mob_motion`, `open_chat` (`command` boolean; opens the vanilla chat screen), or
-`key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
-`seed` defaults to 100, `world` copies an existing world, `server_view_distance`
-defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
-server config, and `lod_share_terrain_keys` optionally sets
-`[lod].share_terrain_keys` when LOD is enabled. Sharing reveals seed-derived
-terrain parameters to the client; use only with an isolated test world.
-`client_settings` accepts `graphics_preset`, `render_distance`
-and `fov` (default 70: the owner's saved fov is never inherited). Set
-`RUST_LOG=mc_edge::lod=debug` to retain a server log line for each successfully
-queued LOD tile response. PNG paths are
-recorded in `result.json`; settings and world are isolated per run.
-A frame-diff check must start below the horizon: sky and clouds drift between frames even on a frozen tick (`cmd: tick freeze`), so keep the compared box on the hand or terrain (measured on `issue1-02-held-tool`, 2026-11-24).
-`tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
-obsidian from far (2.5 blocks) and close (0.6) positions, including held attack frames.
-`tool_hand_visible` (`shot`, `min_distance`, `max_distance`) requires the received
-obsidian target and the diamond pickaxe at that range, and that the turquoise tool
-pixels are present: the pre-image that draws the hand in world geometry keeps the
-tool visible away from the wall, so a control that hides it everywhere is not a
-wall-clipping control.
-`tool_wall_visible` checks the received target, selected tool and eye distance,
-then requires turquoise tool pixels over a dark wall in the fixed close-view
-frame. Inspect the attack frames separately; the pixel check covers rest only.
+`python3 -m tools.harness run scene-shot --client native|java --windowed` runs a
+scripted capture from `SCENE_SHOT_SCENARIO=<json>` (registered scenes:
+`run scenario <id>`, mapped in `tools/harness/backends/scene_shot_scenario.py`),
+with the server/client binaries and the environment block above. Settings and
+world are isolated per run; PNG paths land in `result.json`. Step schemas and
+validation live in `tools/harness/backends/scene_shot_steps.py`.
 
-`render_draw_sample` (`name`, `yaw_deg`, optional `pitch_deg` default 0) records
-the client's own draw counters (`data.render`) at the requested view, checks that
-the client's reported yaw and pitch are that view, so a sample taken without the
-turn cannot pass, and requires its `submitted_frame_id` to be newer than the
-previous sample's, so a frozen renderer that keeps reporting one non-zero count
-cannot pass. `assert_render_bounded` (`max_index_count`, `max_growth`,
-`min_index_count`) is an aggregate over every earlier sample of the same run:
-each count must be non-zero, under the absolute bound and within `max_growth` of
-the first sample (`render_drawn_index_bounded`), and a view sampled again or
-returned to must stay within `max_growth` of that view's earlier count
-(`render_repeat_view_stable`; a view is yaw **and** pitch, so a down look is not a
-horizon repeat). It refuses fewer than three samples over two views with one
-repeated view. Pair it with `toggle_debug_overlay` and a `shot` per view: the
-screenshot is what the player sees, while the counters are the same field F3
-renders.
+Scenario options: `seed` (default 100), `world` (copy an existing world),
+`server_view_distance` (default 4), `lod_enabled` / `lod_share_terrain_keys`
+(the latter reveals seed-derived terrain parameters: isolated worlds only),
+`client_settings` (`graphics_preset`, `render_distance`, `fov` default 70, never
+the owner's saved fov; `language`), `server_console` (stdin on
+`RUN_DIR/console.fifo` for console fixtures), `operator_level`,
+`vanilla_singleplayer`, `java_plain`, `java_hide_chat`.
+`RUST_LOG=mc_edge::lod=debug` logs each queued LOD tile response.
 
-`assert_chat_components` (`name`, `line`, `hover`, optional `click`) takes the
-newest `recent_chat_components` line whose plain `text` contains `line`, then
-requires a `hover` (and `click`) event with the given `action` whose rendered
-`value` contains the given text. It proves what the chat component carries —
-`/datapack list` links, for example — where `assert_chat` only sees the
-flattened line; a plain listing has the same text and no event. That is a
-payload check, not a hover check. The projection itself is bounded: the newest
-20 lines, each with at most 512 text characters, 64 distinct events and 4096
-event characters; `truncated` is set whenever a cap cut something, and a payload
-the client cannot name is `unreadable` with a null value instead of serialised
-JSON. An event inherited from an outer style is converted once, not once per
-run.
+| Steps | Purpose |
+|---|---|
+| `cmd`, `tp` (five coordinates), `look`, `hotbar`, `key` (`keys`, `ticks`; released when the step ends), `hold_keys` (released even on failure), `use_item_on`, `attack_entity`, `click_screen_button`, `open_chat` (`command` bool), `navigate_to_block`, `pause` (native) | drive the client through ordinary input and commands |
+| `wait_ticks`, `wait_play`, `wait_respawn` (live health, death screen closed), `wait_screen`, `wait_chat`, `wait_terrain`, `wait_loader_block`, `wait_disconnect` (`eof`), `reconnect`, `server_eof` | wait on client state events |
+| `shot`, `observe`, `scan_blocks`, `read_block`, `list_entities`, `timed_entities`, `require_entities`, `toggle_debug_overlay`, `resize` (native), `render_draw_sample` | capture frames and state |
+| `assert_block`, `assert_chat` (native), `assert_chat_components`, `hover_chat_component`, `assert_entities` (native), `assert_observation`, `assert_player_sleeping`, `assert_render_bounded`, `assert_same_game_time`, `assert_screen`, `pixel_window`, `use_phases`, `upgrade_certified` | generic assertions |
+| `walk_capture`, `mob_motion`, `mob_chase`, `death_tilt`, `dropped_clock_capture`, `falling_block_capture`, `goat_side_horn`, `goat_horns_upright`, `tool_hand_visible`, `tool_wall_visible` | fixture-specific oracles; not general comparators |
+| `ui_click`, `ui_wait`, `ui_shot` | vanilla-singleplayer Java oracle UI (exact screen class/title, 1280×720 coordinates) |
 
-`hover_chat_component` (`name`, `line`, `contains`, `shot`) is the hover check:
-with the chat screen open (`open_chat`, the ordinary T path), it moves
-`client_pointer` over each painted `chat/line/*` node whose label contains
-`line`, through the ordinary pointer path, and requires the tooltip the client
-then shows — and the `component/hover/text` UI node — to carry `contains`; the
-matching frame is kept as `shot`. The pointer result of every candidate is in
-`<name>-hover.json`. The registered scenario `native-datapack-hover` creates a
-pack with `/datapack create`, lists it, opens chat and hovers the link, so it
-needs no fixture world.
+Rules that bite:
 
-`issue1-23-held-items` (`tools/harness/issue1_23_held_item_scene.json`) summons
-a `NoAI` villager and witch facing the camera on a grass platform and equips
-them through the ordinary command path (`/item replace entity … weapon.mainhand
-with minecraft:emerald` / `minecraft:redstone`), then requires both received
-entities and counts the item colours inside the fixed crossed-arms windows of
-one frame (`pixel_window`). It then replaces the witch's hand with
-`minecraft:potion` and counts the potion in the fixed nose window; because the
-control aborts at the earlier emerald window, the potion-at-the-nose claim also
-runs as its own scenario `issue1-23-witch-potion` (one witch, one potion, one
-frame, `potion_nose_pixels`). The pre-image, whose rig has no crossed-arms/nose
-role, finds no attachment bone and draws nothing.
+- A frame-diff box must start below the horizon: sky and clouds drift between
+  frames even under `tick freeze`; keep the box on the hand or terrain
+  (`issue1-02-held-tool`, 2026-11-24).
+- `wait_chat` sees current chat history, not freshness: use a unique ordered
+  fence when the same reply could already be present, and fence after the
+  commands under test before checking absence with `assert_chat`. Waiting client
+  ticks never acknowledges a command.
+- `require_entities` proves presence in the client snapshot, not in the frame.
+  `assert_entities` counts only received entities in the radius/box and refuses
+  snapshots whose `truncated` is true or missing.
+- `assert_player_sleeping` and `assert_entities` `sleeping` read received pose
+  metadata (wire index 6, pose 2), never the predicted pose; missing metadata is
+  an error.
+- `wait_terrain` (sections as unique section-coordinate triples, timeout
+  0.1–120 s) is a readiness fence on matching requested and mesh revisions, not
+  proof of visible pixels; capture is not atomic with it.
+- `render_draw_sample` requires the reported view to match and a newer
+  `submitted_frame_id`; `assert_render_bounded` needs at least three samples
+  over two views with one repeat (a view is yaw **and** pitch).
+- `assert_chat_components` checks the component payload; only
+  `hover_chat_component` drives the pointer and requires the shown tooltip.
+- `walk_capture` resamples overlapping ticks until the render frame matches
+  instead of widening tolerance, and keeps every attempt; a phase miss still
+  fails within `max_ticks`.
+- `upgrade_certified` takes the newest `Certified <kind> #<id>` reply and fails
+  `<kind>_upgraded_to_level_<level>` without the upgrade reply.
+- Wait/teardown progress files (`lifecycle-progress.json`,
+  `scene-progress.json`, `scene-shot/mcp-progress.json`,
+  `teardown-progress.json`) are written before each operation, so a forced stop
+  keeps the last phase; proxy start, EOF and teardown are each bounded to 8 s.
 
-`native-player-head` installs an authored offline skin pack in its private run:
-cyan base head, magenta opaque hat and a transparent face window. The fixed
-camera frames the placed head at x580–700/y520–655; `placed_head_hat_layer_pixels`
-requires magenta there separately from the placed/worn changed-pixel checks.
-The authored pack supplies both `slim/steve` (the pinned default-skin fact at
-index 6, used by unresolved placed heads) and `wide/steve` (special items).
-The unresolved `HarnessHat` profile deliberately uses those offline resources;
-it is not a listed player and does not fetch unsigned/online profile textures.
-This proves hat geometry, not profile resolution. `worn_head_renders` also
-requires magenta at the actual avatar head, x600–680/y280–375: adjacent,
-torso/back attachments or unrelated avatar/sky changes cannot satisfy it.
-`worn_head_back_unchanged` separately counts the authored skull's magenta hat pixels
-at x600–680/y400–510 against `head-none`, allowing at most 100 additional pixels.
-The reference accounts for the held item's edge. Brown torso/arm movement from idle
-animation is not an attachment and must not fail this colour-specific oracle.
-Raw changed-pixel counts remain diagnostic; both hat counts and their difference
-are retained. Inspect candidate and control frames before promotion.
+**Java lanes.** `--client java --windowed` runs the NeoForge Loader automation
+client (`:fabric-agent:runClientMcp`) at 1280×720, fov 70, GUI scale 3 and the
+scene's render distance: an instrumented rendering oracle, not an unmodified
+vanilla client or a vanilla-server AI oracle. Mojang's client is a test-time
+reference only, never a source for models. With `vanilla_singleplayer: true` it
+is a Java client **and vanilla server** oracle: no standalone server or EULA
+file; begin with `ui_click`/`ui_wait`/`ui_shot` to create a world and enable
+commands, then `wait_play`. The harness checks the title overlay, window
+ownership, in-play state and the integrated-server log; fixed UI coordinates
+must be rechecked when the Java UI changes.
 
-`walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
-resample. Its walk evidence lists all attempts; a phase miss still fails within
-`max_ticks`, without widening the phase bracket.
+**Scenario knobs** (beyond `explain`):
 
-The dropped clock in `native-dynamic-context` is raised to eye level and lit by a
-sea lantern. Its search region x300–460/y260–420 excludes the HUD and chat.
-`dropped_clock_face_*` normalizes rows enclosed by the gold rim into an 8×8
-blue-occupancy grid; only changed cells inside that face count, not rim motion.
-The phase pair uses noon (6000) and midnight (18000), not similar-looking
-sunrise/sunset sprites. Both shelves contain an explicit clock and compass.
-The held clock gets a separate elevated camera pair so its face is visible
-instead of edge-on; it uses the same face oracle.
-`dropped_clock_capture` samples the spinning dropped item at client-tick events
-(four ticks between captures, at most 32 captures per phase). It retains every
-attempt and selects the first face with at least 100 interior pixels and all
-64 grid cells sampled. Selection uses rim coverage only, never a day/night
-colour difference. The selected PNG and same-frame JSON become `ctx-day` or
-`ctx-night` unchanged; `<phase>-clock-capture.json` names the original attempt.
-Missing/edge-on-only frames fail closed. The day/night comparison retains the
-48 shared-cell and four changed-cell requirements, and also requires a change
-of at least 0.35 in blue / (blue + neutral-dark) face pixels, with at least 20
-such pixels per phase. This material proportion excludes the gold bezel and sun:
-item projection scales both sky colours, whereas noon/midnight change their
-relative areas. Bobbing or a clipped lower bezel can shift normalized grid cells
-without changing the texture, so cell changes alone are not animation proof.
-Both colour counts and fractions are retained for review; same-time frames at
-different poses must fail `face_changed`. Capture selection remains coverage-only.
-A static clock or changing HUD without that face fails. Retained old frames
-exercise the rejection test with `KRASNOKAMEN_CLOCK_TEST_FRAMES` naming their
-screenshot directory; actual graphical receipts remain required.
+| Scenario | Knob |
+|---|---|
+| `native-dynamic-context` | `KRASNOKAMEN_CLOCK_TEST_FRAMES=<screenshot dir>` reruns the clock-face rejection test on retained frames (`test_scene_shot.py`); graphical receipts remain required |
+| `native-world-first-start-interrupted` | `KRASNOKAMEN_FIRST_START_RECOVERY_BINARY` selects an older server for the recovery attempt (negative control only) |
+| `native-death-tilt` | needs a server that keeps the dead body for its 20 dead ticks; recalibrate the Java frames with the scene minus its `death_tilt` step and `--client java` (oracle table `backends/death_tilt_oracle.py`) |
+| `native-player-head-registry` | scene generated by `tools/harness/gen_player_head_registry_scene.py`; fetches a public texture from `textures.minecraft.net` |
+| `java-gait-sidecar` | copy of `gait_phase_scene.json` with `java_plain` and `java_hide_chat` true |
+| `native-unloaded-eye` | registered as `harness:scene-shot:native-unloaded-eye`; teardown releases the held proxy stream even on failure |
 
+## Profiles with their own procedure
 
-`require_entities` takes `name`, `args` for `minecraft_list_entities`, and a nonempty
-`types` list of namespaced entity IDs. Place it immediately before a shot: it
-records the client-visible entity snapshot as `<name>.json` and fails if any
-required type is absent. It works with native and Java MCP clients, but presence
-in the snapshot does not establish that the entity appears in the captured frame.
+### Civilization gate
 
-`run scenario native-263-entity-rigs --client native --windowed` records a
-four-entity 26.3 fixture and fails if a summoned entity is absent, its
-captured frame reports an unrendered rig, or a per-entity pixel region does not
-change. Inspect the retained image too: changed pixels do not prove model parity.
+`civilization-seed-qa` prepares an operator entry (level 4) for its primary
+player, because its founding fixture certifies storage with explicit bounds
+(`settlement building certify storage <min> <max>`, operator-only); it does not
+exercise the ordinary "Проверить здесь" path. `spawn_protection = 0` keeps the op
+entry from changing spawn protection; the claim still runs as a player command.
+It needs `KRASNOKAMEN_SNAPSHOT_BINARY` (the `player-scale-bots` pin) for the
+birth checkpoint. Street stands are searched around each street cell's own level
+(`layout::stand`), because street work can lie more than `SITE_BAND` below the
+bell. Sprint, fixture-distance and house-milestone rules are in
+[receipts and failure diagnosis](../AGENT_TOOLING.md#receipts-and-failure-diagnosis).
 
-`run scenario native-shelf-clock --client native --windowed` checks the blue
-clock-face pattern in a fixed shelf position at received day and night times;
-it also checks camera and GPU completion. It covers that shelf-clock surface
-only, not compass, other contexts, or exact vanilla appearance.
+### Battle crash recovery
 
-`run scenario native-entity-visuals --client native --windowed` fails if the
-vindicator's torso reads maroon or its arms read teal (MODEL-OPUS-12), the baby
-happy ghast renders pink instead of white (MODEL-OPUS-16), a burning pig shows
-no fire quads or a plain pig shows them (MODEL-ENTITY-FIRE), or a leashed pair
-shows no rope (MODEL-ENTITY-LEASH). One entity per shot, fixed camera.
+`run scenario battle-kit-census | battle-crash-handoff | battle-auth-hydration`
+(profile `battle-crash-recovery`, ledger refs
+`harness:battle-crash-recovery:<id>`): a field-1k 1500/side battle with PovRed
+holding a rank, CamSpec spectating and an actual SIGKILL; census rules are in
+[crash census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence). Inputs
+fail closed: `KRASNOKAMEN_SERVER_BINARY` (a pin directory with `manifest.json`;
+the two runner scenarios need `pin-release --no-incremental`, also under
+`ledger probe --client`), `KRASNOKAMEN_BATTLE_WORLD` and
+`KRASNOKAMEN_BATTLE_WORLD_SEED` (a stopped native battle world),
+`KRASNOKAMEN_BATTLE_HORIZON_CLIENT`, `_CTL`, `_RESOURCES` (the Horizon pin) and,
+for the runner scenarios, `KRASNOKAMEN_CLIENT_BINARY` plus
+`KRASNOKAMEN_BATTLE_RECORDER_DATA`. The auth scenario deploys `krasnokamen-auth`
+from the plugins sibling and has no recorder. A failed runner scenario or cleanup
+writes `battle-failure-diagnostics.json` (original traceback, process states
+before/after cleanup, secondary errors); a broken control pipe during cleanup
+never replaces the original failure. `ledger promote` needs a receipt from the
+promoted tree's own server pin. `java-battle-end-camera`
+(`java-battle-functional --client java --platform neoforge`, seed 46, 150 s)
+uses the same battle inputs plus `KRASNOKAMEN_BATTLE_PACK_ROOT` and
+`KRASNOKAMEN_BATTLE_HIT_COUNTER`; a battle pass without its late-capture
+assertion is not that regression's proof.
 
-`run scenario native-item-bars --client native --windowed` fails if the damaged
-pickaxe or filled bundle slot does not change against undamaged/empty
-replacements, or the durability/fullness bar fill is missing (MODEL-ITEM-BARS).
+### Mixed-version Loader gates
 
-`run scenario native-toast --client native --windowed` fails if the join-time
-unsecure-server toast is not drawn two seconds after Play or is still drawn
-eighteen seconds later: the ROI is the panel's own `gui/sprites/toast/system`
-rectangle (GUI scale 3 puts it at x 621..1280, y 0..168 on a 1280x720 frame,
-inside the frame) and
-the assertion is its dark pixels (NATIVE-TOASTS-MISSING). A capture requested
-while the HUD repaints is only deferred for *screen* transitions
-(`UiState::capture_deferring`); deferring it for HUD animation as well pushed
-every capture past the toast's 10 s lifetime, which is how the renderer looked
-missing. Advancement/recipe toasts and the text stay unit-covered.
+- `loader-fabric-mixed-interaction` (`loader-live` lifecycle, explicit release
+  server and plugin directory): Fabric 26.3 and 26.1.2 clients in one fresh
+  world; server-log admission records must bind the clients' names and distinct
+  connection IDs to protocols 777 and 775. `A8_NEGATIVE_CONTROL=no-drop` must
+  fail the recipient inventory oracle; `A8_NEGATIVE_CONTROL=same-version`
+  launches both as 26.3 and must fail the protocol admission assertion. No 26.2
+  gameplay claim; not the freeze-pin recheck.
+- `loader-fabric-mixed-version-build` (`loader-live`, `KRASNOKAMEN_JAVA_VERSION=26.3`,
+  `--platform fabric`, exact `--server-bin`, empty `--plugins-dir`): after the
+  26.3 client enters Play it builds and starts Fabric/SVC 26.1.2; the first
+  client must stay in Play and keep every path and SHA-256 of its Loader class
+  tree. Registered regression for `HARNESS-LOADER-SHARED-BUILD-DIR-RACE`; a
+  same-version voice pair is no substitute. Provision the SVC artifact as for
+  `screens-voice-qa`.
 
-`run scenario native-elytra --client native --windowed` fails if the worn
-elytra's back layer does not change the avatar's back region against the same
-player with an empty chest slot (MODEL-OPUS-15), or if a worn chestplate does
-not, or if the idle arm motion between two empty-chest frames exceeds the
-recorded bound. It proves the back layer is drawn; the wing silhouette and the
-vanilla pixel appearance are not asserted.
+### Screens and voice (`screens-voice-qa`)
 
-`run scenario native-placed-head --client native --windowed` fails if an
-unresolved placed head stops drawing the default skin
-(MODEL-PLACED-HEAD-UNRESOLVED); the authored hat layer needs the skin pack and
-is checked by the scenario's own pixel region.
+`--client native --windowed --parts 2` picks endpoints per leg: screens on
+26.3/Fabric; voice on the SVC artifact's baseline (26.1.2/Fabric, the owner's
+PrismLauncher case). A conflicting explicit Java selector is rejected. The SVC
+jar comes from the harness's pinned artifact path or `KRASNOKAMEN_SVC_JAR`;
+publisher size and both hashes are checked before staging. The fixture binds
+SVC's group action to `G` in each `options.txt`. The native reconnect check
+records cleared voice registration, server support, listening and microphone
+HUD after disconnect and requires them to stay off on the next non-voice server;
+a fresh `registered=true` capability advertisement in Play is not stale state.
+The screen check waits for completed Loader acknowledgement and then records
+whether `computer:monitor` was admitted: missing content after that handshake is
+a false verdict, not a wait.
 
-`run scenario native-shade-override --client native --windowed` fails if one
-torch's north and east side faces read different mean luminance. `template_torch`
-carries `shade_direction_override: "up"` on its only element and its four side
-faces share one texture region, so 26.3 shades both by the up weight (1.0); a
-mesher that uses each quad's own face weights reads them at 0.8 and 0.6 (4:3),
-which is the MODEL-SHADE-OVERRIDE symptom. Noon keeps the sun term equal on the
-two vertical faces and the torch's own light is identical in both frames. The
-row's `north`/`down` directions have no placeable model on this server
-(`flowerbed_*` is absent from the block data and `snow_height2` overrides its own
-down face with down), so the up direction carries the proof. Vanilla pixel
-parity still needs the Java oracle.
+### `settlement-map-qa`
 
-`run scenario native-decorated-pot --client native --windowed` fails if a placed
-decorated pot's side band does not change when the block entity gains bare-id
-sherds (MODEL-PLACED-POT-DECORATIONS). 26.3 `PotDecorations` is a record of
-optional `back`/`left`/`right`/`front` templates and `ItemStackTemplate.CODEC`
-accepts `{id, …}` or a bare item id; the server forwards the placing item's
-component verbatim, so a pot placed from a bare-form item arrives as bare
-strings. The scene sets the same pot twice at one position and camera, plain then
-with the angler sherd on all four sides, and compares the frames: a renderer that
-reads only `template["id"]` draws brick in both. Before the second frame the
-scene reads the block back (`assert_block` `pot-sherds-block`), so a re-set that
-never reached the client fails as a setup error instead of as a renderer
-difference; no tool exposes the block entity's `sherds` payload, so the payload
-itself is not read. The pot-item surface is unit-covered
-(`decorated_pot_item_bakes_all_sides_and_received_sherds`); the exact vanilla
-pattern placement is not asserted.
+Privileged fixture commands found and certify a town; then only physical input
+drives the owned window: bell → hub, dashboard, map (a house cell found by its
+palette pixels), building page, L2 order review and receipt, shortage icons and
+material detail, Storage (a shift-click moves and conserves one real stack),
+construction progress against independently observed blocks, Residents,
+Household, Resources, and a production order on a certified crafting-table
+workshop whose bound resident must craft for it. Native uses the renderer's UI
+nodes; Java locates labels by the running version's bitmap font and takes
+`-- --gui-scale 2|3 --language en_us|ru_ru --size 1280x720|1920x1080` (native
+always sends `en_us`). `--wrong-click` is the negative control.
 
-`run scenario native-pig-saddle --client native --windowed` fails if a pig
-carrying a saddle in equipment slot 7 draws the same frame as the plain pig
-(MODEL-OPUS-3). The server accepts `equipment:{saddle:{id:"minecraft:saddle"}}`
-on `minecraft:pig` (`command_summon`) and forwards it as slot 7
-(`entity_appearance`, `EquipmentSlot::Saddle`), so one client is enough: the pig
-is captured plain, then replaced by the same pig with the saddle at the same
-position and camera. Both frames must show the pig, and the saddle's leather is
-the only brown in the region (the stone is grey, the sky blue): the plain frame
-holds under 100 leather pixels and the saddled one over 300, while an animation
-or shading difference between the two pigs stays pink and cannot pass. A client
-whose animal overlay table carries only the horse and wolf resolves none of the
-other species' mount slots and draws no saddle. The other species and the
-saddle's exact vanilla shape stay unit-covered (`equipment::tests`).
+`details.verdicts` (`bell_opens_hub`, `dashboard`, `map`, `building_order`,
+`shortage_icons`, `storage_transfer`, `project_progress`, `residents`,
+`resources`, `production_order`, `localized_text` for `ru_ru` runs, `all`) are
+published whether the run passes or stops: `false` when a check failed (or an
+earlier one did), `null` when the run stopped without a failed check; the ledger
+reads `false` as red and `null` as no evidence. A Java client that cannot load
+the requested language fails before connect (`check_java_language`; usual cause:
+missing `minecraft/lang/<locale>.json` objects in the asset store, repair it).
 
-`run scenario native-player-head --client native --windowed` fails if a placed
-or worn player head does not change its frame region (MODEL-OPUS-N3). The hat
-layer itself needs an online skin: the client rejects profile texture URLs whose
-host is not `textures.minecraft.net` (`src/profile_textures.rs`).
+| Scenario (`-- --scenario`) | What it judges |
+|---|---|
+| default | the walk above; most verdicts run native with `--timeout-seconds 3600`; `localized_text` runs Java `--language ru_ru` (owner host: source `<work>/receipts/BuildHost/java-prereqs.env` for the Java prerequisites) |
+| `quickwins --language ru_ru` (native) | the D63 quick wins, written from the decision text by an agent that did not see the implementation (criteria and sources in `backends/settlement_quickwins_qa.py`); stops at the first unmet `QW <id>` (`details.client_evidence.quickwins.first_unmet`); `--survey` records every unmet criterion and is never acceptance; control = the same run on the tree without the quick wins, with its own pin |
+| `quickwins-c1-race [--founding-clocks 1..6] [--found-after-ticks 1..1200]` | `JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK`: observer clocks churn the anchor chunk, then only C1 is judged; `starter_chest_race` is `true` (seen), `false` (seen only after a chunk resend), `null` otherwise |
+| `stage2 --language ru_ru` (native, Java) | stage-2 certification (standing inside, «Проверить здесь») by a non-operator; fixtures through `server_console` (`settlement_quickwins_console.ConsoleFixtures`, replies between two unique `say` fences) |
+| `stage2op` | the same player at ops.json level 2 (`operator_level: 2`), judging only the operator branch of the coordinate form of `/settlement building certify` |
+| `blueprints --language ru_ru\|en_us` | the Construction blueprint list read page by page: no raw ids or «Unknown», every name localized, 26 or more distinct |
 
-`run scenario native-player-head-registry --client native --windowed` fails if a
-head demanded after 261 distinct malformed profiles does not render its own skin
-(PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION). The flood is nine visible
-hotbar slots with distinct malformed `textures` values in 29 groups, the
-HeadBreaker saturation reproducer (`receipts/HeadBreaker/REPORT-skull.md`). In
-the same fixed third-person frame the scene then wears two heads: an offline name
-(default skin) and the public Notch texture property, fetched from
-`textures.minecraft.net` in the isolated run. The assertion is that the valid
-head's frame region differs from the default-skin head's, so a full registry that
-refuses the valid key (both frames default-skin) fails; the exact Notch
-appearance is not asserted. The fetch is a real network read, so the same run
-demands a second, distinct key (the same document re-serialized, so the registry
-key differs) and wears it **before** the flood: `pre_flood_valid_head_renders`
-reds when the fetch itself is broken, which keeps the row's red from being
-ambiguous. The scene is generated by
-`tools/harness/gen_player_head_registry_scene.py`.
+Tab-completion denial has no client tool; `mc-edge` `command_tree` tests cover it.
 
-`run scenario native-dynamic-context --client native --windowed` fails if the
-left/right shelf clocks' blue face pattern or the held clock's pattern does not
-change between received day and night, if the dropped clock's needle axis does
-not rotate, or if two shelf compasses at different positions show the same
-needle axis (MODEL-DYNAMIC-CONTEXT). Item frames cannot hold an item through
-`summon` on this server, so that surface is not covered here.
+### `settlement-quickwins-horizon`
 
-`use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
-start and hold captures, releases it even on failure, and requires the client's
-`using` state to transition idle → active → active → idle.
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600`
+runs the quick-wins walk on the pinned Horizon 26.3 client (`--offscreen` under
+the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
+`--horizon-client|--horizon-ctl|--horizon-resources`); `-- --scenario stage2|stage2op`
+runs the stage-2 walks (Tab completion recorded, not judged). The harness owns
+server, Xvfb and client in one `ExitStack` and receipts the tree fingerprint and
+server path/sha256. Waits block on the client's
+`wait-for state-change --since REV` (a read-only extension in the QA kit at
+`targets/horizon-qa-kit`). A `ru_ru` run refuses before connect when the client
+resources lack `assets/minecraft/lang/ru_ru.json`.
 
-`resize` (native only) takes `name` and `size` in pixels, resizes the owned Xvfb
-window, and captures a frame whose dimensions must match the requested size.
+### Distant Horizons gate (`dh-gate`)
 
-`wait_disconnect` (native only) takes `name` and `eof`; it waits for the
-disconnected/error phase and records cleared use state, requiring the transport
-EOF reason when `eof` is true. `reconnect` targets the same private server.
-`server_eof` half-closes every client-facing socket in the harness-owned proxy,
-producing clean EOF without killing the server or approximating EOF with a reset.
-The receipt's `lifecycle-progress.json`, `scene-progress.json`,
-`scene-shot/mcp-progress.json` and `teardown-progress.json` are written before
-their respective operations, so forced termination retains the last phase and
-its timeout. Proxy start, EOF and teardown are each bounded to eight seconds.
+`python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real Java
+Distant Horizons client against a candidate; prerequisite discovery is never a
+pass. [`tools/harness/dh-artifacts.json`](../../tools/harness/dh-artifacts.json)
+owns the publisher hashes and loader pins the profile checks. Inputs:
+`KRASNOKAMEN_DH_JAR`, `KRASNOKAMEN_SERVER_BINARY`, Java 25, Xvfb, Pillow and the
+Loader's DH scenario driver (private Prism copy under the Loader checkout's
+`.analysis/prism-26.1.2/minecraft`, fresh MCP tokens per client). The scenario
+compares server DH off and on from one camera with clean DH caches (vanilla
+render distance ≤ 8, DH radius 128, a never-visited landmark 1024 blocks away)
+and keeps request/DTO/render completion, packet coordinates, screenshots,
+surface-edit/reconnect/dimension/reset checks and a bounded adversarial pass
+(`dh-scenario.json`, `dh-packet-evidence.json`). Pixel check: no gold in the
+DH-off control, gold in the cold DH-on frame, emerald after the live edit; a
+decoded leaf or replacement VBO before parent aggregation is not a rendered edit.
 
-`walk_capture` samples one uniquely matching entity and its minimum speed. An
-endpoint sample may straddle the requested range because rendering interpolates
-from the previous tick, so the harness captures overlapping ticks until the
-actual render frame matches without widening the tolerance. An early frame is
-sampled again immediately rather than waiting a whole tick and potentially
-skipping the requested phase. It records every capture attempt, the matching
-before/after observations, and the screenshot's
-render-frame gait inputs; the entity identity must persist. Position is not
-wrapped: renderers can apply a factor before calculating phase.
-`tools/harness/gait_phase_scene.json` fixes the scene and slows both clients'
-server clock to 2 TPS so extraction can be sampled without widening the phase
-tolerance. Zombie and spider use separate approach lanes, with the camera moved
-to the spider's lane so the zombie death animation cannot obscure its capture.
-For the Java lane copy the fixture and set `java_plain` and `java_hide_chat` to
-`true`; the latter hides chat in the captured image.
+### village-autonomy-qa
 
-`goat_side_horn` checks a previously named screenshot from the fixed goat side
-pose against the measured Java horn edge; its four-row bracket shifts down one
-pixel when rasterization moves the horn top below the first row. It is not a
-general image comparator.
-`death_tilt` takes `empty` and `shots`, names of earlier screenshots (`t00`..`t18`,
-one per stepped tick) from the fixed zombie pose of
-`tools/harness/death_tilt_scene.json`, the registered `native-death-tilt` scenario.
-For each shot it takes what differs from the empty frame inside a region clear of
-clouds, hotbar and hand, and checks the silhouette's top row and tipping-side column
-against the Java 26.3 frame of the same step or the step before (±2 px; the table is
-in `backends/death_tilt_oracle.py`). Java renders a frozen entity at partial tick 1.0,
-the native client at 0, so native step `s` equals Java step `s - 1` pixel for pixel
-today and Java step `s` once the client takes the vanilla partial. A client that turns
-the dying body about any point other than its feet, or on another deathTime curve,
-fails. The scene needs a server that keeps the dead body until its 20th dead tick, as
-vanilla does (`b874a4ea`, on the battle line, not yet in main: a server without it
-removes the body at death and the scenario fails with `silhouette missing`). The Java
-frames are recalibrated with `SCENE_SHOT_SCENARIO=<scene without the death_tilt step>`
-and `--client java`.
-`assert_chat` (native only) records the current observation and checks `contains`
-and `excludes` substrings against `recent_chat`. At least one expected substring
-is required; use an ordered chat fence after the commands under test before
-checking absence. `tools/harness/command_feedback_scene.json` exercises player
-success suppression, failure visibility and the enabled feedback control.
-
-`assert_same_game_time` compares integer `time.game_time` from two named native
-observations and requires the specified daylight change, proving a fresh clock
-update arrived. The registered `native-frozen-game-age` scene fences freeze,
-teleport and time-command replies across held frames and local input.
-
-`wait_chat` (native only) takes a nonempty substring and waits on client state
-notifications until `recent_chat` contains it. Use a received acknowledgement
-before observing a server-driven transition; waiting client ticks does not
-acknowledge a command. This checks current chat history, not freshness: use a
-unique ordered fence when the same reply could already be present.
-
-`native-low-roof-house` certifies a two-block-high enclosed house with a paired
-bed. An ordered command fence and block predicates check the bed and roof before
-the native client asserts the certification reply. This checks certification,
-not whether a villager sleeps or breeds.
-
-`assert_entities` (native only) takes `name`, `args` (as `list_entities`), `entity_type`
-and `min`, plus optional `max`, `box` (`[x0,y0,z0,x1,y1,z1]` on the received feet
-position), `max_height` (a sleeping pose is 0.2 tall), `profession` (the received
-VillagerData) and `baby` (the received DATA_BABY_ID; a row that never received it matches
-neither `true` nor `false`). It counts the matching received entities and fails `<name>_min` or
-`<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
-It rejects snapshots whose `truncated` field is true or missing; an incomplete
-page cannot prove a count or absence. Counts still cover only entities received
-by the client within the requested radius and any supplied box.
-The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
-`native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
-within 32 blocks in 3000 ticks; two villagers dropped into a 4-deep pond float up within 100 ticks),
-`native-village-night-door` (a door the player left open reads shut after both
-residents sleep behind it at night), `native-village-late-job` (at day tick 10000 an
-unbound villager and a bound resident take a free lectern),
-`native-village-distant-job` (a resident claims a certified workshop 72 blocks away),
-`native-village-deep-water` (residents dropped onto the floor of 2- and 5-deep ponds, with no bank cell
-beside them, leave the water and sleep at home), `native-village-mob-doors` (residents shut behind
-poplar, copper and waxed oxidized copper doors walk to the bell and the doors read shut afterwards;
-an iron door keeps its resident in), `native-village-after-hours-job` (at Idle day tick 11000 a bound
-jobless resident walks 44 blocks to a new farmer workshop and takes the profession) and
-`native-village-breeding` (two bound adults ration bread from a certified storage and, in a
-house whose roof sits one block over its three beds, raise a baby villager the client receives
-within 3000 game ticks; the fix patch of `ISSUE-1-13` is the headroom-free spare-bed scan).
-Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
-
-Three additional claim gates cover the BreakIssue1x11 findings:
-`native-village-moved-workstation` removes a certified composter, observes the
-novice lose its profession, replaces it two blocks over and requires the received
-farmer profession again. `native-village-open-air-home` queries the existing
-read-only `/data get entity ... Brain.memories."minecraft:home"` path through
-`execute store success`: the bound resident initially has no outdoor claim,
-the later unbound villager claims and sleeps in that bed, then the resident
-claims and sleeps in a newly roofed bed. No second brain authority is added.
-`native-village-occupied-bed` presses `use` for one tick on the same bed/ray
-first vacant (positive sleeping control), then occupied: only the villager wakes,
-and it later returns after its wake cooldown. This matches the
-[Bed sleeping reference](https://minecraft.wiki/w/Bed#Sleeping): the villager
-is kicked out before the player can enter on a subsequent use.
-
-`assert_player_sleeping` takes `{"name": "<assertion>", "sleeping": true|false}`.
-It reads `player.received_metadata` from the native client, never the predicted
-`player.pose`: wire pose index 6 must be present with `kind=pose`, and sleeping
-is pose 2. Missing metadata is an error, not an awake default.
-`assert_entities` also accepts `sleeping` with the same received-pose rule,
-so the occupied-bed gate proves both the wake and the player's non-sleep.
-
-`upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
-it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
-`settlement building upgrade <id>` (a building id is a settlement and sequence
-pair, so a fixed scenario cannot spell it), waits 20 ticks and fails the named
-assertion `<kind>_upgraded_to_level_<level>` unless `Upgraded building #<id> to
-level <level>.` arrived.
-
-`native-settlement-buildings-upgrade` hand-builds a stone wall, a tower, a
-barracks with two beds and a farmer workshop with a composter inside a founded
-settlement and certifies each, expands the wall to the next level's size and
-adds a second composter, then upgrades both through `upgrade_certified`. It
-covers ISSUE-1-09 on the command path; it does not press the Buildings dialog's
-Upgrade button (`army-qa` does), build with Builders (`buildings-qa`), or cover
-gates, level 3 or the other workshop kinds.
-
-`native-settlement-radius-growth` founds a settlement of radius 8 around six
-villagers, then binds a seventh. `/settlement info` must show `radius=24
-members=6` after founding and `radius=28 members=7` after the bind (four blocks
-per resident, docs/settlements/construction.md). It reads the command reply, not
-the Settings dialog or the map territory.
-
-
-- `timed_entities` takes the same `name` and `args` as `list_entities` and retains
-  its same-client-thread `game_time` and entity positions. Missing timestamps fail.
-- `mob_motion` reads three named `timed_entities` receipts and records horizontal
-  displacement and blocks per client tick for one zombie and one spider. Both
-  must retain their identities and move; observed game time must advance. These
-  are client-observed rates, not authoritative server-clock speeds: client time
-  can be corrected by server packets, and curved paths make net displacement a
-  lower bound on traveled distance.
-- `mob_chase` reads the named `timed_entities` samples of one kind (at least two, a window of 60 or
-  more client ticks) and records ONE pace over the whole window, so the server's position sample
-  period cannot become the band: `chase_speed_<kind>` (blocks per client tick inside the declared
-  range), `chase_approach_<kind>` (the received distance to the player fell by at least the declared
-  blocks — a wanderer that keeps pace without closing ground fails), `chase_aggressive_<kind>` (the
-  mob-flags byte carries the declared bit on the first and last samples) and
-  `chase_identity_<kind>` (one entity throughout). `issue1-19-hostile-motion` uses it for the zombie
-  chase (`chase_speed_zombie`, 0.105..0.128 from the Java 26.3 moving interval, approach >= 3 blocks,
-  aggressive bit 2).
-- Zombie-family chase uses a blueprint capability to send the aggressive-arms
-  mob flag. It is cleared when the target is lost or on the first hostile
-  evaluation after restart, because targets are runtime-only; the changed
-  appearance is journaled. The focused metadata and WAL tests do not substitute
-  for a matched animated visual comparison.
-
-- With a client supporting held MCP input,
-  `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player
-  list and releases the key even if capture fails (native only).
-- Terrain fence (native only): after observing the relevant block states and
-  before the screenshot, use
-  `{"wait_terrain":{"name":"terrain-ready","args":{"sections":[[62,10,62],[62,9,62]],"timeout_seconds":30}}}`.
-  Sections are unique section-coordinate integer triples (1-64); the timeout is
-  0.1-120 s, default 30, also bounded by the scenario deadline. A missing tool,
-  timeout or non-ready response fails the scenario. The receipt is saved as
-  `<artifact>/terrain-ready.json` and in `scenario.terrain_waits`; requested and
-  mesh revisions must match. The completed frame is a readiness fence, not proof
-  of visible pixels, and capture is not atomic with the fence.
-- `--client java --windowed` connects a NeoForge Java client with the Loader
-  automation mod to the Krasnokamen server (`:fabric-agent:runClientMcp`): `shot`
-  uses `minecraft_screenshot` and matches the 1280x720 window, fov, GUI scale 3
-  and render distance. It is an instrumented rendering oracle, not an unmodified
-  vanilla client or a vanilla-server AI or movement oracle. Mojang's client is a
-  test-time reference only, never a source for models.
-- For a Java client **and vanilla server** oracle, set `vanilla_singleplayer: true`
-  in the scenario and run `--client java --windowed`. No standalone server or
-  EULA file is created. Begin the steps with `ui_click` (exact screen `class`,
-  `title`, and 1280×720 window `x`/`y`), `ui_wait` (screen class), and `ui_shot`
-  as needed to create a world and enable commands, followed by `wait_play` and
-  normal scene actions. The harness checks the title overlay, window ownership,
-  actual in-play state and integrated-server log; fixed UI coordinates are tied to
-  this window size and must be checked when the Java UI changes.
-- `settlement-map-qa` reuses this lifecycle with a scripted body: privileged fixture
-  commands found and certify the town, then the owned window is driven by physical
-  input only. A right-click on the anchor bell opens the hub; the Settlement
-  dashboard, the map (a house cell is found by its rendered palette pixels), the
-  building page, the L2 order review and receipt, the project shortage icons and
-  material detail, the Storage page (a shift-click moves one real stack and conserves
-  it), construction progress against independently observed blocks, the Residents,
-  Resident and Household pages and Resources follow. Last, a fixture certifies a
-  workshop holding a crafting table, and the player opens Production orders, presses
-  New order, picks the `open_hay` recipe (and the workstation when asked) and confirms
-  the form with its default count; `settlement production <name> job <id>` must then
-  show the order with one of the bound residents as worker, and that resident must have
-  crafted for it (receipts), the Production orders page listing it. `--client native --windowed`
-  uses the received renderer's UI nodes; `--client java --windowed` locates labels by
-  the running vanilla version's bitmap font and takes
-  `-- --gui-scale 2|3 --language en_us|ru_ru --size 1280x720|1920x1080` (the native
-  client sends ClientInformation language `en_us` fixed and has no such options);
-  `--wrong-click` is the negative control (Help instead of Settlement).
-  The run publishes boolean `details.verdicts` whether it passes or stops (they are
-  mapped from the recorded assertions, `verdicts_from_assertions`): `bell_opens_hub`,
-  `dashboard`, `map`, `building_order`, `shortage_icons`, `storage_transfer`,
-  `project_progress`, `residents`, `resources`, `production_order`, `localized_text` (every Russian title and
-  the rendered shortage text; `ru_ru` runs only, `null` otherwise) and `all`. A verdict
-  is `false` when one of its checks failed or an earlier check already failed, and
-  `null` when the run stopped without a failed check (a lost client): the ledger reads
-  `false` as red and `null` as no evidence. A ledger ref
-  `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
-  (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
-  `harness:settlement-map-qa:starter_chest_race` runs `--client java ... --scenario quickwins-c1-race`
-  (below); `harness:settlement-map-qa:blueprints` runs `--client native ... --scenario blueprints` — the
-  quickwins setup founds the settlement, then the Construction page's list is read page by page
-  (`blueprint_names`: no raw ids, no Unknown, every name in the client language, 26 or more distinct) and
-  published as `blueprints`/`all`; every other verdict runs native with `--timeout-seconds 3600`.
-  A Java run whose client could not load the requested language fails before connect
-  (`scene_shot_client.check_java_language`, marker `Failed to load translations for
-  <locale> from pack vanilla`): such a client still reports the locale to the server but
-  translates item names and vanilla tooltips into `en_us`, so its scene is no evidence
-  for any client-localized text. An asset store missing the `minecraft/lang/<locale>.json`
-  objects is the usual cause (2026-11-19: all 144 lang objects were absent); repair the
-  store instead of accepting the run.
-
-  `settlement-map-qa -- --scenario quickwins --language ru_ru` (native only; the client takes the language
-  from `KRASNOKAMEN_CLIENT_LANGUAGE`, which the lifecycle sets from `client_settings.language`) is the
-  owner-path acceptance of the D63 settlement quick wins, written from the decision text and
-  `receipts/SettlementUX/REPORT.md` section 5 by an agent that did not see the implementation
-  (`tools/harness/backends/settlement_quickwins_qa.py` lists every criterion with its source). One session
-  walks `/settlement create` → the empty starter chest as storage (Storage page count, `data get block`,
-  a Shift-click deposit) → hub → next step → dashboard → Storage → empty Buildings → an order on empty
-  storage with its Russian outcome and storage link → Back to where each screen came from → the active
-  project's icon and status → certifying a small house by marking its two floor corners while standing
-  on its floor → the Buildings list and map → `/settlement guide`. Each criterion is the assertion
-  `QW <id>`; the default run stops at the first unmet one and the receipt names it
-  (`details.client_evidence.quickwins.first_unmet`). `-- --survey` walks every block and records the unmet
-  criteria instead (negative-control plumbing check on a tree without the changes; it fails when any
-  criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
-  the quick wins, with that tree's own server pin.
-
-  `settlement-map-qa -- --scenario quickwins-c1-race [--founding-clocks 1..6] [--found-after-ticks 1..1200]`
-  (native or Java, any language) is the standing check of
-  JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK: the same pad and `/settlement create`, but first observer
-  clocks (default 4) on the anchor chunk's far side keep changing blocks of that chunk, and the founding waits
-  (default 100 ticks) until the pad's traffic has left the connection queue; then only C1 is judged with the
-  quickwins diagnostics (15 scans, a ±16 scan, a rescan after 60 s and after a teleport 220 blocks away and
-  back). It publishes `details.verdicts.starter_chest_race`: `true` when the client sees the chest, `false`
-  when it sees it only after coming back (the server had it; only a chunk resend delivered it), `null`
-  otherwise. On the unfixed core (pin `7393780e37a4`) the client missed the chest in every run (Java 7/7,
-  Horizon 2/2, `receipts/ChestDeliveryFix/REVIEW-BRIEF.md`). The options exist only on this scenario.
-
-  `settlement-map-qa -- --scenario stage2 --language ru_ru` (native and Java) is the stage-2 acceptance of the
-  same decision (certification by standing inside and «Проверить здесь», no corner marking), written from the
-  decision text and the stage-2 rules (`tools/harness/backends/settlement_quickwins_stage2.py`). The player is
-  NOT an operator, so privileged fixtures run on the server console: the scene scenario option
-  `server_console: true` starts the server with stdin on `RUN_DIR/console.fifo` (the battle runner's
-  mechanism, `FifoConsole`); `settlement_quickwins_console.ConsoleFixtures` replaces `@s` with the player's
-  name and returns exactly the reply lines between two unique `say` fences. `-- --scenario stage2op` is the
-  same player written into ops.json at level 2 before the server starts (scenario option
-  `operator_level: 2`; the console `op` always grants level 4) and judges only the operator branch of the
-  coordinate form of `/settlement building certify`. Tab-completion denial has no native or Java client
-  tool; the command tree is covered by the `mc-edge` `command_tree` tests. `settlement-map-qa -- --scenario
-  blueprints --language ru_ru|en_us` opens the blueprint list with the player's `/settlement menu projects`
-  and judges that every icon name is a localized word (no snake_case or `minecraft:` ids, no «Unknown»,
-  26 or more distinct names).
-
-## Settlement quick wins on Horizon (`settlement-quickwins-horizon`)
-
-`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600` runs the same
-quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizon 26.3 client
-(`--offscreen` under the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
-`--horizon-client|--horizon-ctl|--horizon-resources`; `-- --scenario stage2|stage2op` runs the stage-2 walk with a
-non-operator player and console fixtures, or the same player at ops.json level 2; Tab completion there is
-recorded, not judged: the coordinate arguments are integers and offer no suggestion even to a level-2 operator). The harness owns the server (a `Server` with
-its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
-`ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
-and the server binary path and sha256. Waits are pushes: `Probe.wait` observes and then blocks on the
-client's `wait-for state-change --since REV` (`state.revision`, a read-only extension carried by the QA
-kit at `targets/horizon-qa-kit`), which moves when the dialog, the position, a tracked entity or a
-block write changes. A `ru_ru` run refuses before connect when the client's resources lack
-`assets/minecraft/lang/ru_ru.json` (the film resources carry only `en_us`, so the outcome showed
-English item names next to Russian server text).
-
-## Distant Horizons gate (`dh-gate`)
-
-`python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real
-Java Distant Horizons (DH) client against a candidate server. Prerequisite
-discovery alone is never a pass. The profile checks both publisher hashes (URLs,
-sizes, SHA-512/SHA-1) and the baseline loader pins in
-[`tools/harness/dh-artifacts.json`](../../tools/harness/dh-artifacts.json), which
-is the pin owner.
-
-- Inputs: `KRASNOKAMEN_DH_JAR` (the pinned DH jar), `KRASNOKAMEN_SERVER_BINARY` (the
-  candidate), Java 25, Xvfb, Python Pillow, and the real DH scenario driver in the
-  sibling `krasnokamen-loader` (`KRASNOKAMEN_LOADER_ROOT` selects the checkout). The driver
-  uses a private copy under `.analysis/prism-26.1.2/minecraft` inside that
-  checkout, never the owner's Prism, and mints fresh local MCP bearer tokens per
-  client.
-- Scenario: independently clean DH caches; server DH disabled versus enabled from
-  the same camera; vanilla render distance <= 8, DH radius 128; a never-visited
-  landmark 1024 blocks away.
-- Required receipts: request/DTO/render completion, vanilla-versus-DH packet
-  coordinates, screenshots, surface-edit/reconnect/dimension/reset checks and a
-  bounded adversarial pass. `dh-scenario.json`, `dh-packet-evidence.json` and
-  `result.json` keep the actual outcomes.
-- Fixed-camera pixel check: no gold in the DH-off control, gold in the cold DH-on
-  frame, emerald after the live edit. A decoded leaf or replacement VBO can precede
-  parent aggregation and is not a rendered-edit pass.
-
-## Flakes that are environment
-
-- Treat historical overload/GPU symptoms as hypotheses, not automatic exceptions.
-  Retain the first failed receipt and record actual load, cgroup/CPU pressure,
-  renderer/backend and failure phase; rerun once under a corrected environment
-  only when that supplies new evidence. `Parent device is lost`, a missing frame
-  or `stale_dimension_epoch` is not exonerated by its wording.
-- Xvfb/software rendering and capture overhead belong to the recorded backend.
-  Label that environment and compare like-for-like; never subtract a historical
-  `xcb_put_image` estimate to manufacture physical-display FPS. Completed capture
-  frames still do not prove monitor scanout.
-- A debug server runs at about 2–9 TPS while a joining player's chunks generate;
-  timing-sensitive checks (bow draw, eating, cooldowns) need the release server
-  (AGENTS.md).
-
-## Promotion with a negative control
-
-A bug row closes only with a registered `harness:<profile>:<scenario>` check that
-fails closed at the row's own assertion on a negative control. Build the negative
-control as the current candidate with only that row's fix reverse-applied. Commits
-from before the 26.3 cutover speak protocol 775 and fail at login, which is not a
-negative control; bundled multi-fix reversals do not count either. A unit or
-synthetic test is a regression guard, never the closing evidence for a
-client-visible bug.
-
-## Client fixes and `ledger promote` (stage 2, 2026-11-15)
-
-A fix that lives in the client repository is recorded as `fix_commit = "client:<sha>"`
-instead of a core commit or a `patch:`. `ledger promote` proves it with receipts, because
-there are no server hunks to reverse: `--client-control-receipt` is a real-client
-`result.json` of the **pre-fix** client whose row ref is red, and `--client-receipt` is a
-`passed` one of the client that contains `<sha>` with the same ref green. Both ran on the
-tree being promoted, so the server-side identity checks are unchanged.
-
-Two rules make that evidence real, and both cost a rerun when skipped:
-
-- **The client that ran, not a checkout beside it.** Receipts record `client_binary` at run
-  start: the sha256 of `KRASNOKAMEN_CLIENT_BINARY` hashed then, its pin-release
-  `manifest.json`, and that manifest's `head`/`dirty`. Promotion refuses a receipt without
-  it, a manifest that pins another binary, a `dirty` pin and a pin without a head, and the
-  ancestry checks read the pinned head. A receipt that only names a checkout HEAD proves
-  nothing: preflight launches the binary, not the checkout.
-- **Red means an observed assertion failure.** The control must be `status = "failed"` with
-  the scenario's own assertion recorded false. A `timeout`, a launch error, a preflight
-  failure or a crashed client never observed the bug; they are refused as a control.
-
-`python3 -m tools.harness ledger promote <ID> --client-control-receipt <pre-fix.json>
---client-receipt <fixed.json>` writes `control_tree: client` in `promote.json` and flips the
-row; `--dry-run` runs both checks and writes nothing.
-
-## village-autonomy-qa
-
-1. Build the release server under the runner into its own target.
-2. Run the fast proxy first (about 8 min, deterministic):
-   `cargo test -p mc-core --lib
-   seed_100_generated_village_builds_storage_with_player_simulation_distance --
-   --ignored --nocapture`.
+1. Pin the release server.
+2. Run the fast deterministic proxy first (about 8 min):
+   `cargo test -p mc-core --lib seed_100_generated_village_builds_storage_with_player_simulation_distance -- --ignored --nocapture`.
 3. `python3 -m tools.harness run village-autonomy-qa --client native --windowed`
-   takes 40-55 min (cap 3600 s); run it async with `timeout: 0`. Two in parallel
-   are fine on the 12-core host; stop stale `krasnokamen` processes from old runs by
-   PID first.
-4. Receipt: `.analysis/validation/<UTC>-village-autonomy-qa-*/village-autonomy-qa/scenario.json`:
-   `assertions`, `autonomy_acceptance.storage_rounds` (chest totals and buildings
-   about once a minute), `client_blocks` (blueprint matches; `wood_species`),
-   `planner_status`, resident census; `transcript.json` has every MCP call. Replay
-   recorded `minecraft_scan_blocks` results through the harness matcher offline to
-   test matcher changes without a 50-minute rerun.
-5. `all_behaviours_pass` requires every recorded verdict, including ones commented
-   "non-gating". Never narrow it without an owner decision.
+   takes 40–55 min (cap 3600 s): launch it as a background job; stop stale
+   `krasnokamen` processes from old runs by PID first.
+4. Receipt `.analysis/validation/<UTC>-village-autonomy-qa-*/village-autonomy-qa/scenario.json`:
+   `assertions`, `autonomy_acceptance.storage_rounds` (chest totals and
+   buildings about once a minute), `client_blocks` (blueprint matches,
+   `wood_species`), `planner_status`, resident census; `transcript.json` has every
+   MCP call. Replay recorded `minecraft_scan_blocks` results through the matcher
+   offline to test matcher changes without a rerun.
+5. `all_behaviours_pass` requires every recorded verdict, including ones
+   commented "non-gating"; never narrow it without an owner decision.
 
-Known causes: builders only come from residents that reach storage (a bridge exit
-over water once blocked them); builders and resource workers work only in day time
-2000..9000, so harness waits must span a game day; each project uses one wood
-species funded from stock, so an upgrade can differ from its base level; an
-autonomous upgrade clears the previous level's removed cells before it places
-anything, so a level-one building matches only until its upgrade starts and again
-once the upgrade completes; natural zones must prove wild resources. A chat-reply
-race (`mutations_refused_while_unowned`) fails on a CPU-contended host. Lumberjack
-latency varied between runs; only the final checkpoint persists, so diagnosing it
-needs a run that records state over time.
+Known causes: builders come only from residents that reach storage (a bridge
+exit over water once blocked them); builders and resource workers work only in
+day time 2000–9000, so waits must span a game day; each project uses one wood
+species funded from stock; an autonomous upgrade first clears the previous
+level's removed cells, so a level-one building matches only until its upgrade
+starts and again once it completes; natural zones must prove wild resources. A
+chat-reply race (`mutations_refused_while_unowned`) fails on a CPU-contended host.
+Only the final checkpoint persists, so lumberjack latency needs a run that records
+state over time. To trace villagers temporarily (never merge): a
+`tracing::debug!(target: "villager_trace", ...)` every 400 ticks in the villager
+brain, `RUST_LOG=info,villager_trace=debug`, then grep `server.log` per entity id;
+`path=0` with a fixed target for thousands of ticks means no route, the same
+position with `path>0` a navigation stall.
 
-To trace villagers temporarily (never merge): a `tracing::debug!(target:
-"villager_trace", ...)` gated every 400 ticks in the villager brain, run with
-`RUST_LOG=info,villager_trace=debug` (the harness passes the environment to the
-server), then grep `server.log` per entity id. `path=0` with a fixed target for
-thousands of ticks means no route; the same position with `path>0` means a
-navigation stall. Compare good and bad runs of the same binary.
-
-## Edge pump lag on real clients (`join-lag-gate`)
+### Edge pump lag (`join-lag-gate`)
 
 `python3 -m tools.harness run join-lag-gate --client native --windowed` covers
-EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS and
-EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.
+`EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS` and
+`EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP`. The test/dev-only
+`KRASNOKAMEN_PUMP_LAG_TICKS=K` makes the pump wait for K core tick events before
+each call to the unchanged `next_publication`, which then meets a backlog and
+applies its own skip/drain: the production path stays the only path, and no
+clock is read (unset or 0 keeps the shipped pump; an invalid value fails startup;
+see `crates/mc-edge/src/server/pump.rs`). The gate runs `/tick rate 3` with K=8
+(about 2.7 s per publication: past the 1.6 s publish budget, under the 10 s
+outbox watch), opens its verdicts only on the server's `pump lag enabled` warn
+line (inotify) and reads the join interval from the server's `login admitted` →
+`join landed` pair.
 
-The condition is a pump behind the tick. There is no operator knob for that, so
-the gate sets the test/dev-only `KRASNOKAMEN_PUMP_LAG_TICKS=K`: with it, the
-pump waits for K core tick events (the light tick-time stream, subscribed only
-when the knob is set) before each call to the unchanged `next_publication`,
-which then meets a backlog and applies its own skip/drain — the production path
-stays the only path, so a control tree that reverts the fix is exercised exactly
-as the fix is. No clock is read by the knob. Unset or 0 keeps the shipped pump;
-an invalid value fails startup and one `warn` line names the knob (see
-`crates/mc-edge/src/server/pump.rs` beside the queue budget).
+- `join_behind_slow_pump`: a fresh client's join lands inside 10 s.
+- `live_pump_does_not_halt`: `/stats` keeps advancing `simulation_tick` and the
+  log has no `edge pump not draining`.
 
-The gate runs `/tick rate 3` with K=8: about 2.7 s per publication, past the
-1.6 s publish budget (so the skip applies) and under the 10 s outbox watch (so
-the fixed pump keeps draining), while the pre-fix queue still grows to the whole
-broadcast window. The gate opens its verdicts only on the server's
-`pump lag enabled` warn line, which it waits for with
-`runtime.wait_for_path_condition` (inotify), and it reads the join interval from
-the server's own `login admitted` -> `join landed` pair (`RUST_LOG` sets the pump
-to debug for that line), never from the client's process startup. The gate
-harness itself takes no wall-clock sleep: the join is awaited as a client MCP
-event and the warn line as a filesystem event.
-
-Criteria (rows reference them as `harness:join-lag-gate:<name>`):
-
-- `join_behind_slow_pump`: behind the delayed pump, a fresh client's join has to
-  land inside the 10 s deadline.
-- `live_pump_does_not_halt`: behind the delayed pump, `/stats` keeps advancing
-  `simulation_tick` and the server log carries no `edge pump not draining`.
-
-A verdict whose condition never occurred is `null` (inconclusive: the run ends
-failed with that reason), never `false` — the ledger reads a false verdict as
-the row's symptom, so an unreached condition must not look like a red control.
-
-Options (deterministic, no environment): `--tick-rate N` (1-20, default 3) and
-`--pump-lag-ticks N` (1-64, default 8).
-
-Negative control: run the same command on a control tree that differs only in
-the fix hunks (`stale()` never skips on the queue budget; the anti-xray side
-repair removed) with `KRASNOKAMEN_SERVER_BINARY` naming its build: the join then
-misses its deadline and the core halts with `edge pump not draining`, so both
-verdicts go red.
-
-Not covered here: ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH. A held
-chunk's reveal reaches a real client through the plain block-update path in
-both trees, so a client-world read cannot discriminate the chunk-frame repair;
-that row keeps its frame-level unit tests, and a packet/frame-level witness is
-backlog.
-
-Traps: the client data root is a private `XDG_DATA_HOME` linked to the caller's
-content (a shared root leaks settings); the witness and the joiner are ops (the
-gate writes `ops.json` for both); a run without the `pump lag enabled` line is
-red as inconclusive by design, never green; the flood clients the first design
-had are gone — real client work never made a publish longer than a tick here,
-and the load collapsed the core's own rate instead.
+A verdict whose condition never occurred is `null` (the run fails as
+inconclusive), never `false`. Options: `--tick-rate N` (1–20, default 3),
+`--pump-lag-ticks N` (1–64, default 8). Control: the same command on a tree with
+only the fix hunks reverted, whose server misses the join deadline and halts.
+`ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH` is not covered: a real
+client receives the reveal through plain block updates in both trees, so that
+row keeps its frame-level unit tests.
 
 ## Settlement and army QA false alarms
 
 Check these before blaming the product (all happened):
 
-- `fill` over 32768 blocks is silently rejected; chunk fills and assert air.
+- `fill` over 32768 blocks is silently rejected; fill per chunk and assert air.
 - A one-block step under a two-high lintel traps builders.
 - Summon villagers at cell centres (`x+.5`) of free cells, not inside walls.
 - Dialogs are static snapshots; read progress from a fresh menu or the ledger.
-- Over-funding (1.5x) lets the planner upgrade to the next level right after
-  certification; fund 1.0x.
-- An oracle variable never updated in its loop makes the verdict always FAIL.
+- Over-funding (1.5×) lets the planner upgrade right after certification; fund 1.0×.
+- An oracle variable never updated in its loop makes the verdict always fail.
 - A target outside simulation distance does not tick; keep the player near both
   site and storage.
-- The client log ends at `session startup: play` by design; server logins are not
-  logged at INFO.
+- The client log ends at `session startup: play` by design; server logins are
+  not logged at INFO.
 - Never read state with `strings state.redb` (old pages); use the recovery path.
-- Guard-return oracle: track one soldier UUID that leaves its post by more than 4
-  blocks and returns within 2.5 after the lure dies. The `army-qa` fixture waits
-  for every live guard within 2.5 blocks of its post before spawning a zombie 11
-  blocks away (inside the 12-block tether); the command-order check needs an
-  `Ordered` reply newer than its chat fence and a dialog roster showing Patrol for
-  every soldier; Return deliberately does not engage.
+- Guard return: track one soldier UUID that leaves its post by more than 4
+  blocks and returns within 2.5 after the lure dies. `army-qa` waits for every
+  live guard within 2.5 blocks of its post before spawning a zombie 11 blocks
+  away (inside the 12-block tether); the command-order check needs an `Ordered`
+  reply newer than its chat fence and a roster showing Patrol for every soldier;
+  Return deliberately does not engage.
 
 For product failures, copy the receipt world into a throwaway `#[ignore]` core
 test, add a ticket at the player chunk, run the real tick and log per resident;
@@ -1248,112 +592,78 @@ then write a minimal failing-first test without the world, fix, delete the probe
 Proves join, auth, one action and persistence; not a graphical gate.
 
 1. Launch as a supervised service, ready on `automation descriptor`:
-   `krasnokamen-client play --headless --profile offline-test --server <host:port>
-   --username <name<=16> --automation --mcp-http 127.0.0.1:0 --artifact-dir <dir>`.
+   `krasnokamen-client play --headless --profile offline-test --server <host:port> --username <name<=16> --automation --mcp-http 127.0.0.1:0 --artifact-dir <dir>`.
    MCP: `initialize` with the descriptor's nonce, `notifications/initialized`,
    then `tools/call`.
-2. `minecraft_wait_for_play` (90-120 s). "Connection refused" right after the
-   server became ready means the client launched too early: relaunch rather than
-   reuse the session.
+2. `minecraft_wait_for_play` (90–120 s). "Connection refused" right after the
+   server became ready means the client launched too early: relaunch.
 3. Auth plugin servers: `/register <pw> <pw>` or `/login <pw>` via chat, confirmed
-   through `recent_chat` and `minecraft_wait_for_state_change`. Keep test
+   through `recent_chat` and `minecraft_wait_for_state_change`; keep test
    passwords in a 0600 file under ignored `.analysis/`.
-4. One action with a server-side result: scan, navigate, `minecraft_break_block`
-   expecting `became_air` and `pickup_confirmed`. Spawn protection (16 blocks when
-   `ops.json` is non-empty) makes a non-op dig near spawn report `started` without
-   `became_air`; move away. A plant above the target blocks the look ray; pick
-   another column.
-5. Persistence: disconnect, stop the server via `stop` on stdin and wait for the
-   checkpoint line, restart, rejoin, `minecraft_wait_for_loaded_block`,
-   `minecraft_read_block`.
-6. Clients older than the server's Loader channel version fail in configuration
-   with `unsupported Loader channel or phase`; that is version skew, not a server
-   bug.
-
-## Mixed-version Loader build overlap
-
-`loader-fabric-mixed-version-build` uses `loader-live` with Fabric 26.3
-(`KRASNOKAMEN_JAVA_VERSION=26.3`, `--platform fabric`, an exact release
-`--server-bin` and empty `--plugins-dir`). After that client enters Play,
-it builds and starts Fabric/SVC 26.1.2 while the first client remains live.
-The first client must still report Play and retain every path and SHA-256
-in its nonempty Loader class tree; an unchanged accessor alone is insufficient
-because some classes are byte-identical across versions. The second must
-reach its title screen with its classes present.
-Both windows are captured after the second build. Provision the pinned SVC
-artifact as for `screens-voice-qa`; no audio-flow claim is made here.
-
-This is the registered regression for
-`HARNESS-LOADER-SHARED-BUILD-DIR-RACE`. A same-version Fabric voice pair is
-not a substitute. The fix-only control reverses the runtime build/history
-isolation patch; the observer follows that launch's shared output rather than
-reading stale isolated files from an earlier green run.
+4. One action with a server-side result, e.g. `minecraft_break_block` expecting
+   `became_air` and `pickup_confirmed`. Spawn protection (16 blocks when
+   `ops.json` is non-empty) makes a non-op dig near spawn report `started`
+   without `became_air`; move away. A plant above the target blocks the look ray.
+5. Persistence: disconnect, `stop` on server stdin, wait for the checkpoint line,
+   restart, rejoin, `minecraft_wait_for_loaded_block`, `minecraft_read_block`.
+6. A client older than the server's Loader channel version fails in
+   configuration with `unsupported Loader channel or phase`: version skew, not a
+   server bug.
 
 ## Manual local playable launch (owner-visible play, not a gate)
 
-An owner-visible session on a visible display, with a copied config and release
-binaries. It produces no receipt and proves nothing; the automated
-`playable`/`regression` profiles and agent QA run isolated, headless-display
-clients instead and must never touch the owner's desktop.
+An owner-visible session with a copied config and release binaries; it produces
+no receipt and proves nothing. Automated `playable`/`regression` profiles and
+agent QA use isolated displays and never touch the owner's desktop.
 
-1. Prepare the server cache once:
-   `krasnokamen content import --version 26.3 --download --cache data/vanilla`
+1. Prepare the cache once: `krasnokamen content import --version 26.3 --download --cache data/vanilla`,
    then `krasnokamen content verify --cache data/vanilla`.
-2. Copy the manual profile and edit the copy, never `playable.toml` itself:
-   `cp playable.toml .analysis/playable-run.toml`; set `world_dir`, `port` and
-   `seed` (the profile is offline, loopback `127.0.0.1:25565`, view distance 4).
-   A reused `world_dir` keeps its old seed and generation contract; use a new
-   directory for a fresh world.
-3. Start the server: `target/release/krasnokamen --config .analysis/playable-run.toml`.
-   It is ready when it logs that the listener is bound. Type `stop` on its stdin
-   (or send Ctrl+C) to write the final checkpoint.
-4. Install and start the client from the client repository's release build:
-   run `krasnokamen-launcher --headless-bootstrap` once (or the launcher window), then
-   `krasnokamen-client` (Title screen: Multiplayer, Add Server or Direct Connect) or
-   `krasnokamen-client --server 127.0.0.1:25565 --username Steve`. Use the same
-   `--data-dir` as the bootstrap if you did not use the default.
+2. Copy the profile and edit the copy, never `playable.toml`:
+   `cp playable.toml .analysis/playable-run.toml`; set `world_dir`, `port`,
+   `seed` (offline, loopback `127.0.0.1:25565`, view distance 4). A reused
+   `world_dir` keeps its old seed and generation contract.
+3. `target/release/krasnokamen --config .analysis/playable-run.toml`; ready when
+   the listener is bound; `stop` on stdin (or Ctrl+C) writes the final checkpoint.
+4. From the client repository's release build: `krasnokamen-launcher --headless-bootstrap`
+   once (or the launcher window), then `krasnokamen-client` (Multiplayer → Add
+   Server or Direct Connect) or `krasnokamen-client --server 127.0.0.1:25565 --username Steve`,
+   with the same `--data-dir` as the bootstrap if not default.
 
 ## Vanilla render oracle (native visual parity)
 
 The owner requires a side-by-side comparison with the real Java client, not
-memory or wiki images. Reproducible from this repository: the two captures.
-**Not reproducible from this repository:** the panel step. The owner's runners
-and panel composer live in the owner-local `<work>/vref-kit` (a throwaway
-Pillow script that pastes the vanilla and Krasnokamen PNGs of each row side by side
-with labels); it is not tracked anywhere. To review, put the two PNGs of the
-same scenario step next to each other with any image viewer or a few lines of
-Pillow, and follow the review rules below.
+memory or wiki images. Both captures are reproducible here; the owner's panel
+composer (owner-local `<work>/vref-kit`) is not tracked: put the two PNGs of the
+same step side by side with any viewer or a few lines of Pillow.
 
-- Capture both clients with the same scenario JSON: `python3 -m tools.harness run
-  scene-shot --client java|native --windowed` (steps in [Scene shots](#scene-shots)).
-  The Java oracle uses a Loader checkout for the server's Minecraft version
-  (`KRASNOKAMEN_LOADER_ROOT`).
-- Same window 1280x720, FOV 70, GUI scale 3, seed, server build, render distance
-  and pose for both clients. Java shots change only when the server changes: reuse
-  them and reshoot native only.
-- Vanilla's default graphics preset resets render distance to 16 at startup: write
-  `graphicsPreset:"custom"` and fail when the post-run `options.txt` distance
-  differs.
-- The native Medium preset is the HDR look; Low is the vanilla-exact path (default
-  since RC2). Check the preset first for global colour gaps.
-- Review the panels yourself; report each item as `matches` or `differs:` with RGB
-  sampled over the same rectangles (no HUD, hands or text). Never generalise a
-  per-sample error beyond the samples.
-- Capture native scenes only after `geometry_ready` with zero pending sections.
-- Provenance (owner, 2026-11-04): never copy Mojang code, numbers, model geometry or
-  UVs into sources, including values read from decompiled or `javap` classes;
-  textures load from game resources at runtime. Entity rigs are authored by eye
-  from public visuals, with provenance notes kept outside Git. Tell agents not to
-  open decompiled sources. (This rule is about client rendering assets. Packet ids
-  and layouts for the server are read from local reports and `javap`, see
-  [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md).)
-- The owner workstation cannot reach minecraft.wiki; reference files were fetched
-  through the test server with `ssh "$KRASNOKAMEN_TEST_HOST" "curl ..."` into
-  `/tmp/wiki-ref` there and rsynced back. That needs the owner's SSH access.
+- Capture both clients from the same scenario JSON with
+  `run scene-shot --client java|native --windowed` ([scene shots](#scene-shots));
+  the Java oracle uses a Loader checkout for the server's Minecraft version.
+- Same window 1280×720, FOV 70, GUI scale 3, seed, server build, render distance
+  and pose. Java shots change only when the server changes: reuse them, reshoot
+  native.
+- Vanilla's default graphics preset resets render distance to 16 at startup:
+  write `graphicsPreset:"custom"` and fail when the post-run `options.txt`
+  distance differs. The native Medium preset is the HDR look; Low is the
+  vanilla-exact path (default since RC2): check the preset first for global
+  colour gaps. Capture native scenes only after `geometry_ready` with zero
+  pending sections.
+- Review the panels yourself; report each item as `matches` or `differs:` with
+  RGB sampled over the same rectangles (no HUD, hands or text); never generalise
+  a per-sample error.
+- Provenance (owner, 2026-11-04): never copy Mojang code, numbers, model geometry
+  or UVs into sources, including values read from decompiled or `javap` classes;
+  textures load from game resources at runtime; entity rigs are authored by eye
+  from public visuals with provenance notes outside Git; agents do not open
+  decompiled sources. (Server packet ids and layouts come from local reports and
+  `javap`: [decision C2](../../DECISIONS.md#content-and-protocol).)
+- The owner workstation cannot reach minecraft.wiki; reference files are fetched
+  through the test server (`ssh "$KRASNOKAMEN_TEST_HOST" "curl ..."` into
+  `/tmp/wiki-ref`, rsynced back), which needs the owner's SSH access.
 
 ## Combinatorial scenario matrix with bots
 
-The registered `protocol-matrix`, `java-matrix` and `native-matrix` profiles
-share one adapter contract. See [matrix runner status](../AGENT_TOOLING.md#matrix-runner-status)
-for client limits and [matrix invocation](../AGENT_TOOLING.md#bot-scenario-matrix)
-for the run and evidence rules. A protocol bot pass is not graphical proof.
+`protocol-matrix`, `java-matrix` and `native-matrix` share one adapter contract:
+[bot scenario matrix](../AGENT_TOOLING.md#bot-scenario-matrix) and
+[matrix runner status](../AGENT_TOOLING.md#matrix-runner-status). A protocol bot
+pass is not graphical proof.

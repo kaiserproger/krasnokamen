@@ -14,9 +14,9 @@
 //! in `level.dat/Data` (`KrasnokamenEntitySalt`), so it rides every checkpoint.
 use sha2::{Digest, Sha256};
 
-use crate::boundary::EntityId;
 use crate::config::CoreError;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Per-world salt width in bytes.
 pub(crate) const SALT_LEN: usize = 16;

@@ -31,7 +31,7 @@ def build(tree, out):
     source = provenance(tree)
     vanilla = vanilla_provenance(tree)
     target = Path('/run/media/kaiserroman/games/solaris-work/targets') / ('CoreUnloadImpl-bytecheck-' + digest(str(tree).encode())[:16])
-    env = dict(os.environ, KRASNOKAMEN_BUILD_LANE='background', CARGO_TARGET_DIR=str(target))
+    env = dict(os.environ, CARGO_TARGET_DIR=str(target))
     cmd = [str(RUNNER), '-m', '6G', 'cargo', 'build', '-j', '1', '--manifest-path', str(tree / 'Cargo.toml'),
            '-p', 'mc-world-conversion', '-p', 'workspace-features', '--lib', '--message-format=json']
     with (out / 'compile.log').open('wb') as log:
@@ -100,7 +100,7 @@ def consume(tree, out, snapshot, seed, pin, expected_refusal):
         cmd = [str(RUNNER), '-m', '6G', str(pin), mode, str(world), str(out), str(seed),
                str(tree / 'data/vanilla'), str(out / 'plugins')]
         with (out / (mode + '.log')).open('wb') as log:
-            result = subprocess.run(cmd, cwd=tree, env=dict(os.environ, KRASNOKAMEN_BUILD_LANE='background'),
+            result = subprocess.run(cmd, cwd=tree, env=os.environ,
                                     stdout=log, stderr=subprocess.STDOUT)
         if mode == 'census' and expected_refusal is not None:
             observed = refusal(out / 'census.log')
@@ -163,7 +163,7 @@ def main():
             preflight = [str(RUNNER), '-m', '6G', str(base_pin), 'fold', str(snapshot / 'world'),
                          str(base_out), str(seed), str(base_tree / 'data/vanilla'), str(snapshot / 'plugins')]
             with (out / 'precondition.log').open('wb') as log:
-                result = subprocess.run(preflight, cwd=base_tree, env=dict(os.environ, KRASNOKAMEN_BUILD_LANE='background'),
+                result = subprocess.run(preflight, cwd=base_tree, env=os.environ,
                                         stdout=log, stderr=subprocess.STDOUT)
             repaired = False
             if result.returncode:
@@ -171,7 +171,7 @@ def main():
                     result.check_returncode()
                 preflight[4] = 'repair'
                 with (out / 'repair.log').open('wb') as log:
-                    subprocess.run(preflight, cwd=base_tree, env=dict(os.environ, KRASNOKAMEN_BUILD_LANE='background'),
+                    subprocess.run(preflight, cwd=base_tree, env=os.environ,
                                    stdout=log, stderr=subprocess.STDOUT, check=True)
                 repaired = True
             (out / 'repair.json').write_text(json.dumps(dict(performed=repaired,

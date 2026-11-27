@@ -1,7 +1,8 @@
 //! Sculk shrieks and vanilla per-player warden_spawn_tracker persistence.
-use crate::boundary::{BlockPos, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::tick::TickState;
 use crate::vibration::{self, GameEvent, Pending};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};

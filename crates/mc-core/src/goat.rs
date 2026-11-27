@@ -1,11 +1,11 @@
 //! Goat ram preparation, charge and horn loss.
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::{ChangeSet, EntityDataValue};
 use crate::entities::{ColdRow, EntityKind};
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::natural_spawn::Rng;
 use crate::special_mobs::Retained;
 use crate::tick::TickState;
-use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

@@ -27,9 +27,9 @@
 use super::Frame;
 use super::columns::Columns;
 use super::combat::CombatRuntime;
-use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::entity_motion::{Facing, MOVING};
+use mc_domain::EntityId;
 use mc_physics::{Vec3, mth};
 
 /// Trigger: the smoothed bearing this far off the head starts a turn.

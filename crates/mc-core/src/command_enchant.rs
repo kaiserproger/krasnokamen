@@ -14,7 +14,7 @@
 use mc_data::Identifier;
 use mc_data::ItemEnchantment;
 
-use crate::boundary::{ChangeSet, ConnectionId, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId};
 use crate::command_args::CommandError;
 use crate::command_execution::{
     CommandResult, entity_name, error, feedback, resolve_target, targets_label,
@@ -23,6 +23,7 @@ use crate::command_feedback::translated;
 use crate::commands::{Command, Target, target_of};
 use crate::inventory::{ItemRules, PlayerInventory};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnchantCommand {

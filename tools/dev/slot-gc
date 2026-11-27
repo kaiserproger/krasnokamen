@@ -23,10 +23,12 @@ disk is short); everything else is kept:
   finalized session; `-working` ones are skipped, and so is a session whose
   `.lock` rustc holds (flock), exactly as rustc's own session GC does.
 * Capacity rotation (class 2): only when free space on the targets disk is still
-  below floor + 10 GiB (`--min-free-gb`, KRASNOKAMEN_SLOT_MIN_FREE_GB, default 250)
-  after the safe classes, evict idle slots least recently used first (last use:
-  newest mtime under `<profile>/.fingerprint` or the pool lock file's mtime): first
-  the slot's incremental dirs, then, if still short, everything except `tmp/`. A
+  below `--min-free-gb` + 10 GiB (default 290, i.e. it starts below 300 GiB free:
+  the same `KRASNOKAMEN_DISK_GC_BELOW_GB` threshold mem-run passes as this flag
+  minus 10) after the safe classes, evict idle slots least recently used first
+  (last use: newest mtime under `<profile>/.fingerprint` or the pool lock file's
+  mtime): first the slot's incremental dirs, then, if still short, everything
+  except `tmp/`. A
   slot is never rotated while its pool lock is held or a live process has it as
   CARGO_TARGET_DIR. Evictions rename into `<slot>/.gc-trash-<pid>` first, so an
   interrupted run is finished by the next pass. `--no-rotate` skips this class.
@@ -695,8 +697,9 @@ def main() -> None:
     parser.add_argument("--no-rotate", action="store_true", help="skip class 2 (capacity rotation of idle slots)")
     parser.add_argument("--incremental-only", action="store_true",
                         help="class 2 evicts only incremental dirs of idle slots, never whole slots")
-    parser.add_argument("--min-free-gb", type=float, default=float(os.environ.get("KRASNOKAMEN_SLOT_MIN_FREE_GB") or 250),
-                        help="free-space floor; rotation runs while free space is below floor + 10 GiB (default 250, KRASNOKAMEN_SLOT_MIN_FREE_GB)")
+    parser.add_argument("--min-free-gb", type=float, default=290.0,
+                        help="rotation target: evict idle slots while free space is below this + 10 GiB (default 290, "
+                             "i.e. rotation starts below 300 GiB free; mem-run passes KRASNOKAMEN_DISK_GC_BELOW_GB - 10)")
     parser.add_argument("--work", type=Path, default=w.WORK, help=argparse.SUPPRESS)
     parser.add_argument("--targets", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--lock-dir", type=Path, default=LOCK_DIR, help=argparse.SUPPRESS)

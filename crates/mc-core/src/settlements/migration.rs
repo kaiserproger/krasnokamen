@@ -3,11 +3,12 @@
 
 use super::SettlementId;
 use super::{allocator, households, transit};
-use crate::boundary::{BlockPos, ChangeSet, EntityId};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
 use crate::natural_spawn::Rng;
 use crate::tick::TickState;
 use crate::tick_budget::Consumer;
+use mc_domain::EntityId;
 use mc_physics::mth;
 use std::collections::BTreeMap;
 use std::collections::{BTreeSet, VecDeque};

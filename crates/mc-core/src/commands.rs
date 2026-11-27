@@ -110,7 +110,7 @@ pub enum Target {
     Player(String),
     Selector(Box<Selector>),
     /// Already resolved by the tick owner's global command dispatcher.
-    Entity(crate::boundary::EntityId),
+    Entity(mc_domain::EntityId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

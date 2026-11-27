@@ -573,7 +573,7 @@ regenerated, so existing villages keep the layout of the revision that built the
 (for example revision-26 interiors, water and streets); only chunks generated after
 the upgrade use the current village generator, and the border of the old explored
 area is a hard revision seam. A village straddling that border is not repaired.
-Policy: [ADR 0008](decisions/0008-overworld-density-router.md).
+Policy: [decisions G1–G3](../DECISIONS.md#world-generation).
 
 The following revision-24 paragraphs preserve the original village checkpoint
 evidence and its limits; they are not current revision numbers or operator recipes.

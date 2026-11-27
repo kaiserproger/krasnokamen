@@ -1,8 +1,8 @@
 //! Tick-owned pet ownership, trust and horse temperament.
-use crate::boundary::EntityId;
+use crate::boundary::EntityDataValue;
 use crate::entities::{ColdRow, EntitySlot};
 use crate::tick::TickState;
-use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

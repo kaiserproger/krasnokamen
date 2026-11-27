@@ -1,7 +1,8 @@
 //! Outgoing-only names never overwrite native CustomName or dirty saves.
 use super::{Activity, VillagerProfession, conversion_tests::state};
-use crate::boundary::{EntityAppearance, EntityId};
+use crate::boundary::EntityAppearance;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn villager(state: &mut TickState, kind: &str) -> (EntityId, crate::entities::EntitySlot) {

@@ -14,8 +14,8 @@ This page owns measurement method, not a second catalog.
    It freezes builds, drains tests/servers and serializes measurement; no GO.
    [Runner lock/lane rules](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28)
    apply, including scene-before-exclusive ordering.
-3. `tools/dev/measurement-windows` and the existing announcement plan own
-   allocations (recurring 01:00–02:30 plus dated grants). Expired grants do not
+3. `tools/dev/measurement-windows` owns allocations: owner-dated grants only
+   (the daily 01:00–02:30 baseline was removed on 2026-11-16). Expired grants do not
    recur. Outside grant = refusal, not permission to bypass it. Only Main may
    explicitly authorize override; reassign before next cell, never mid-cell.
 4. Report gate status, p50/p95/p99, stage breakdown, CPU time/tick and raw profile path.
@@ -170,7 +170,7 @@ failure a server bug.
 Durable optimization boundaries:
 
 - Quiescence caches prove geometric absence, never suppress live burn/fire/
-  portal timers. [Tick-anchor projection](lessons.md) replaces journaled
+  portal timers. [Tick-anchor projection](../PITFALLS.md#code) replaces journaled
   per-tick counters. Transparent huge pages had no measurable gain (2026-10-18).
 - Contact work classifies on pool; serial owner receives only live burn,
   feet-cauldron or real-hazard rows. Section palettes are coarse, so pool checks

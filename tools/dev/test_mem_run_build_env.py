@@ -37,7 +37,8 @@ class BuildEnvTests(unittest.TestCase):
                 shutil.copy(HERE / name, self.root)
         (self.root / 'targets' / 'slot-a').mkdir(parents=True)
         self.env = os.environ | {'CARGO_TARGET_DIR': str(self.root / 'targets' / 'slot-a'),
-                                 'KRASNOKAMEN_SLOT_TARGETS': str(self.root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0',
+                                 'KRASNOKAMEN_SLOT_TARGETS': str(self.root / 'targets'),
+                                 'KRASNOKAMEN_DISK_GC_BELOW_GB': '0', 'KRASNOKAMEN_DISK_REFUSE_BELOW_GB': '0',
                                  # This test measures the -x lane and the release lanes themselves, not the
                                  # schedule or the pin policy that gate them: opt in explicitly.
                                  'KRASNOKAMEN_WINDOW_OVERRIDE': '1', 'KRASNOKAMEN_RELEASE_BUILD_ALLOW': '1'}

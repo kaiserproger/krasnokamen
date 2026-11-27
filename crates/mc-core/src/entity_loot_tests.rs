@@ -1,4 +1,4 @@
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, EntityDataValue, PlayerInput};
 use crate::entities::EntityKind;
 use crate::entity_loot::*;
 use crate::intent::DamageSource;
@@ -11,6 +11,7 @@ use mc_data::loot::entity_26_1_2::{
 };
 use mc_data::loot::{LootContextItem, LootEnchantments};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn id(name: &str) -> Identifier {

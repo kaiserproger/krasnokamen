@@ -500,7 +500,7 @@ fn a_roster_snapshot_shared_by_every_recipient_is_charged_once_per_batch() {
     let players: Arc<[crate::dimensions::RosterPlayer]> = (0..64usize)
         .map(|index| crate::dimensions::RosterPlayer {
             connection: ConnectionId(index as u64 + 1),
-            entity: crate::boundary::EntityId(index as i32 + 1),
+            entity: mc_domain::EntityId(index as i32 + 1),
             uuid: uuid::Uuid::from_u128(index as u128),
             name: format!("roster player {index} with a longer name"),
             game_mode: 0,
@@ -556,7 +556,7 @@ fn retained_roster_snapshots_are_accounted_by_the_queued_bytes() {
         let roster: Vec<crate::dimensions::RosterPlayer> = (0..players)
             .map(|index| crate::dimensions::RosterPlayer {
                 connection: ConnectionId(index as u64 + 1),
-                entity: crate::boundary::EntityId(index as i32 + 1),
+                entity: mc_domain::EntityId(index as i32 + 1),
                 uuid: uuid::Uuid::from_u128(index as u128),
                 name: format!("roster player {index} with a longer name"),
                 game_mode: 0,

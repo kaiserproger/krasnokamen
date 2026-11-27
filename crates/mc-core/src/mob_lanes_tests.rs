@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 use std::sync::{Arc, LazyLock};
 
 struct Empty(u32, &'static str);

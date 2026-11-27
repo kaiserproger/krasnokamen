@@ -2,10 +2,9 @@
 use super::*;
 use crate::plan::{ChunkPacketCache, TickPlanIndex, plan_viewer};
 use mc_core::blueprint::MovementClass;
-use mc_core::boundary::{
-    ChangeSet, ConnectionId, EntityAppearance, EntityId, PlayerChange, TickOutput,
-};
+use mc_core::boundary::{ChangeSet, ConnectionId, EntityAppearance, PlayerChange, TickOutput};
 use mc_core::entities::{ColdFields, EntityKind, EntitySlot, EntityStore};
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 

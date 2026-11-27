@@ -1,7 +1,8 @@
 use super::{DamagePiece, TickState, spawn_item_entity};
-use crate::boundary::{EntityEvent, EntityId, PlayerChange};
+use crate::boundary::{EntityEvent, PlayerChange};
 use crate::entities::{EntityKind, EntitySlot};
 use mc_data::statistics::{CustomStat, StatType};
+use mc_domain::EntityId;
 use mc_physics::mth;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 

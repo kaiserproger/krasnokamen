@@ -1,8 +1,9 @@
 //! Pillager patrol admission using the vanilla 26.1.2 custom-spawner cadence.
 use super::{MobCategory, Rng, observe_slot};
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 
 fn banner(state: &TickState) -> ItemStack {
     let id = state

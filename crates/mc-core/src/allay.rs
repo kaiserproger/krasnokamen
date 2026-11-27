@@ -1,13 +1,14 @@
 //! Retained allay collection, liked note blocks, jukebox dance and duplication.
 //! 26.1.2 uses Inventory, equipment.mainhand, Brain memories and DuplicationCooldown.
 use crate::bees::{block, centre, distance, fail, field, fly, pos_tag, position, uuid};
-use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, EntityDataValue, Hand};
 use crate::config::CoreError;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_nbt::{stack_from_fields, stack_to_fields};
 use mc_data::{Identifier, ItemStack, items::ItemRegistry};
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

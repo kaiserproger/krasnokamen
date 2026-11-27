@@ -12,8 +12,9 @@
 //! (encoding a whole view square here held the connection task for
 //! seconds and starved the client of every other packet).
 
-use mc_core::boundary::{EntityId, TickOutput};
+use mc_core::boundary::TickOutput;
 use mc_data::{Identifier, VanillaData};
+use mc_domain::EntityId;
 use mc_protocol::frame::Compression;
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{

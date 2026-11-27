@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::blueprint::{GoalKind, MovementClass};
-use crate::boundary::{ChunkPos, EntityId};
+use crate::boundary::ChunkPos;
 use crate::entities::EntityKind;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
+use mc_domain::EntityId;
 
 const BASELINES: &[&str] = &[
     "cow",

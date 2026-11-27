@@ -1,10 +1,11 @@
 use super::*;
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::projectiles::{ProjectileKind, ProjectileState, launch};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use std::sync::Arc;
 
 fn fixture() -> (TickState, EntityId, Uuid) {

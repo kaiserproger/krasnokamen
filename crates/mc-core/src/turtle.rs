@@ -1,8 +1,8 @@
 //! Turtle egg custody, homeward movement and beach nesting.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::{BlockPos, EntityDataValue};
 use crate::entities::{ColdRow, EntitySlot};
 use crate::tick::TickState;
-use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::EntityId;
 use serde::{Deserialize, Serialize};
 
 static TYPE: std::sync::LazyLock<u32> = std::sync::LazyLock::new(|| {

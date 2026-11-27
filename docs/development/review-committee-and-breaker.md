@@ -1,6 +1,6 @@
 # Advisor, reviewer, breaker and committee
 
-[AGENTS](../../AGENTS.md) owns review points/counts; [QA protocol](../QA_AGENT_PROTOCOL.md)
+The [owner rules](../RULES.md#commits-reviews-and-publication) own review points/counts; [QA protocol](../QA_AGENT_PROTOCOL.md)
 owns breaker acceptance. Normal review points: promotion batches ≥5 rows,
 critical persistence/protocol/custody/battle-core changes (including client
 threading/entity-tick design and code), and two reviewers before a tag.
@@ -47,7 +47,7 @@ Each finding: `file:line`, reachable path, severity. P0/P1 introduced or left op
 
 ## Independent reviewer
 
-Read-only independent review is **required at each review point** in AGENTS,
+Read-only independent review is **required at each review point** in the owner rules,
 including critical work **before Main commits**, not just before release.
 Reviewers neither edit nor delegate; fixing findings does not itself commission
 another review. Current fleet policy sets verdict counts.

@@ -23,11 +23,11 @@ use uuid::Uuid;
 use crate::blueprint::{
     Goal, GoalKind, MobBlueprint, MobCategory, MobParams, MovementClass, Sensors,
 };
-use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub const ARROW_IN_GROUND_INDEX: u8 = 10;
 pub const ARROW_STUCK_TICKS: u32 = 1200;

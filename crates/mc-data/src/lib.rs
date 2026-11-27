@@ -1,7 +1,7 @@
 //! # mc-data
 //!
 //! Read-only indexes into the vanilla data sidecar described in
-//! [`docs/decisions/0001-vanilla-data-as-runtime-input.md`]. Registry
+//! decision C1 of `DECISIONS.md`. Registry
 //! entries are discovered from `<data_dir>/data/<namespace>/<registry>/**/*.json`;
 //! selected reports, tags, recipes, item facts, block facts, and worldgen
 //! facts are parsed by focused loaders.

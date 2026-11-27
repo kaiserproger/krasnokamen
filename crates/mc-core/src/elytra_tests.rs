@@ -1,8 +1,9 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, EntityId, PlayerChange, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
+use mc_domain::EntityId;
 
 fn fixture() -> (TickState, EntityId, [f64; 3]) {
     let (mut state, player, mut pos) = flat_player_fixture();

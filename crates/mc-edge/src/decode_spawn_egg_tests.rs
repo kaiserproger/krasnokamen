@@ -1,10 +1,10 @@
 //! Ordinary spawn eggs must reach authority through the native UseItemOn decoder.
 use super::{entity_slot, fixture, packet, stack};
-use mc_core::boundary::EntityId;
 use mc_core::commands::GameMode;
 use mc_core::entities::EntityKind;
 use mc_core::tick::TickState;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_protocol::packets::play::{
     Direction, InteractionHand, ServerboundUseItemOn, pack_block_pos,

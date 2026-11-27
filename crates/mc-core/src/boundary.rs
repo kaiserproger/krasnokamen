@@ -12,6 +12,7 @@ use std::sync::Arc;
 mod views;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::item_stack::ItemStack;
+use mc_domain::EntityId;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
 use uuid::Uuid;
@@ -19,12 +20,6 @@ pub use views::EntityViews;
 
 /// Simulation tick number. Tick `t` output describes the state after tick `t`.
 pub type Tick = u64;
-
-/// Network entity id as sent on the wire. Players and mobs share one id space.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-pub struct EntityId(pub i32);
 
 /// Player identity for the lifetime of one connection, assigned by the edge.
 #[derive(

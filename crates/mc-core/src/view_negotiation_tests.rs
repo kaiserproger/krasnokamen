@@ -15,7 +15,7 @@ fn state() -> TickState {
     state
 }
 
-fn join(state: &mut TickState, connection: u64, view: Option<u8>) -> crate::boundary::EntityId {
+fn join(state: &mut TickState, connection: u64, view: Option<u8>) -> mc_domain::EntityId {
     let mut inputs = Vec::new();
     if let Some(view_distance) = view {
         inputs.push(PlayerInput::SetViewDistance {
@@ -36,7 +36,7 @@ fn join(state: &mut TickState, connection: u64, view: Option<u8>) -> crate::boun
         .expect("joined")
 }
 
-fn centre(state: &TickState, entity: crate::boundary::EntityId) -> ChunkPos {
+fn centre(state: &TickState, entity: mc_domain::EntityId) -> ChunkPos {
     let pos = state.entities.pos(state.entities.slot_of(entity).unwrap());
     ChunkPos {
         x: mc_physics::mth::floor_i32(pos[0]).div_euclid(16),

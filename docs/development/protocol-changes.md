@@ -8,7 +8,7 @@ changing a step. Never infer packet IDs or layouts from memory.
 
 ## Reference boundary
 
-[ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md) permits
+[Decision C2](../../DECISIONS.md#content-and-protocol) permits
 reading official unobfuscated jar **metadata** as protocol reference: packet
 registrations, class and field names and types, record order and constants.
 It does not permit translating Java source or copying algorithms; keep Krasnokamen
