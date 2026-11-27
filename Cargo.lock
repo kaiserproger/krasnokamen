@@ -1802,6 +1802,7 @@ dependencies = [
  "mc-melee-range",
  "mc-nbt",
  "mc-physics",
+ "mc-placement",
  "mc-plugin-host",
  "mc-script",
  "mc-world",
@@ -1928,6 +1929,17 @@ name = "mc-physics"
 version = "1.0.0-rc.5"
 dependencies = [
  "smallvec",
+]
+
+[[package]]
+name = "mc-placement"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-data",
+ "mc-domain",
+ "mc-physics",
+ "mc-world",
+ "rustc-hash 2.1.3",
 ]
 
 [[package]]
