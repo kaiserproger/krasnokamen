@@ -241,6 +241,17 @@ Owner chat and structured INFO events report arrivals, departures and
 cancellations. `settlement info` displays observations, components, reasons
 and inbound/outbound transit.
 
+Brain observation keeps the order allocator → settlement policy → brain:
+policy uses the fresh POI census, while departures and arrivals retain their
+same-tick custody. Before brain admission, reconcile the cached entity
+projection if the entity-store notification epoch changed; unlike the
+resident-membership revision, that epoch also covers nonresident swap-removes
+and row-only policy writes. Reuse the allocator's entity refresh (resident
+identities, claims, profiles and nearby item/threat sensors), preserving
+surviving identities' cadence and clearing obsolete slot scratch; do not repeat
+POI scanning, job/bed assignment or economy. The unchanged-epoch path returns
+without allocation; the changed path retains the existing roster/update sorts.
+
 `villager/return_home.rs` is a weak-goal fallback, not a work order. It uses
 the allocator's completed empty Home search and shared bed eligibility,
 choosing the nearest certified house's free native bed. Only outside the

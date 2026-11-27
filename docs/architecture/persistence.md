@@ -962,6 +962,10 @@ transaction. Recovery fails closed when a UUID is both an entity and a member,
 a member of two records, or a record household is also a settlement's; the
 offline census reports `transit_records` / `transit_members` and refuses the
 same duplicates. Binaries without this domain refuse such a store.
+A departed member's entity row is tombstoned at the checkpoint after departure;
+the store accepts that identity's live row again only in the checkpoint that
+drops it from every transit row. Every other tombstone stays final
+([ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)).
 
 Crash evidence reads the durable boundary itself: `krasnokamen world
 custody-census --copy <disposable copy> --receipt <new file>` repairs the

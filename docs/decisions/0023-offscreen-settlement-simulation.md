@@ -83,31 +83,14 @@ subtract. The owners:
 The off-screen pass never writes a counter owned by another module and never
 re-derives a period from wall time.
 
-Slice 2 (merged) keeps this rule through the legacy conversion. Recovery
-converts a store's world-tick clocks once, after the WAL fold and the
-restoration of the global game clock, at the durable tick `R` and game time
-`G`; the converted values and the record's clock marker travel in one record
-image, so a crash before the next batch repeats the same conversion.
-
-- Wages: a future `next_due` becomes `G + (next_due - R)`. An overdue one keeps
-  its complete owed periods, `(elapsed / period + 1) * wage` for an active
-  contract, in `legacy_owed`, and the next due keeps its phase:
-  `G + period - elapsed % period`. `legacy_owed` is a one-time conversion debit
-  owned by `commerce`, the only accrual owner, not a second counter: it is
-  added to `earned` at the contract's first payroll-cursor visit and zeroed,
-  then paid like any accrued wage when budget and treasury allow; `next_due`
-  stays the only watermark. Recovery never pays money.
-- Caravans: `game_deadline` is the first expired game tick (a shipment expires
-  when game time `>= game_deadline`), so a new shipment gets
-  `admit + max_ticks + 1`, the first tick the old `world.tick > epoch +
-  max_ticks` rejected. A legacy deadline not yet passed (`epoch + max_ticks >=
-  R`) becomes `G + (epoch + max_ticks - R) + 1`; one already passed becomes `G`
-  and expires on the first simulation tick. `epoch` stays the world-tick
-  receipt identity.
-- Startup refuses only inconsistent data (a future wage due more than one
-  period ahead, a shipment epoch after `R`) or arithmetic overflow; valid
-  legacy debt is never forgiven. The removal condition of this shim is in
-  [settlements](../architecture/settlements.md).
+Slice 2 keeps this rule through the one-time legacy conversion: recovery
+converts a store's world-tick clocks once, after the WAL fold and the global
+game clock's restoration. Overdue wages keep their complete owed periods in a
+one-time `legacy_owed` debit owned by `commerce` (not a second counter; `next_due`
+stays the only watermark), caravans get a game-time deadline, recovery never pays
+money and never forgives valid debt, and only inconsistent clocks or overflow
+refuse startup. The rules and the shim's removal condition are in
+[settlements](../architecture/settlements.md).
 
 ### 3. Block and item placement: deferred materialisation on load
 
@@ -186,41 +169,22 @@ This restates the binding design (`receipts/SpainCulture/IMMIGRATION-DESIGN.md`,
   certified native work point, not only commercial employment. The role must
   be released before selection or departure; an empty carry is not proof that
   a mine, lumber camp or workshop no longer needs its assigned worker.
-- **Brain observation boundary.** Keep allocator → settlement policy → brain:
-  policy uses the fresh POI census, while departures and arrivals retain their
-  same-tick custody. Before brain admission, reconcile the cached entity
-  projection if the entity-store notification epoch changed. Unlike the
-  resident-membership revision, that epoch also covers nonresident swap-removes
-  and row-only policy writes. Reuse the allocator's entity refresh (resident
-  identities, claims, profiles and nearby item/threat sensors), preserving
-  surviving identities' cadence and clearing obsolete slot scratch. Do not
-  repeat POI scanning, job/bed assignment or economy. The unchanged-epoch path
-  returns without allocation; the changed path retains the existing roster/update sorts.
+- **Brain observation boundary.** Allocator → settlement policy → brain; see
+  [migration policy](../architecture/settlements.md#migration-policy-and-physical-return).
 - **Record.** Source, destination and its anchor, departure and arrival game
   time, bearing, exit, status, the household record `leave` removed, and each
   member's image in the WAL entity codec. Member images name no settlement or
   household; the record's household is the unit's only household identity in
   transit (the villager codec refuses a household without a settlement), and
   arrival restores it when the unit joins.
-- **Persistence.** `transit/<uuid>` checkpoint rows and `Transit` tick-WAL
-  images (`None` deletes); `deny_unknown_fields`; old stores decode as no
-  records; binaries without the row kind refuse the store (unknown global
-  domain), so downgrade means restoring the pre-upgrade backup.
-- **Native store.** Settlement and transit rows are complete per checkpoint:
-  the store deletes a stored row the image omits (the settlement half is the
-  fix for `SETTLEMENT-REMOVAL-STALE-ROW-BLOCKS-STARTUP`; transit extends it to
-  `transit/` rows). A member's entity row is tombstoned at the checkpoint after
-  departure; the store accepts that identity's live row again only in the
-  checkpoint that drops it from every transit row. Every other tombstone stays
-  final (ADR 0020).
-- **Invariant and recovery.** At every committed tick each member UUID is in
-  exactly one place: a world entity or one record. Recovery refuses a UUID that
-  is an entity and a member, a member of two records, or a record household
-  that is also a settlement's, before membership validation. The offline census
-  reports `transit_records` and `transit_members` and refuses the same cases;
-  `world custody-census` checks them on a crash copy at the durable boundary
-  (checkpoint plus published WAL through recovery's replay records, before any
-  entity is restored, transit rows read as raw JSON).
+- **Persistence and recovery.** `transit/<uuid>` checkpoint rows and `Transit`
+  tick-WAL images (`deny_unknown_fields`; binaries without the row kind refuse
+  the store, so downgrade means restoring the pre-upgrade backup). At every
+  committed tick each member UUID is in exactly one place, a world entity or one
+  record; recovery, the offline census and `world custody-census` refuse every
+  violation ([transit custody](../architecture/persistence.md#migration-transit-custody)).
+  A member's entity tombstone stays final except for that identity's return
+  from transit (ADR 0020).
 - **Operator commands** (Main option A): `settlement transit depart <settlement>
   <household> <destination>` (exit = the household's current position, full
   validation) and `settlement transit list`. Handlers live in `transit.rs`; the
@@ -238,18 +202,13 @@ Each slice lands with native tests on real terrain and a negative control:
 - for new custody, one real-process SIGKILL scenario per cut followed by the
   offline census, at least three runs per cut on the laptop lane.
 
-Slice 1 has the disk tests (`transit_disk_tests.rs`: departure published and
+Slice 1's evidence is `transit_disk_tests.rs` (departure published and
 unpublished, in transit from the checkpoint row, arrival and its later
-checkpoint, and the body-plus-record negative control) and the census and
-native-store negative controls. Its SIGKILL cuts are the `transit-crash` harness
-profile: a pinned release server, a household formed by a native birth and the
-operator departure command; SIGKILL once the WAL batch covering the departure
-or arrival tick is published, or after the `awaiting_entry` image and a
-committed checkpoint; then the custody census of the crash copy, a frozen
-recovery at the durable tick and the clean-stop census. Its controls: a forged
-published batch that re-adds a member body beside its record (census FAIL,
-recovery refuses) and a binary whose departure leaves the record out of the
-departure tick's WAL (the departure cut turns red).
+checkpoint, and a body-plus-record negative control) and the `transit-crash`
+harness profile ([transit custody](../architecture/persistence.md#migration-transit-custody)).
+Its controls: a forged published batch that re-adds a member body beside its
+record (census FAIL, recovery refuses) and a binary whose departure leaves the
+record out of the departure tick's WAL (the departure cut turns red).
 
 ### 8. Module boundaries
 
@@ -258,9 +217,9 @@ module cycle refers to) with its own state, systems, tests and row codec, a
 narrow interface, and one registration point in `settlements::tick` or the
 settlement command host. Placement does not bound the module cycle: code-health
 attributes a submodule's `crate::`/`super::` references to its top-level host,
-so the largest module cycle is measured with `cargo run -p xtask --
-code-health` on the integrated tree for every slice (ceiling 187, measured 187
-on 2026-11-16) and reported with it. The [ADR 0017](0017-tick-system-graph.md)
+so every slice reports the largest module cycle from `cargo run -p xtask --
+code-health` on the integrated tree and must not grow it (decision K5). The
+[ADR 0017](0017-tick-system-graph.md)
 system graph is not a registration path, and a registration point does not
 break a cycle.
 
@@ -268,14 +227,14 @@ break a cycle.
 
 Write sets are disjoint; each slice owns its tests and docs paragraph.
 
-| Slice | Writes | Delivers |
+| Slice | State | Delivers |
 |---|---|---|
-| 1 Migration transit (integrated) | `settlements/transit.rs`, `transit_tests.rs`, `transit_disk_tests.rs`, `households.rs` leave/join, `registry.rs` field, `settlements/persistence.rs` hookups, `journal.rs`/`journal/replay.rs` `Transit` entry, `mc-world` native checkpoint rows, `mc-world-conversion` census | this ADR's section 6 |
-| Migration flows (integrated) | `settlements/migration.rs`, `villager/return_home.rs`, one brain registration (+ tests) | runtime policy owns membership relocation and immigrant spawn; weak physical return goals; [Migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return) |
-| 2 Game-time economy clocks (merged, `1360be18a`) | `settlements/commerce.rs`, `settlements/caravan.rs` (+ tests) | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze; one-time legacy conversion (section 2) |
-| 3 Production and consumption (integrated) | `settlements/production.rs`, `settlements/offscreen_production.rs` (+ tests) | deferred portions and daily food debit; shared game-time watermarks, physical load reconciliation and WAL/recovery tests |
-| 4 Construction labour (planned) | `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load; not implemented |
-| 5 Births (planned) | `settlements/offscreen_births.rs`, one call in the birth path | birth credit realised through the existing path; not implemented |
+| 1 Migration transit | integrated | section 6 |
+| Migration flows | integrated | runtime policy owns membership relocation and immigrant spawn; weak physical return goals; [migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return) |
+| 2 Game-time economy clocks | integrated | wages and caravan deadlines stop under `/tick freeze`; double-count test across freeze; one-time legacy conversion (section 2) |
+| 3 Production and consumption | integrated | deferred portions and daily food debit; shared game-time watermarks, physical load reconciliation and WAL/recovery tests |
+| 4 Construction labour | planned: `settlements/offscreen_construction.rs`, one call in `construction.rs` | labour credit and accelerated application on load |
+| 5 Births | planned: `settlements/offscreen_births.rs`, one call in the birth path | birth credit realised through the existing path |
 
 The remaining slices 4–5 depend on sections 1–3 and use the integrated
 game-time clock and native reconciliation boundaries.

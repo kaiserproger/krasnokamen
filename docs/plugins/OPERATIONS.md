@@ -51,20 +51,11 @@ with fail-closed (`deny`) policy. Unsupported hooks, including `before-damage`,
 fail startup before component compilation or native world admission. There is
 no server `--check`: startup performs real validation before serving.
 
-The v2 edge obtains a native read-only build plan, asks the production component
-host outside the tick, then submits a single-use frozen authorization. One
-queue-inclusive 100 ms deadline covers preview and the host handler chain,
-ending when the host answers. A timely answer may wait for the next native
-merge without expiring; consumption still rechecks roster/source validity,
-single-use, native state and plugin-KV versions. Click-time orientation and ray
-origin stay frozen; current reach, occupancy and support still validate.
-A native-input FIFO fence prevents previews from overtaking
-earlier movement or hotbar changes. An idle native owner can retire metadata
-fences and answer ready read-only previews on an explicit wake without creating
-an extra tick or renewing the deadline.
-Denial, timeout, unavailable/retired handlers and stale native or
-plugin-KV guards repair client block predictions and inventory without creating
-a world edit or block-WAL record; the tick never waits for a guest.
+Hooks run outside the tick: one 100 ms deadline covers queueing and the whole
+handler chain. Denial, timeout, an unavailable or retired handler and a stale
+native or plugin-KV guard repair the client's block prediction and inventory
+without a world edit or block-WAL record; the tick never waits for a guest
+([build hooks](../architecture/mutations.md#component-operations-and-build-hooks)).
 
 The covered native operations match the old build-hook call sites: player block
 breaks and placements (including paired/construction cells), bone-meal growth,
@@ -115,16 +106,6 @@ refuses new admission with `Busy`. Unbound terminal references leave a bounded
 FIFO and cease to resolve after eviction. Custody checks use native source
 indexes, and mutations journal individual reservation records rather than a
 whole historical ledger.
-
-Observations have a separate 256-event queue per registered plugin. A full queue
-drops the newest observation and increments
-`ScriptBoundary::observation_events_dropped(plugin_id)`; round-robin dispatch
-prevents one observer from owning the whole observation backlog. Durable native
-completion callbacks and command replies are not shed: exhaustion of their
-retained capacity fails closed. Timers advance only from acknowledged native
-ticks. Optional Loader bundles use the existing configuration
-manifest/artifact/ACK protocol; sound requires that session's actual Loader
-readiness and the bundle's sound permission.
 
 
 ## Protected zones
@@ -189,6 +170,37 @@ fail-closed assertions that the `grave-<x>-<y>-<z>` barrel holds exactly the
 given stacks, that the stored player inventory keeps no copy and that no item
 entity remains): `python3 -m tools.harness run graves -- --plugins-dir DEPLOYED_PACK`.
 
+## Callback limits and backlog
+
+Ordinary callbacks have a 50,000,000-unit guest fuel allowance and a separate
+1,200-epoch hang guard (approximately 30 seconds with the production 25 ms
+ticker). Fuel bounds guest instructions, not host scheduling delay. The hang
+guard includes time inside native imports and descheduling; it interrupts at
+the next Wasm check, not inside blocking native code. In particular, native
+Argon2id password work retains its fixed 19 MiB, two-pass, single-lane cost and
+does not consume guest fuel. Precommit hooks obey their short absolute chain
+deadline (above) rather than the ordinary callback allowance.
+
+One host thread delivers every durable event to every plugin, one callback at a
+time, and a callback may run up to its fuel or wall-clock limit. Until the host
+takes them, durable events (player commands, operation results, menu clicks,
+graves) wait in the core, bounded at 1024 entries (events, player changes and
+execution traces). While a quarter of that bound (256 entries) is waiting, the
+core refuses new plugin commands: the player is told the plugin is backed up and
+the command is not queued. A menu click in that state is dropped the same way
+(the menu is redrawn, the plugin never sees the click). A refused command or
+click is never delivered; the player retries. Both are accepted again once the
+host catches up. If the bound itself is passed by events that cannot be refused
+(graves, guest command results), the core halts the world fail closed and logs
+the backlog by event kind under the `plugin.backlog` target.
+
+Observations (joins, chat, block and kill events) never count toward that
+bound: each registered plugin has its own 256-event observation queue. A full
+queue drops the newest observation and increments
+`ScriptBoundary::observation_events_dropped(plugin_id)`; round-robin dispatch
+keeps one observer from owning the whole observation backlog. Timers advance
+only from acknowledged native ticks.
+
 ## Diagnosing a deployment
 
 Startup validates manifests, components, API/capability/event names, duplicate
@@ -200,15 +212,6 @@ At runtime, act on traps, budget failures and admission refusals. A failed
 component is not a successful degraded deployment: owned command roots remain
 reserved and unavailable, never native-command fallbacks. Repair or explicitly
 remove the package and restart with a valid deployment.
-
-Ordinary callbacks have a 50,000,000-unit guest fuel allowance and a separate
-1,200-epoch hang guard (approximately 30 seconds with the production 25 ms
-ticker). Fuel bounds guest instructions, not host scheduling delay. The hang
-guard includes time inside native imports and descheduling; it interrupts at
-the next Wasm check, not inside blocking native code. In particular, native
-Argon2id password work retains its fixed 19 MiB, two-pass, single-lane cost and
-does not consume guest fuel. Precommit hooks still obey their short absolute
-chain deadline rather than the ordinary callback allowance.
 
 With required plugin login, the configured deployment must contain an
 `auth`-capable package. Every such provider is required: retirement logs the
