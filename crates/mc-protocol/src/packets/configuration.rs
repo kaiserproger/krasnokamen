@@ -168,7 +168,7 @@ pub struct ClientboundCustomPayload {
 }
 
 impl Packet for ClientboundCustomPayload {
-    // `.analysis/protocol-dump.txt`: configuration CLIENTBOUND_CUSTOM_PAYLOAD
+    // `data/vanilla/reports/packets.json` (canonical 26.3): configuration CLIENTBOUND_CUSTOM_PAYLOAD
     // is clientbound registration index 1, wire id 0x01. Body is the common
     // custom-payload codec from local decompiled sources.
     const ID: i32 = 0x01;
@@ -285,7 +285,7 @@ pub struct ServerboundClientInformation {
 }
 
 impl Packet for ServerboundClientInformation {
-    // `.analysis/protocol-dump.txt`: configuration SERVERBOUND_CLIENT_INFORMATION
+    // `data/vanilla/reports/packets.json` (canonical 26.3): configuration SERVERBOUND_CLIENT_INFORMATION
     // is the first serverbound registration, wire id 0x00. Body delegates to
     // decompiled `ServerboundClientInformationPacket(ClientInformation)`.
     const ID: i32 = 0x00;
@@ -307,7 +307,7 @@ pub struct ServerboundCustomPayload {
 }
 
 impl Packet for ServerboundCustomPayload {
-    // `.analysis/protocol-dump.txt`: configuration SERVERBOUND_CUSTOM_PAYLOAD
+    // `data/vanilla/reports/packets.json` (canonical 26.3): configuration SERVERBOUND_CUSTOM_PAYLOAD
     // is serverbound registration index 2, wire id 0x02. Body is the common
     // custom-payload codec from local decompiled sources.
     const ID: i32 = 0x02;
@@ -329,7 +329,7 @@ pub struct ServerboundResourcePack {
 }
 
 impl Packet for ServerboundResourcePack {
-    // `.analysis/protocol-dump.txt`: configuration SERVERBOUND_RESOURCE_PACK is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): configuration SERVERBOUND_RESOURCE_PACK is
     // serverbound registration index 6, wire id 0x06. Body is local decompiled
     // `ServerboundResourcePackPacket(UUID id, Action action)`.
     const ID: i32 = 0x06;

@@ -8,10 +8,10 @@ pub struct ServerboundChangeGameMode {
 }
 
 impl Packet for ServerboundChangeGameMode {
-    // Verified from `.analysis/protocol-dump.txt`: SERVERBOUND_CHANGE_GAME_MODE
-    // is game-SB index 5 = wire id 0x05. `javap -p -c
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): SERVERBOUND_CHANGE_GAME_MODE
+    // is game-SB index 5 = wire id 0x05. 26.1.2 `javap -p -c
     // ServerboundChangeGameModePacket` shows the body is GameType.STREAM_CODEC;
-    // `javap GameType` shows ids survival=0, creative=1, adventure=2,
+    // 26.1.2 `javap GameType` shows ids survival=0, creative=1, adventure=2,
     // spectator=3 via ByteBufCodecs.idMapper.
     const ID: i32 = 0x05;
 
@@ -33,8 +33,8 @@ pub struct ServerboundChatCommand {
 }
 
 impl Packet for ServerboundChatCommand {
-    // Verified from `.analysis/protocol-dump.txt`: SERVERBOUND_CHAT_COMMAND is
-    // game-SB index 7 = wire id 0x07. `javap -p -c
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): SERVERBOUND_CHAT_COMMAND is
+    // game-SB index 7 = wire id 0x07. 26.1.2 `javap -p -c
     // ServerboundChatCommandPacket` shows a single FriendlyByteBuf UTF string.
     const ID: i32 = 0x07;
 
@@ -168,7 +168,7 @@ pub struct ServerboundChat {
 }
 
 impl Packet for ServerboundChat {
-    // Verified from `.analysis/protocol-dump.txt`: SERVERBOUND_CHAT is
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): SERVERBOUND_CHAT is
     // game-SB index 9 = wire id 0x09. Local decompiled
     // `ServerboundChatPacket` reads UTF(256), Instant as epoch millis, salt,
     // nullable MessageSignature (256 bytes), then LastSeenMessages.Update:
@@ -237,7 +237,7 @@ pub struct ServerboundCommandSuggestion {
 }
 
 impl Packet for ServerboundCommandSuggestion {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_COMMAND_SUGGESTION is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_COMMAND_SUGGESTION is
     // serverbound registration index 15, wire id 0x0F. Local decompiled source
     // reads VarInt id then `readUtf(32500)`.
     const ID: i32 = 0x0F;
@@ -324,7 +324,8 @@ pub struct ServerboundEditBook {
     pub title: Option<String>,
 }
 impl Packet for ServerboundEditBook {
-    // Local reports/packets.json: edit_book=24. Local javap codec:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
+    // SERVERBOUND_EDIT_BOOK = 24. Codec from 26.1.2 javap:
     // VAR_INT, list(100,stringUtf8(1024)), optional(stringUtf8(32)).
     const ID: i32 = 24;
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -370,7 +371,8 @@ pub struct ClientboundOpenBook {
     pub hand: InteractionHand,
 }
 impl Packet for ClientboundOpenBook {
-    // Local reports/packets.json: open_book=58; javap writes InteractionHand enum.
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
+    // CLIENTBOUND_OPEN_BOOK = 59 (0x3B); 26.1.2 javap writes InteractionHand enum.
     const ID: i32 = 0x3B;
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
         buf.write_varint(self.hand as i32);
@@ -562,7 +564,7 @@ pub struct CommandSuggestionEntry {
 }
 
 impl Packet for ClientboundCommandSuggestions {
-    // `.analysis/protocol-dump.txt`: game CLIENTBOUND_COMMAND_SUGGESTIONS is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game CLIENTBOUND_COMMAND_SUGGESTIONS is
     // clientbound registration index 15, wire id 0x0F. Local decompiled source
     // writes VarInt id/start/length and a list of entries. Krasnokamen currently
     // emits empty lists, so optional component tooltips are not produced.
@@ -611,7 +613,7 @@ impl Packet for ClientboundCommandSuggestions {
 }
 
 impl Packet for ClientboundCommands {
-    // `.analysis/protocol-dump.txt` / `GameProtocols`: game
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / `GameProtocols`: game
     // CLIENTBOUND_COMMANDS is clientbound registration index 16, wire id 0x10.
     // `ClientboundCommandsPacket` writes a list of nodes followed by rootIndex;
     // each node is flags, VarInt child array, optional redirect, then the
@@ -988,7 +990,7 @@ pub struct ClientboundSystemChat {
 }
 
 impl Packet for ClientboundSystemChat {
-    // `.analysis/protocol-dump.txt` / `GameProtocols`: game
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / `GameProtocols`: game
     // CLIENTBOUND_SYSTEM_CHAT is clientbound registration index 124, wire id
     // 0x7C. `ClientboundSystemChatPacket` writes trusted Component NBT then a
     // bool overlay flag.
@@ -1059,7 +1061,7 @@ pub struct ServerboundChatAck {
 }
 
 impl Packet for ServerboundChatAck {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_CHAT_ACK is serverbound
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_CHAT_ACK is serverbound
     // registration index 6, wire id 0x06. Local decompiled source reads one
     // VarInt offset.
     const ID: i32 = 0x06;
@@ -1082,7 +1084,7 @@ pub struct ServerboundChunkBatchReceived {
 }
 
 impl Packet for ServerboundChunkBatchReceived {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_CHUNK_BATCH_RECEIVED is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_CHUNK_BATCH_RECEIVED is
     // serverbound registration index 11, wire id 0x0B. Local decompiled source
     // reads one f32 desiredChunksPerTick.
     const ID: i32 = 0x0B;
@@ -1103,7 +1105,7 @@ impl Packet for ServerboundChunkBatchReceived {
 pub struct ServerboundClientTickEnd;
 
 impl Packet for ServerboundClientTickEnd {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_CLIENT_TICK_END is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_CLIENT_TICK_END is
     // serverbound registration index 13, wire id 0x0D. Local decompiled source
     // uses `StreamCodec.unit`, so the body is empty.
     const ID: i32 = 0x0D;
@@ -1121,7 +1123,7 @@ impl Packet for ServerboundClientTickEnd {
 pub struct ServerboundPlayerLoaded;
 
 impl Packet for ServerboundPlayerLoaded {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_PLAYER_LOADED is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_PLAYER_LOADED is
     // serverbound registration index 44, wire id 0x2C. Local decompiled source
     // uses `StreamCodec.unit`, so the body is empty.
     const ID: i32 = 0x2C;

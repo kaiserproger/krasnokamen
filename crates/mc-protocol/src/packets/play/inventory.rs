@@ -4,7 +4,7 @@ use super::*;
 
 /// `Clientbound Set Held Slot` (CB). Tells the client which hotbar
 /// slot the server believes is selected. Server emits this on login
-/// to seed the cursor. Per ADR 0002, verified against `javap -p`:
+/// to seed the cursor. Per ADR 0002, verified against 26.1.2 `javap -p`:
 /// `ClientboundSetHeldSlotPacket(int slot)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientboundSetHeldSlot {
@@ -12,7 +12,7 @@ pub struct ClientboundSetHeldSlot {
 }
 
 impl Packet for ClientboundSetHeldSlot {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_SET_HELD_SLOT at game-CB index 107 = wire id 0x6B.
     const ID: i32 = 0x6B;
 
@@ -31,7 +31,7 @@ impl Packet for ClientboundSetHeldSlot {
 /// `Clientbound Container Set Content` (CB). Replaces every slot of a
 /// container in one packet. M6 uses it on login to seed window 0
 /// (player inventory) with the starter kit. Per ADR 0002, verified
-/// against `javap -p`:
+/// against 26.1.2 `javap -p`:
 /// `ClientboundContainerSetContentPacket(int containerId, int stateId,
 /// List<ItemStack> items, ItemStack carriedItem)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +43,7 @@ pub struct ClientboundContainerSetContent {
 }
 
 impl Packet for ClientboundContainerSetContent {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_CONTAINER_SET_CONTENT at game-CB index 18 = wire id 0x12.
     const ID: i32 = 0x12;
 
@@ -144,7 +144,7 @@ impl Packet for ClientboundContainerSetData {
 /// `Clientbound Container Set Slot` (CB). Single-slot update inside a
 /// container. M6 emits one of these after a place mutation to
 /// decrement the held stack's count. Per ADR 0002, verified against
-/// `javap -p`:
+/// 26.1.2 `javap -p`:
 /// `ClientboundContainerSetSlotPacket(int containerId, int stateId,
 /// int slot, ItemStack itemStack)`. The Java field type is `int` but
 /// the wire codec encodes `slot` as a `short` — same convention as
@@ -161,7 +161,7 @@ pub struct ClientboundContainerSetSlot {
 }
 
 impl Packet for ClientboundContainerSetSlot {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_CONTAINER_SET_SLOT at game-CB index 20 = wire id 0x14.
     const ID: i32 = 0x14;
 
@@ -614,14 +614,14 @@ impl Packet for ServerboundSelectBundleItem {
 
 /// `Serverbound Set Carried Item` (SB). Sent when the client scrolls
 /// the hotbar — `slot` ∈ `0..=8`. Per ADR 0002, verified against
-/// `javap -p`: `ServerboundSetCarriedItemPacket(short slot)`.
+/// 26.1.2 `javap -p`: `ServerboundSetCarriedItemPacket(short slot)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerboundSetCarriedItem {
     pub slot: i16,
 }
 
 impl Packet for ServerboundSetCarriedItem {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // SERVERBOUND_SET_CARRIED_ITEM at game-SB index 54 = wire id 0x36.
     const ID: i32 = 0x36;
 
@@ -680,7 +680,7 @@ pub struct ServerboundPlaceRecipe {
 }
 
 impl Packet for ServerboundPlaceRecipe {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // SERVERBOUND_PLACE_RECIPE at game-SB index 39 = wire id 0x27.
     const ID: i32 = 0x27;
 
@@ -896,8 +896,8 @@ pub struct ClientboundUpdateRecipes {
 }
 
 impl Packet for ClientboundUpdateRecipes {
-    // GameProtocols' bundle packet is wire id 0. UPDATE_RECIPES is the
-    // 133rd following clientbound registration, giving wire id 0x85.
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
+    // CLIENTBOUND_UPDATE_RECIPES is game-CB index 136 = wire id 0x88.
     const ID: i32 = 0x88;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

@@ -380,7 +380,7 @@ pub struct ClientboundInitializeBorder {
 }
 
 impl Packet for ClientboundInitializeBorder {
-    // `.analysis/protocol-dump.txt` / GameProtocols: game-CB index 43,
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / GameProtocols: game-CB index 43,
     // wire id 0x2B. `ClientboundInitializeBorderPacket` writes doubles for
     // center/size, then VarLong lerp time and three VarInts.
     const ID: i32 = 0x2C;
@@ -426,7 +426,7 @@ pub struct ClientboundChangeDifficulty {
 }
 
 impl Packet for ClientboundChangeDifficulty {
-    // `.analysis/protocol-dump.txt` / `GameProtocols`:
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / `GameProtocols`:
     // CLIENTBOUND_CHANGE_DIFFICULTY is clientbound registration index 10,
     // wire id 0x0A.
     const ID: i32 = 0x0A;
@@ -456,7 +456,7 @@ pub struct ClientboundCooldown {
 }
 
 impl Packet for ClientboundCooldown {
-    // `.analysis/protocol-dump.txt` / `GameProtocols`:
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / `GameProtocols`:
     // CLIENTBOUND_COOLDOWN is clientbound registration index 22,
     // wire id 0x16. `ClientboundCooldownPacket.STREAM_CODEC` is
     // `Identifier.STREAM_CODEC` followed by `VAR_INT` duration.
@@ -517,7 +517,7 @@ impl ClientboundSetTime {
 }
 
 impl Packet for ClientboundSetTime {
-    // `.analysis/protocol-dump.txt` / `GameProtocols`: game
+    // `data/vanilla/reports/packets.json` (canonical 26.3) / `GameProtocols`: game
     // CLIENTBOUND_SET_TIME is clientbound registration index 115, wire id 0x73.
     // Local 26.1.2 `javap` evidence:
     // - `long gameTime`;
@@ -610,8 +610,8 @@ pub struct ClientboundSetExperience {
 }
 
 impl Packet for ClientboundSetHealth {
-    // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_HEALTH is
-    // game-CB index 106 = wire id 0x6A. `javap -p -c
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_HEALTH is
+    // game-CB index 106 = wire id 0x6A. 26.1.2 `javap -p -c
     // ClientboundSetHealthPacket` shows f32 health, VarInt food, f32 saturation.
     const ID: i32 = 0x6A;
 
@@ -632,7 +632,7 @@ impl Packet for ClientboundSetHealth {
 }
 
 impl Packet for ClientboundSetExperience {
-    // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_EXPERIENCE
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_SET_EXPERIENCE
     // is game-CB index 105 = wire id 0x69. Vanilla 26.1.2 `javap -p -c`
     // shows f32 progress, VarInt level, VarInt total experience.
     const ID: i32 = 0x69;
@@ -657,8 +657,8 @@ impl Packet for ClientboundSetExperience {
 }
 
 impl Packet for ClientboundPlayerAbilities {
-    // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_ABILITIES
-    // is game-CB index 65 = wire id 0x41. `javap -p -c
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_PLAYER_ABILITIES
+    // is game-CB index 65 = wire id 0x41. 26.1.2 `javap -p -c
     // ClientboundPlayerAbilitiesPacket` shows one flags byte
     // (1=invulnerable, 2=flying, 4=canFly, 8=instabuild), then f32
     // flying speed and f32 walking speed.
@@ -705,7 +705,7 @@ pub struct ClientboundBlockEntityData {
 }
 
 impl Packet for ClientboundBlockEntityData {
-    // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_BLOCK_ENTITY_DATA
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_BLOCK_ENTITY_DATA
     // is game-CB index 6 = wire id 0x06. Declared field order is BlockPos,
     // BlockEntityType registry id, then network-NBT compound tag.
     const ID: i32 = 0x06;
@@ -791,7 +791,7 @@ pub struct ClientboundOpenSignEditor {
 }
 
 impl Packet for ClientboundOpenSignEditor {
-    // Verified from `.analysis/protocol-dump.txt`: CLIENTBOUND_OPEN_SIGN_EDITOR
+    // Verified from `data/vanilla/reports/packets.json` (canonical 26.3): CLIENTBOUND_OPEN_SIGN_EDITOR
     // is game-CB index 61 = wire id 0x3D. Declared field order is BlockPos,
     // then front/back text boolean.
     const ID: i32 = 0x3D;

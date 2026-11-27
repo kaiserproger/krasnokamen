@@ -90,7 +90,7 @@ pub fn pack_chunk_pos(x: i32, z: i32) -> i64 {
 /// LONG_ARRAY)` — count, then `VarInt typeId` + `long[]` per entry.
 ///
 /// `type_id` is the ordinal of the entry in `Heightmap$Types`
-/// (verified by `javap -p -c` of the unobfuscated jar, per ADR 0002).
+/// (verified by 26.1.2 `javap -p -c` of the unobfuscated jar, per ADR 0002).
 /// Only the three entries with `Usage.CLIENT` are sent:
 /// `WORLD_SURFACE = 1`, `MOTION_BLOCKING = 4`,
 /// `MOTION_BLOCKING_NO_LEAVES = 5`. The packed `long[]` is the same
@@ -110,7 +110,7 @@ impl ChunkHeightmap {
 
 /// One block-entity sidecar entry carried inside [`LevelChunkWithLight`].
 ///
-/// Verified via `javap -p -c` of
+/// Verified via 26.1.2 `javap -p -c` of
 /// `ClientboundLevelChunkPacketData$BlockEntityInfo.write` (ADR 0002):
 /// `u8 packedXZ`, `i16 y`, `VarInt typeId` (id into
 /// `minecraft:block_entity_type` registry), then network-NBT
@@ -307,7 +307,7 @@ pub struct LevelChunkWithLight {
 }
 
 impl Packet for LevelChunkWithLight {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_LEVEL_CHUNK_WITH_LIGHT at game-CB index 46 = 0x2E.
     const ID: i32 = 0x2E;
 
@@ -441,7 +441,7 @@ impl Packet for LevelEvent {
 /// discard chunks that fall outside its (anchored, but still
 /// vd-bounded) loaded ring.
 ///
-/// Wire layout per `javap -p -c` of
+/// Wire layout per 26.1.2 `javap -p -c` of
 /// `ClientboundSetChunkCacheCenterPacket.write` (ADR 0002): two
 /// VarInts, `x` then `z`, in chunk coordinates (= `floor(world / 16)`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -451,7 +451,7 @@ pub struct SetCenterChunk {
 }
 
 impl Packet for SetCenterChunk {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_SET_CHUNK_CACHE_CENTER at game-CB index 96 = 0x60.
     const ID: i32 = 0x60;
 
@@ -496,7 +496,7 @@ impl Packet for SetChunkCacheRadius {
 
 /// `Clientbound Block Update` (CB). Single-block delta the server
 /// sends in response to any state change at a `BlockPos`. Per
-/// ADR 0002, verified against `javap -p` of the unobfuscated jar:
+/// ADR 0002, verified against 26.1.2 `javap -p` of the unobfuscated jar:
 /// `ClientboundBlockUpdatePacket(BlockPos pos, BlockState state)`,
 /// the `BlockState` wire form being its global state-id VarInt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -510,7 +510,7 @@ pub struct BlockUpdate {
 }
 
 impl Packet for BlockUpdate {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_BLOCK_UPDATE at game-CB index 8 = wire id 0x08.
     const ID: i32 = 0x08;
 
@@ -538,7 +538,7 @@ pub struct SectionBlockChange {
 }
 
 /// `Clientbound Section Blocks Update` (CB). Multi-block delta for one
-/// chunk section. Per ADR 0002, verified against `javap -p`:
+/// chunk section. Per ADR 0002, verified against 26.1.2 `javap -p`:
 /// `ClientboundSectionBlocksUpdatePacket(SectionPos sectionPos,
 /// short[] positions, BlockState[] states)`. Vanilla's stream codec writes
 /// the raw `SectionPos.asLong`, then a VarInt count, then each entry as a
@@ -551,7 +551,7 @@ pub struct SectionBlocksUpdate {
 }
 
 impl Packet for SectionBlocksUpdate {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_SECTION_BLOCKS_UPDATE at game-CB index 86 = wire id 0x56.
     const ID: i32 = 0x56;
 
@@ -597,14 +597,14 @@ impl Packet for SectionBlocksUpdate {
 /// echoes the `sequence` from a `ServerboundPlayerAction` or
 /// `ServerboundUseItemOn`; without it the vanilla client rolls
 /// back its predicted edit. Per ADR 0002, verified against
-/// `javap -p`: `ClientboundBlockChangedAckPacket(int sequence)`.
+/// 26.1.2 `javap -p`: `ClientboundBlockChangedAckPacket(int sequence)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockChangedAck {
     pub sequence: i32,
 }
 
 impl Packet for BlockChangedAck {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_BLOCK_CHANGED_ACK at game-CB index 4 = wire id 0x04.
     const ID: i32 = 0x04;
 
@@ -622,7 +622,7 @@ impl Packet for BlockChangedAck {
 
 /// `Clientbound Light Update` (CB). Per-chunk light delta — sent
 /// when block changes alter sky / block light without re-streaming
-/// the full chunk. Per ADR 0002, verified against `javap -p`:
+/// the full chunk. Per ADR 0002, verified against 26.1.2 `javap -p`:
 /// `ClientboundLightUpdatePacket(int x, int z,
 /// ClientboundLightUpdatePacketData lightData)`. The wire body for
 /// the chunk coordinates is a pair of VarInts (matching vanilla's
@@ -636,7 +636,7 @@ pub struct LightUpdate {
 }
 
 impl Packet for LightUpdate {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3):
     // CLIENTBOUND_LIGHT_UPDATE at game-CB index 49 = wire id 0x31.
     const ID: i32 = 0x31;
 

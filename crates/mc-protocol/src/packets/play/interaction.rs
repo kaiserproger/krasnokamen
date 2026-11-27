@@ -8,7 +8,7 @@ pub struct ServerboundResourcePack {
 }
 
 impl Packet for ServerboundResourcePack {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_RESOURCE_PACK is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_RESOURCE_PACK is
     // serverbound registration index 50, wire id 0x32. Body is local decompiled
     // `ServerboundResourcePackPacket(UUID id, Action action)`.
     const ID: i32 = 0x32;
@@ -30,7 +30,7 @@ pub struct ServerboundClientInformation {
 }
 
 impl Packet for ServerboundClientInformation {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_CLIENT_INFORMATION is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_CLIENT_INFORMATION is
     // serverbound registration index 14, wire id 0x0E. Body delegates to local
     // decompiled `ServerboundClientInformationPacket(ClientInformation)`.
     const ID: i32 = 0x0E;
@@ -52,7 +52,7 @@ pub struct ServerboundCustomPayload {
 }
 
 impl Packet for ServerboundCustomPayload {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_CUSTOM_PAYLOAD is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_CUSTOM_PAYLOAD is
     // serverbound registration index 22, wire id 0x16. Body is the common
     // custom-payload codec from local decompiled sources.
     const ID: i32 = 0x16;
@@ -210,7 +210,7 @@ impl Packet for ServerboundInteract {
 
 /// `Serverbound Pick Item From Block` (SB, middle click). Local 26.1.2
 /// `reports/packets.json`: `minecraft:pick_item_from_block` = 36 (0x24);
-/// `javap`: `ServerboundPickItemFromBlockPacket(BlockPos pos, boolean
+/// 26.1.2 `javap`: `ServerboundPickItemFromBlockPacket(BlockPos pos, boolean
 /// includeData)` via `composite(BlockPos.STREAM_CODEC, ByteBufCodecs.BOOL)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerboundPickItemFromBlock {
@@ -237,7 +237,7 @@ impl Packet for ServerboundPickItemFromBlock {
 
 /// `Serverbound Pick Item From Entity` (SB, middle click). Local 26.1.2
 /// `reports/packets.json`: `minecraft:pick_item_from_entity` = 37 (0x25);
-/// `javap`: `ServerboundPickItemFromEntityPacket(int id, boolean includeData)`
+/// 26.1.2 `javap`: `ServerboundPickItemFromEntityPacket(int id, boolean includeData)`
 /// via `composite(ByteBufCodecs.VAR_INT, ByteBufCodecs.BOOL)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerboundPickItemFromEntity {
@@ -427,7 +427,7 @@ impl Packet for ServerboundMovePlayerStatusOnly {
 /// `ServerboundPlayerAction`. Enum discriminants match the wire
 /// VarInt: the order is the vanilla source's declaration order
 /// (`ServerboundPlayerActionPacket$Action`), verified against
-/// `javap -p` on the unobfuscated jar.
+/// 26.1.2 `javap -p` on the unobfuscated jar.
 ///
 /// The variants follow the 26.3 `ServerboundPlayerActionPacket$Action`
 /// ordinal order (`readEnum`), which inserted `CHANGE_DESTROY_DIRECTION` at 1.
@@ -468,7 +468,7 @@ impl PlayerActionKind {
 
 /// `Serverbound Player Action` (SB). Carries break-start /
 /// break-abort / break-stop, plus item-drop and a few miscellaneous
-/// actions. Per ADR 0002, verified against `javap -p` of the
+/// actions. Per ADR 0002, verified against 26.1.2 `javap -p` of the
 /// unobfuscated jar: `ServerboundPlayerActionPacket(action, pos,
 /// direction, sequence)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -565,8 +565,8 @@ pub struct ServerboundPlayerInput {
 }
 
 impl Packet for ServerboundPlayerInput {
-    // `.analysis/protocol-dump.txt`: SERVERBOUND_PLAYER_INPUT follows
-    // SERVERBOUND_PLAYER_COMMAND at game-SB index 43, wire id 0x2B. `javap -p -c`
+    // `data/vanilla/reports/packets.json` (canonical 26.3): SERVERBOUND_PLAYER_INPUT follows
+    // SERVERBOUND_PLAYER_COMMAND at game-SB index 43, wire id 0x2B. 26.1.2 `javap -p -c`
     // of `ServerboundPlayerInputPacket` and `Input$1` shows one signed byte bitset:
     // forward, backward, left, right, jump, shift, sprint.
     const ID: i32 = 0x2B;
@@ -584,7 +584,7 @@ impl Packet for ServerboundPlayerInput {
 }
 
 impl Packet for ServerboundPlayerCommand {
-    // `.analysis/protocol-dump.txt`: game SERVERBOUND_PLAYER_COMMAND is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game SERVERBOUND_PLAYER_COMMAND is
     // serverbound registration index 42, wire id 0x2A. The packet record fields
     // are `int id`, `Action action`, then `int data`; vanilla writes all three as
     // VarInts.
@@ -652,7 +652,7 @@ impl Packet for ServerboundPunch {
 }
 
 /// `Serverbound Use Item On` (SB) — the place-block / right-click
-/// packet. Per ADR 0002, verified against `javap -p`:
+/// packet. Per ADR 0002, verified against 26.1.2 `javap -p`:
 /// `ServerboundUseItemOnPacket(BlockHitResult blockHit,
 /// InteractionHand hand, int sequence)`.
 ///
@@ -718,7 +718,7 @@ impl Packet for ServerboundUseItemOn {
 }
 
 /// `Serverbound Use Item` (SB) — right-click air / consume held item.
-/// Verified via `.analysis/protocol-dump.txt` and `javap -p`:
+/// Verified via `data/vanilla/reports/packets.json` (canonical 26.3) and `javap -p`:
 /// `ServerboundUseItemPacket(InteractionHand hand, int sequence,
 /// float yRot, float xRot)`; game-SB index 67 = wire id 0x43.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -781,7 +781,7 @@ pub struct ServerboundClientCommand {
 impl Packet for ServerboundClientCommand {
     // SERVERBOUND_CLIENT_COMMAND is game-SB index 12 = wire id 0x0C;
     // Action enum ordinals are PERFORM_RESPAWN=0, REQUEST_STATS=1,
-    // REQUEST_GAMERULE_VALUES=2 per local javap.
+    // REQUEST_GAMERULE_VALUES=2 per 26.1.2 javap.
     const ID: i32 = 0x0C;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {

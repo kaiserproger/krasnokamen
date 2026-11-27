@@ -8,7 +8,7 @@ pub struct ClientboundCustomPayload {
 }
 
 impl Packet for ClientboundCustomPayload {
-    // `.analysis/protocol-dump.txt`: game CLIENTBOUND_CUSTOM_PAYLOAD is
+    // `data/vanilla/reports/packets.json` (canonical 26.3): game CLIENTBOUND_CUSTOM_PAYLOAD is
     // clientbound registration index 24, wire id 0x18. Body is the common
     // custom-payload codec from local decompiled sources.
     const ID: i32 = 0x18;
@@ -282,7 +282,7 @@ pub struct SetDefaultSpawnPosition {
 }
 
 impl Packet for SetDefaultSpawnPosition {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION sits at game-CB index 99
     // (skipping `CLIENTBOUND_BUNDLE` at index 0) = wire id 0x63.
     const ID: i32 = 0x63;
@@ -371,7 +371,7 @@ pub struct ClientboundKeepAlive {
 }
 
 impl Packet for ClientboundKeepAlive {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_KEEP_ALIVE at game-CB index 45 = wire id 0x2D.
     const ID: i32 = 0x2D;
 
@@ -401,7 +401,7 @@ pub struct PlayDisconnect {
 }
 
 impl Packet for PlayDisconnect {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_DISCONNECT at game-CB index 32 = wire id 0x20.
     const ID: i32 = 0x20;
 
@@ -430,7 +430,7 @@ pub struct ClientboundTransfer {
 }
 
 impl Packet for ClientboundTransfer {
-    // Verified via `javap` of vanilla 26.1.2's GameProtocols:
+    // Id from `data/vanilla/reports/packets.json` (canonical 26.3); layout from 26.1.2 `javap`:
     // CLIENTBOUND_TRANSFER at game-CB index 132 = wire id 0x84.
     const ID: i32 = 0x84;
 
