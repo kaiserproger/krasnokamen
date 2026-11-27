@@ -1,9 +1,29 @@
-# Project status
+# Status
 
-Where Krasnokamen stands. Update this page when a release ships, a known 1.0
-gap opens or closes, or a transition opens or closes; day-to-day progress
-belongs in commits and the [bug ledger](bugs/README.md). Last updated
-2026-11-27 (counts measured on `973e6e60`).
+What works and how each part was last checked. Updated 2026-11-27 on `973e6e60`.
+Update this page in the change that alters what works or how it was proven;
+day-to-day progress belongs in commits and the [bug ledger](bugs/README.md).
+
+Labels ([decision V1](../DECISIONS.md#evidence)):
+
+- **Verified**: a real vanilla Java client ran the path against our server
+  (unmodded, or with the Loader or the client mod the row names), or a
+  differential test compared our result with a real Mojang server on the same
+  input.
+- **Native-gated** (proposed label, owner decision pending; if declined, read
+  it as Tested): run end to end with our native client under the harness
+  (graphical, Xvfb). It proves our server and our client together, not vanilla
+  compatibility.
+- **Tested**: unit, fixture, in-process or TCP protocol-bot tests only.
+- **Not run**: nothing exercises it.
+
+"Last real run" is the newest passing harness receipt of the strongest kind
+found for the area on 2026-11-27 under `.analysis/validation/` of the main
+checkout and every worktree. Receipts are not in Git, and removing a worktree
+removes its receipts. A run proves only what its scenario asserts. "Rows" counts
+ledger rows fixed with a real-client receipt (`client_receipt` in
+`bugs/promotions/*.json`: 221 rows, 1 on a vanilla Java client, 2 on Horizon
+clients, the rest on the native client).
 
 ## Release
 
@@ -19,21 +39,139 @@ belongs in commits and the [bug ledger](bugs/README.md). Last updated
   [announcement criteria](DEFINITION_OF_DONE.md#finite-announcement-acceptance)
   (owner D91). Tags and publication need the owner's explicit authorization.
 
+## Feature areas
+
+| Area | Status | Last real run | Result |
+|---|---|---|---|
+| Join, login, protocol window | Verified on 26.3, and on 26.1.2 with a Loader client; 26.2 Tested | 2026-11-24 `settlement-map-qa`, vanilla 26.3 client; 2026-11-15 `java-battle-end-camera`, 26.1.2 Loader client | 7/7 and 8/8 assertions. 26.2 has only the real-cache TCP joins in `translation::join_tests` (ignored by default). Online-mode Mojang login and Velocity forwarding: Tested. 5 rows |
+| Chat and commands | Native-gated | 2026-11-26 `native-command-feedback`; 2026-11-15 `native-chat-visibility` | Chat visibility 26/26 (full, commands-only, hidden). 33 rows. No vanilla-client run of chat settings or command suggestions |
+| Movement, physics, combat | Native-gated | 2026-11-24 `native-elytra`, `issue1-19-hostile-motion` | 7 and 13 passing runs. The vanilla player differential (diagonal sprint, attribute swapping; [quirk gate](QUIRK_PARITY.md)) has no retained receipt |
+| Mobs and villagers | Native-gated | 2026-11-26 `native-v2-dolphin-treasure`, `native-entity-bogged` | 16 rows. Attack on a cow by a TCP bot: 2026-11-25 `protocol-mob-attack-cow`. No vanilla differential for spawning or AI beyond the quirk farms |
+| Items, stations, containers | Verified for crafting-grid drags | 2026-11-07 `java-v2-p5-craft-drag-paced`, vanilla Java client | 74/74: cursor retention and custody for left, right and outside-release drags. 26 rows on the native client (latest 2026-11-26) |
+| Blocks, redstone, fluids, farming | Verified for one quasi-connectivity scenario | 2026-11-23 quirk gate `qc-piston-bud` against a Mojang 26.1.2 server | Pass. The other 10 quirk scenarios (TNT duping, lever lamp, seven farm rates) have no retained receipt; 5 of them carry `known_divergence`. 8 rows |
+| World generation, dimensions | Native-gated (one scene) | 2026-11-24 `native-kelp-ocean-floor` | 1 row. No terrain differential against vanilla retained; the target is wiki-level similarity ([P2](../DECISIONS.md#product)) |
+| Survival loop, game rules | Native-gated | 2026-11-26 `native-bed-occupied-state`; 2026-11-24 `native-v2-p4-damage` | 10 and 4 passing runs. 9 rows |
+| Saves, WAL, recovery | Native-gated | 2026-11-26 `native-v2-ledger-gravity-tick`; 2026-11-25 `native-v2-corrupt-chunk-near-camera` | 16/16: an imported world's saved block tick survives a restart. 16 rows. Anvil round trip through a Mojang server (`tools.harness.vanilla_world_roundtrip`): no retained receipt. Power cut and Windows soak: Not run |
+| Datapacks, resource packs | Native-gated | 2026-11-27 `native-datapack-reload` on `973e6e60` | 47/47: the crafting output follows `/datapack enable` and `disable`. 13 rows. Server-offered resource pack download and render: Not run |
+| Administration | Native-gated for commands | 2026-11-11 `admin-commands` | 41/41: `/tellraw`, `/title`, `/bossbar`, `/tick`, `/locate` read back from the client. RCON and Query with an external client: Tested |
+| Wasm plugins | Tested | none of its own; first-party plugins run inside the settlement and battle gates | Plugin host unit and startup tests |
+| Settlements | Verified for the map-dialog starter-chest race | 2026-11-24 `settlement-map-qa` C1, vanilla 26.3 client; 2026-11-26 `buildings-qa`, native | 7/7 on Java; 22/22 native; `autocraft-qa` 78/78 (2026-11-24); `village-qa` 32/32 (2026-11-23). 47 rows, 1 on Java |
+| Battles | Verified for the end camera | 2026-11-15 `java-battle-end-camera`, 26.1.2 Loader client; 2026-11-25 `battle-crash-handoff`, Horizon clients | 8/8; `battle-rearm-recovery` 20/20 with Horizon clients (2026-11-24); `battle-live-spectator-follows-respawn` 9/9 native (2026-11-25). 2 rows |
+| Screen sharing, voice, Loader | Verified on Fabric with Loader and Simple Voice Chat | 2026-11-26 `screens-voice-qa`; 2026-11-17 `loader-fabric-mixed-interaction` | 11/11 verdicts: consent, deny, app audio, viewer respawn, SVC proximity Fabric–Fabric and Fabric–native, SVC group; chat, visibility and item handoff between Fabric and native. 4 rows |
+| Far terrain | Verified for Distant Horizons on 26.1.2 | 2026-10-22 `dh-gate`, Fabric with DH 3.3.3; 2026-11-19 `horizon-lod-live`, Horizon client | DH pass; Horizon 18/18 at view distance 4, LOD 64. Native `[lod]`: no retained harness receipt. DH on 26.2 and 26.3: Not run |
+| Native client, singleplayer | Native-gated | 2026-11-27 `native-model-layers`; 2026-11-25 `native-sp-slow-machine` | 101/101 and 15/15. 41 rows on client presentation. RC5 assets: see [Release](#release) |
+| Joins under load | Native-gated | 2026-11-24 `join-lag-gate` | 3/3, 23 passing runs. Measured numbers: [profiles](performance/PROFILES.md) |
+
+## Coverage by client
+
+What each client can be asked for today. `yes`: works; `part`: works with the
+restriction named in the cell; `no`: refused or absent, and the cell names what
+to use instead. Java columns are unmodded clients; mods go in the Fabric/NeoForge
+column. Horizon is the pinned Horizon 26.3 client the harness drives
+([real-client gates](development/real-client-gates.md)).
+Evidence for each cell is in [Feature areas](#feature-areas).
+
+| Feature | Java 26.3 | Java 26.2 | Java 26.1.2 | Fabric/NeoForge with mods | Native client | Horizon client |
+|---|---|---|---|---|---|---|
+| Join and vanilla play | yes | part: newer content arrives as its nearest 26.2 form | part: nearest 26.1.2 form | yes (Loader jars: 26.1.2; Loader `main` also builds 26.3) | yes | yes (26.3) |
+| Plugin client content (Loader bundles) | no: login stops in Configuration naming the supported platforms; use a Loader client | no: same | no: same | yes with the Krasnokamen Loader (Fabric, NeoForge, Forge) | yes (Loader wire 3) | no: disconnected without Loader negotiation |
+| Far terrain beyond view distance | no: use the native client, Distant Horizons or Horizon | no: same | no: same | part: Distant Horizons 3.3.3 on 26.1.2; 26.2 and 26.3 need their presentation profile | yes (`[lod]`) | yes (`[horizon_lod]`, stored columns only) |
+| Proximity voice | no: install Simple Voice Chat or use the native client | no: same | no: same | yes with Simple Voice Chat (opt-in bridge) | yes | no |
+| Screen sharing | no: use the native client or Fabric with Loader | no: same | no: same | part: Fabric with Loader only; NeoForge and Forge are refused | yes | no |
+| Krasnokamen singleplayer | no: use the native client | no: same | no: same | no: same | yes | no |
+
+Where the cells come from: the adjacent translation chain
+([ADR 0015](decisions/0015-multiversion-protocol-translation.md)),
+[Loader required-client behaviour](KRASNOKAMEN_LOADER.md#required-client-behavior),
+[far terrain](OPERATING.md#far-terrain-lod), [Horizon far terrain](OPERATING.md#horizon-far-terrain)
+and [Distant Horizons](OPERATING.md#distant-horizons),
+[voice](decisions/0019-voice-chat.md) and
+[screen sharing](decisions/0018-in-game-computer.md#screen-sharing-krasnokamenscreen-protocol-1)
+admission.
+
+## Known gaps by area
+
+Missing or knowingly different behaviour; the rest of each area is limited only
+by its evidence above. Ledger rows track individual bugs.
+
+- **Protocol and login.** Missing endpoint data disables only that version, and
+  a missing translation step disables routes across it. Older clients render
+  `/swing` kinds other than hand swings as legacy swings without duration.
+  Signed chat has no signature or certificate verification and no reportable
+  delivery.
+- **Commands.** `/execute store` writes only score destinations; block-tag and
+  SNBT predicates and rich suggestions are incomplete. `/place` and item
+  modifiers are not implemented; `/particle` refuses option-bearing types;
+  `/loot` refuses mine and fish contexts; unsupported attribute kinds are
+  refused; player `scale` and `step_height` reach clients but not server
+  collision. Command blocks lack comparator output, command minecarts and the
+  editor (configure them through `/data`). Styled `CustomName` compounds are
+  refused (`ENTITY-STYLED-CUSTOM-NAME-REFUSED`, owner decision pending).
+  Bossbars are not exported to Anvil.
+- **Movement and combat.** Mounted portal travel is unsupported. An eye of
+  ender rises and hovers smoothly instead of oscillating.
+- **Mobs.** Undead walkers keep blocked direct pursuit. Mob-farm and gold-farm
+  mobs drift off the collection pad while airborne, and villager-breeder output
+  differs through the farmers' harvest cadence (quirk `known_divergence`).
+  Slime hops run on an absolute tick phase, not vanilla's countdown that pauses
+  in flight. Dolphins swim straight water waypoints to a located structure.
+- **Items and containers.** Special recipe serializers are incomplete.
+  Exploration-map loot needs the saved-map callback and omits the map when the
+  lookup finds no destination. Item frames lack `Fixed`, `ItemDropChance` and
+  complete map decorations. A decorated pot with missing named sides drops
+  nothing.
+- **Blocks, redstone, fluids.** Pistons move instantly: no short-pulse spit,
+  transient collision or moving-piston window, so the TNT BUD duper yields one
+  TNT instead of two and carpet and rail dupers do not work. Torch burnout,
+  exact update order and some analog comparator sources are missing; the fluid
+  destroy list around a push differs. Azalea and mangrove trees, part of
+  bone-meal coverage and exact tree shapes are missing; ordinary vines grow only
+  downward; landing mobs do not trample farmland.
+- **World generation.** Lush and dripstone cave features are incomplete.
+  Legacy structures use authored fixed layouts without rotations, processors,
+  stronghold biome relocation, the jungle piston puzzle or full monument and
+  mansion variants; fortress pieces and ruined-portal aging are incomplete. The
+  End central island is our own height field and outer-island assemblies are
+  authored. Portals lack passenger assemblies and the 300-tick destination
+  lease.
+- **Survival loop.** Thunderstorms create no skeleton-horse traps and do not
+  deoxidise copper. Temperature approximates by biome family and altitude. Bed
+  exits use approximate collision shapes. Some advancements, special recipes
+  and natural progression are missing.
+- **Saves and administration.** Anvil import serves non-empty proto-chunks
+  incomplete, may lose opaque data when regenerating an empty one, refuses
+  superflat and custom dimensions, and keeps POI opaque. Datapacks apply only
+  the experimental jigsaw worldgen inputs (at restart); any other worldgen or
+  dimension resource refuses the whole pack (`DATAPACK-WORLDGEN-OVERRIDES`);
+  macros, arbitrary resource and tag types and non-block loot are unsupported;
+  `filter` patterns use Rust regex syntax. `server.properties` keys without a
+  TOML counterpart only warn.
+- **Plugins.** Unsupported hooks (including before-damage) refuse startup;
+  there is no reload. Bukkit, Spigot and Paper JARs do not run.
+
+Deliberate differences from vanilla ([P7](../DECISIONS.md#product)):
+
+- Native store and WAL only: no live Anvil serving or dual write
+  ([W1](../DECISIONS.md#persistence)).
+- Mount logout: a processed Leave dismounts and leaves the vehicle in the world,
+  where vanilla stores a sole rider's vehicle with the player; reconnecting
+  re-seats the rider ([mount custody](architecture/state-ownership.md#mount-custody)).
+- Worldgen datapack content the native generators cannot apply is refused, not
+  interpreted ([G3](../DECISIONS.md#world-generation)).
+- Exact RNG, AI cadence and vanilla bugs are not reproduced, except the quirks
+  players rely on, which the [quirk gate](QUIRK_PARITY.md) checks
+  ([P2](../DECISIONS.md#product)).
+
 ## Priorities
 
-From the [owner contract](development/owner-contract.md), in order:
-
-1. Ordinary vanilla-client gameplay and multiplayer.
-2. The production plugin API and adapters.
-3. Measured optimization, ECS, ownership and autoscaling.
-4. Rare edges.
-
-A lower item moves up only when it blocks ordinary play, saves or plugins.
-Current owner focus (D123/D124, 2026-11-23/27): close the open ledger rows in
-batches before the 1 December push of `main`; split `mc-core` into real crates
-([ADR 0021](decisions/0021-build-time-and-crate-split.md)) with measured
-incremental-rebuild effect; file-by-file core code-quality cleanup; documentation
-consolidation.
+Work order: [decision P4](../DECISIONS.md#product). Current owner focus
+(D123–D129, 2026-11-23/27): close the open ledger rows in batches before the
+1 December push of `main`; split `mc-core` into real crates as the top
+structural priority ([B1](../DECISIONS.md#build-and-crates)) with measured
+incremental-rebuild effect; prune useless unit tests in favour of differential
+tests against vanilla ([V2](../DECISIONS.md#evidence)); file-by-file core
+code-quality cleanup; documentation in the D129 shape (entry file, rules,
+pitfalls, this page, `DECISIONS.md`).
 
 ## Work queue
 
@@ -50,8 +188,8 @@ and 548 fixed on `973e6e60` (`python3 -m tools.harness ledger list --status open
 ## Open transitions
 
 A transition replaces one mechanism with another and is open while both are in
-the tree. A row exists only where the target is decided (an accepted ADR,
-AGENTS.md or an owner decision); proposals and supported surfaces are listed
+the tree. A row exists only where the target is decided (an accepted ADR, a
+`DECISIONS.md` row or an owner decision); proposals and supported surfaces are listed
 below the table and carry no rule. This is the only register: the change that
 opens a transition adds its row, the change that deletes the old side deletes
 the row. How a change treats an area with an open transition:
@@ -105,7 +243,7 @@ sunset would make one):
   canonical 26.3. [ADR 0015](decisions/0015-multiversion-protocol-translation.md)
   owns the adjacent chain in `crates/mc-edge/src/translation/`; `content import`
   installs every endpoint cache and the independently owned step snapshots
-  (startup never downloads; [operations](OPERATING.md#client-protocol-compatibility)).
+  (a first start with no cache runs the same import; [operations](OPERATING.md#client-protocol-compatibility)).
   A version bump adds a step and never drops existing clients. Backfill to 1.7
   is a future constraint, not a compatibility claim.
 - Loader ([ADR 0010](decisions/0010-krasnokamen-loader-contract.md), accepted,
@@ -117,8 +255,10 @@ sunset would make one):
   decision; until then both are supported.
 
 Other ADR states: [ADR 0018](decisions/0018-in-game-computer.md) (in-game
-computer) and [ADR 0019](decisions/0019-voice-chat.md) (voice chat) are
-accepted designs with draft implementations and pending real-client QA.
+computer, screen sharing) and [ADR 0019](decisions/0019-voice-chat.md) (voice
+chat) are accepted designs with draft implementations; screen sharing and voice
+passed `screens-voice-qa` on 2026-11-26 ([Feature areas](#feature-areas)), and
+the Fabric computer terminal has no harness gate.
 [ADR 0020](decisions/0020-entity-checkpoints-at-one-million.md) is cut over
 (live checkpoints write only changed entity rows, `changed_checkpoint_data_for`
 in `core/capture.rs`; the materialized capture serves offline conversion, Anvil

@@ -26,7 +26,7 @@ full log is private history.
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| C1 | Vanilla facts come from the operator's own local distribution through an explicit `content import`; serving discovers and validates the cache and never downloads. No Mojang bytes in Git, crates or bundles. | Licensing and correctness. [ADR 0001](docs/decisions/0001-vanilla-data-as-runtime-input.md). |
+| C1 | Vanilla facts come from the operator's own local distribution through `content import`, which a first start with no cache also runs; an existing cache is only discovered and validated, never replaced. No Mojang bytes in Git, crates or bundles. | Licensing and correctness. [ADR 0001](docs/decisions/0001-vanilla-data-as-runtime-input.md). |
 | C2 | `javap`-level metadata of the unobfuscated 26.1+ jars is a permitted reference; decompiled source and algorithms are never copied; Rust names are our own. | Since 26.1 the jar is public documentation of the same identifiers the wiki names. [ADR 0002](docs/decisions/0002-vanilla-protocol-metadata-as-reference.md). |
 | C3 | Protocol and Anvil layouts are taken from local wire-probe or `javap` evidence, never from memory. | One wrong packet id disconnects a real client. |
 | C4 | Older and newer clients go through a per-session adjacent translation chain in the edge (777 → 776 → 775); core authority never branches on protocol; each step owns name-paired mappings and fails closed on what it cannot map. | ViaVersion's proven shape; core stays version-free. [ADR 0015](docs/decisions/0015-multiversion-protocol-translation.md). |
@@ -116,9 +116,9 @@ How it works: [persistence](docs/architecture/persistence.md).
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| V1 | STATUS labels: **Verified** = a real vanilla client gate or a differential test against real vanilla; **Tested** = unit or fixture tests only; **Not run**. | Owner D129; fixtures written by the author prove less than real input. |
-| V2 | Gameplay coverage comes from differential tests against a real local vanilla server (isolated localhost, EULA accepted per owner D114), not from piles of unit tests; tautological, wiring, echo and implementation-pinning unit tests are deleted. | Owner D60, D107, D128. |
-| V3 | A unit test cannot close a known real-client failure; client surfaces need a real-client gate. Only `ledger promote`, with a negative control, marks a bug fixed. | A green unit test has repeatedly coexisted with a broken client. |
+| V1 | STATUS labels: **Verified** = a real vanilla client gate or a differential test against real vanilla; **Tested** = unit or fixture tests only; **Not run**. *Proposed, owner decision pending:* **Native-gated** = end to end with our native client only (otherwise counted as Tested). | Owner D129; fixtures written by the author prove less than real input. Our own client proves our server and client together, not vanilla compatibility, and is neither of the owner's first two labels. |
+| V2 | Gameplay coverage comes from differential tests against a real local vanilla server, not from piles of unit tests. | Owner D60, D107, D128: unit tests written by the implementer kept passing while the feature was broken. |
+| V3 | A unit test cannot close a known real-client failure; client surfaces need a real-client gate. | A green unit test has repeatedly coexisted with a broken client. |
 
 ## Settlements
 

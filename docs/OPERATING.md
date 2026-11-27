@@ -10,7 +10,7 @@ for the current runtime. Each procedure has one owner page:
 | Moving a vanilla or Paper world in, and rolling back | [MIGRATION.md](MIGRATION.md) |
 | Plugin package layout, deployment and limits | [PLUGINS.md](PLUGINS.md) |
 | Client-side Loader install | [KRASNOKAMEN_LOADER.md](KRASNOKAMEN_LOADER.md) |
-| What vanilla behavior is covered | [COMPATIBILITY.md](COMPATIBILITY.md) |
+| What works and how it was last checked | [STATUS.md](STATUS.md) |
 
 Contents:
 [Startup and content](#startup-and-content) ·
@@ -470,7 +470,7 @@ enabling it never shares terrain keys. The initial endpoint is MC 26.1.2 +
 DH 3.3.3; MC 26.2 / DH 3.3.3 and MC 26.3 / DH 3.3.4 need the corresponding
 Minecraft presentation profile; protocol-16 agreement alone is not a client
 compatibility pass. Client acceptance status is in
-[COMPATIBILITY.md](COMPATIBILITY.md).
+[STATUS.md](STATUS.md#feature-areas).
 
 Terrain is sampled off-tick, without simulation residency or native writes, from
 the latest committed chunks (resident, then committed-but-unflushed edits, then
@@ -833,7 +833,7 @@ facing. Commands whose native owner reports no outcome count as unsuccessful for
 that check. Relative coordinates resolve at the command block. The client editor
 packets, comparator result output and command minecarts are not implemented.
 
-Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md)):
+Map-making command surface (known gaps in [STATUS.md](STATUS.md#known-gaps-by-area)):
 
 - `send_command_feedback false` suppresses player-source success replies for
   the native command paths that honor it and for the replies the connection layer

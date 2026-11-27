@@ -3,7 +3,7 @@
 **Date:** 2026-11-19  
 **Status:** Accepted 2026-11-19 by Main (owner D66) after three review rounds by
 committee-sol and committee-astra (`receipts/EngineADR/REVIEW-{sol,astra}{,-r2,-r3}.md`);
-their third-round findings are fixed in this text (AGENTS rule 5: fixes need no
+their third-round findings are fixed in this text (owner rule: fixing review findings needs no
 second review); see [Review resolution](#review-resolution). The owner accepted
 both open proposals (D66 answers, 2026-11-19): the §3.4 slowdown verdict in its
 written order (Q1) and the one-off offline converter, reset only for a world he
@@ -605,7 +605,7 @@ component's imports and exports actually carry, and the one the host provides.
   (importers, exporters and transitive users of shared types) and the live pack
   and matrix pins, in one change set; release notes name the service and both
   versions. The host serves one version of each service: no adapters, no second
-  version, no deprecation window (AGENTS.md: no compatibility surface of our
+  version, no deprecation window ([decision P6](../../DECISIONS.md#product): no compatibility surface of our
   own). Here we depart from Roblox, which keeps deprecated APIs callable.
 - **Acceptance of a version change.** The first cut (monolith to services) has
   no unaffected old binary: every kept guest is rebuilt against the split API,
@@ -884,7 +884,7 @@ go last.
   large one goes to the owner first, an inconclusive one does not merge); bench
   receipts before and after. The cut changes the admission path of inventory
   transactions, so it gets an independent review before Main commits it
-  (AGENTS.md rule 5, custody).
+  (owner review rule for custody changes).
 - **Not in it:** no new capability, no behaviour change in the tick, no move
   of gameplay, no delivery aggregation. New D62 settlement operations land after
   it, as `krasnokamen:settlements` 0.x bumps that rebuild their importers.

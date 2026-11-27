@@ -26,7 +26,10 @@ remembered layouts or guessed values.
   the adjacent translation steps. Import stages and validates before it
   publishes; a failure keeps the previous cache. `content verify` validates the
   same cache offline, without starting the world or the listener.
-- **Serving discovers and validates; it never downloads.** Search order:
+- **Serving discovers and validates; only a first start with no cache at all
+  imports.** When no candidate location holds a cache, the server runs the same
+  window-wide importer (with download) before it opens a world or a listener;
+  it never overwrites an existing cache, broken or not. Search order:
   `[data].vanilla_data_dir`, then `KRASNOKAMEN_CONTENT_CACHE`, then
   `$XDG_DATA_HOME/krasnokamen/content/<release>` (else `~/.local/share/…`), then
   `data/vanilla` in the working directory and up to four of its ancestors. A
@@ -52,7 +55,9 @@ remembered layouts or guessed values.
 
 - Search order and the authoritative override: `content_cache.rs:105-176`,
   `content_cache.rs:243-280` (error text names the searched roots).
-- Startup never downloads: `server.rs:1906` (`resolve_content_config`).
+- First-start import: `content_cache::prepare_startup`, called from
+  `bin/krasnokamen.rs:36`; offline commands only resolve
+  (`server::resolve_content_config`).
 - Import flags: `operator_cli.rs:58-80`.
 
 A data-loading change keeps complete-cache validation, actionable errors and
