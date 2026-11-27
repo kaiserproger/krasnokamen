@@ -27,8 +27,12 @@ Reversing the decode patch reds exactly two of the row's refs, both at their own
 
 The other five refs stay green on the control (they construct `PlayerInput`/item facts directly): the
 row's symptom is the decode drop, and those refs are the guards for the rest of the path. The kernel
-half (`combat::stab`) is **not** covered by a control, and the graphical control is a reversed server
-pin, recorded `unrunnable` per Main's CIV-B1 ruling.
+half (`combat::stab`) is **not** covered by a control. The graphical control is a real reversed-pin
+run, not `unrunnable`: `20261127T123404-ledger-promote-43gjck2g/client-artifacts/20261127T123549-native-v2-spear-jab-decode-9vqw9_gu/result.json`
+is `failed` with `scene-shot assertion failed: spear_jab_accepted` on tree `84fc5c955`, client
+`c879f0ae38b7`, and its `spear_jab.json` reads health 10.0 → 10.0 with the iron spear held (3
+attempts). The restored leg `…/20261127T123714-native-v2-spear-jab-decode-druuhm5a/result.json`
+passes on the same tree and client with health 10.0 → 7.0 in one attempt.
 
 ## Real-client proof (candidate)
 
@@ -40,8 +44,10 @@ target's own received state. The step asserts `spear_jab_holds_iron_spear`, `spe
 (authoritative confirmation or a health drop) and `spear_jab_damaged` (a health drop or removal), and
 writes `spear_jab.json` with the before/after rows and each attempt.
 
-Receipt on the promotion tree (pin `660717828dd4`, client `530556e864c2`):
-`.analysis/validation/<stamp>-native-v2-spear-jab-decode-<id>` — see the handout's validation table.
+Receipts on the promotion tree `84fc5c955` (server pin `84fc5c955ca0-server`, client pin
+`c879f0ae38b7`): the two legs quoted above. The candidate leg is
+`20261127T123404-ledger-promote-43gjck2g/client-artifacts/20261127T123714-native-v2-spear-jab-decode-druuhm5a/result.json`
+(`status: passed`), the control leg the `…T123549…` result in the same directory.
 
 Limits: one cow, one swing; the swing itself is the captured frame, not a pixel oracle. The pre-fix
 control is the reversing patch above (the client is unchanged between the two trees).

@@ -1,31 +1,35 @@
 {
   "id": "WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED",
   "verdict": "promoted",
-  "fix_commit": "154914e44e83c78340ebcd7adb18a44ce449b862",
-  "fix_commit_full": "154914e44e83c78340ebcd7adb18a44ce449b862",
-  "promoted_at": "2026-11-24T19:11:15+00:00",
-  "tree_head": "6800e98ce4c6ae88a7dbcd66acfe429e6400a58a",
+  "fix_commit": "patch:d1e5635eea93ad593987adbce48e761a8c20949a99418386ee3bb754f43f4a08",
+  "fix_commit_full": "patch:d1e5635eea93ad593987adbce48e761a8c20949a99418386ee3bb754f43f4a08",
+  "promoted_at": "2026-11-27T10:56:48+00:00",
+  "tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "control_tree_sha256": "be429e8b9b5a39114577be0864747cc95254cdd705ac8beede3fdd33cb7ed7f5",
-  "control_tree_head": "6800e98ce4c6ae88a7dbcd66acfe429e6400a58a",
+  "control_tree_sha256": "90fc332c8b68f5af3144480e7def2af3d2f8a9bdbc24575725c376760bab8a7f",
+  "control_tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": null,
+  "fix_patch_sha256": "d1e5635eea93ad593987adbce48e761a8c20949a99418386ee3bb754f43f4a08",
   "reversed_files": [
-    "tools/bench/remote.py",
+    "crates/mc-core/src/journal.rs",
     "tools/coreperf/profiles.py"
   ],
-  "kept_test_files": [
-    "tools/coreperf/test_profiles.py"
-  ],
+  "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
-      "state": "green",
-      "detail": ""
-    },
     "cargo:mc-core:journal_tests::append_counts_published_bytes_and_fsync_service_time": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/journal_tests.rs",
+        "line": 2463,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
       "state": "green",
       "detail": ""
     },
@@ -34,17 +38,17 @@
       "detail": "test assertion failed",
       "assertion": {
         "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
-        "line": 1306,
+        "line": 1395,
         "error": "AssertionError"
       }
     }
   },
   "restored": {
-    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
+    "cargo:mc-core:journal_tests::append_counts_published_bytes_and_fsync_service_time": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:journal_tests::append_counts_published_bytes_and_fsync_service_time": {
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
       "state": "green",
       "detail": ""
     },
@@ -54,5 +58,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T190524-ledger-promote-ccpm7zpt"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T095712-ledger-promote-qwru2xho"
 }

@@ -3,11 +3,13 @@
   "verdict": "promoted",
   "fix_commit": "patch:e9197d123ade38000e96734a68fbcbb604f8fa1bf30bce4caa8ad8e31a503903",
   "fix_commit_full": "patch:e9197d123ade38000e96734a68fbcbb604f8fa1bf30bce4caa8ad8e31a503903",
-  "promoted_at": "2026-11-24T21:33:26+00:00",
-  "tree_head": "1aee24a9787206bc605b51ef688d3599e125a6e0",
+  "promoted_at": "2026-11-27T12:37:47+00:00",
+  "tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
+  "control_tree_sha256": "93476836a087bbc5d5ad5fa0e7411f85a0fc1830d86daf80759280d5bc95ce43",
+  "control_tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "control": "reversed_fix_hunks",
   "control_b": null,
   "fix_patch_sha256": "e9197d123ade38000e96734a68fbcbb604f8fa1bf30bce4caa8ad8e31a503903",
@@ -16,25 +18,15 @@
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-data:item_components::tests::loads_component_report_fixture": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-core:tick_tests::spear_stab_sequence_preserves_charge_and_rejects_plain_attack": {
-      "state": "green",
-      "detail": ""
+    "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/translation/adjacent/play_tests.rs",
+        "line": 724,
+        "error": "panic",
+        "class": "assertion"
+      }
     },
     "cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap": {
       "state": "red",
@@ -46,22 +38,14 @@
         "class": "assertion"
       }
     },
-    "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation": {
-      "state": "red",
-      "detail": "FAIL",
-      "assertion": {
-        "file": "crates/mc-edge/src/translation/adjacent/play_tests.rs",
-        "line": 724,
-        "error": "panic",
-        "class": "assertion"
-      }
+    "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range": {
+      "state": "green",
+      "detail": ""
     },
-    "harness:scene-shot:native-v2-spear-jab-decode": {
-      "state": "unrunnable",
-      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
-    }
-  },
-  "restored": {
+    "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks": {
+      "state": "green",
+      "detail": ""
+    },
     "cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged": {
       "state": "green",
       "detail": ""
@@ -70,15 +54,21 @@
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range": {
-      "state": "green",
-      "detail": ""
-    },
     "cargo:mc-core:tick_tests::spear_stab_sequence_preserves_charge_and_rejects_plain_attack": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-v2-spear-jab-decode": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-spear-jab-decode --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T123404-ledger-promote-43gjck2g/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T123404-ledger-promote-43gjck2g/client-artifacts/20261127T123549-native-v2-spear-jab-decode-9vqw9_gu/result.json",
+      "assertion": {
+        "name": "spear_jab_accepted"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation": {
       "state": "green",
       "detail": ""
     },
@@ -86,21 +76,42 @@
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation": {
+    "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range": {
       "state": "green",
       "detail": ""
+    },
+    "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-data:item_components::tests::loads_component_report_fixture": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::spear_stab_sequence_preserves_charge_and_rejects_plain_attack": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-v2-spear-jab-decode": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T123404-ledger-promote-43gjck2g/client-artifacts/20261127T123714-native-v2-spear-jab-decode-druuhm5a/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T210018-native-v2-spear-jab-decode-z20la01i/result.json",
-    "tree_head": "1aee24a9787206bc605b51ef688d3599e125a6e0",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T111203-native-v2-spear-jab-decode-vj58hn34/result.json",
+    "tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "fe75260950babdf198bfb25f5e17eca4efd36287cc7272685f8f8a4b3d7185eb",
+    "server_binary_sha256": "862ba2534edfe43df2782dfe9191b1d0d9d243fa52c637b01ba876c90a455b3e",
     "covers": [
       "harness:scene-shot:native-v2-spear-jab-decode"
     ],
     "profile": "scene-shot"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T210054-ledger-promote-v0v7kk8m"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T123404-ledger-promote-43gjck2g"
 }

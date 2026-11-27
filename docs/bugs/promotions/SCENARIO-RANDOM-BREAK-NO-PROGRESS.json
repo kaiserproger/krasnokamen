@@ -3,13 +3,13 @@
   "verdict": "promoted",
   "fix_commit": "patch:b684c3f352101d4df3b32e887a04aa34dd4997d549bc05f2ca86ebeb3066de36",
   "fix_commit_full": "patch:b684c3f352101d4df3b32e887a04aa34dd4997d549bc05f2ca86ebeb3066de36",
-  "promoted_at": "2026-11-24T22:57:16+00:00",
-  "tree_head": "c9128fcfe3acd53aa9798e3824752c4ff0e076ee",
+  "promoted_at": "2026-11-27T11:11:51+00:00",
+  "tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
   "control_tree_sha256": "0b9a8af72b8290bca576700f07ed303b8c4e852c27b3558961e07ea78ad76363",
-  "control_tree_head": "c9128fcfe3acd53aa9798e3824752c4ff0e076ee",
+  "control_tree_head": "84fc5c955ca092a5c2aaac6962b8ebe0c22129ab",
   "control": "reversed_fix_hunks",
   "control_b": null,
   "fix_patch_sha256": "b684c3f352101d4df3b32e887a04aa34dd4997d549bc05f2ca86ebeb3066de36",
@@ -20,9 +20,12 @@
   "kept_test_files": [],
   "negative_control": {
     "harness:matrix-random:protocol-random-break-seed-4": {
-      "state": "unrunnable",
-      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario protocol-random-break-seed-4 --client java exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T225506-ledger-promote-2zffy7f7/regressions-client-0.log",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T225506-ledger-promote-2zffy7f7/client-artifacts/20261124T225517-protocol-random-break-seed-4-0gee7aat/result.json"
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario protocol-random-break-seed-4 --client java exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T110920-ledger-promote-wyufbgyp/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T110920-ledger-promote-wyufbgyp/client-artifacts/20261127T110932-protocol-random-break-seed-4-ak1yji_n/result.json",
+      "assertion": {
+        "name": "legal_break_made_progress"
+      }
     },
     "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero": {
       "state": "green",
@@ -51,7 +54,7 @@
     "harness:matrix-random:protocol-random-break-seed-4": {
       "state": "green",
       "detail": "",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T225506-ledger-promote-2zffy7f7/client-artifacts/20261124T225630-protocol-random-break-seed-4-2dyihczk/result.json"
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T110920-ledger-promote-wyufbgyp/client-artifacts/20261127T111050-protocol-random-break-seed-4-ffltx6_o/result.json"
     },
     "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero": {
       "state": "green",
@@ -67,5 +70,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T225506-ledger-promote-2zffy7f7"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D124PackRepromote/.analysis/validation/20261127T110920-ledger-promote-wyufbgyp"
 }
