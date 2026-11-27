@@ -91,8 +91,8 @@ in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
   touches tracked files to defeat Cargo mtime/relative-dep-info false freshness.
   Never `cd` to a second worktree inside the command: it can run the first
   tree's newer binary. Use separate runner invocations or distinct targets.
-  A command whose tree's own slot is busy takes another free or new 15–40 GB
-  slot, so concurrent commands of one tree multiply slots.
+  A command whose tree's own target-dir slot is busy takes another free or new
+  15–40 GB target-dir slot, so concurrent commands of one tree multiply them.
 - Retain the `mem-run: scope` line (properties, lane, target, peak, signature).
 
 **Watchdog**
