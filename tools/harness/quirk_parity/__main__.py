@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 from . import compare, seeded
-from .corpus import FORMAT, LOCK, Corpus, CorpusError, corpus_root, scenario_sha256
+from .corpus import FORMAT, LOCK, Corpus, CorpusError, corpus_root, scenario_sha256, trusted_lock
 from .vanilla import (MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle, java_version, resolve_jar,
                       resolve_java)
 
@@ -429,7 +429,7 @@ def record(args, rerecord: bool = False) -> int:
     receipt: dict = {"command": "re-record" if rerecord else "record", "mc_version": args.mc_version,
                      "corpus": str(corpus.dir), "lock": str(LOCK), "cases": [], "status": "fail"}
     try:
-        state = corpus.verify()
+        state = verify_against_trusted(corpus, args)
         if state["problems"]:
             raise CorpusError("corpus fails verification: " + "; ".join(state["problems"][:5]))
         scenarios = [resolved(s) for s in load_scenarios(args.scenario, args.family)] if (
@@ -498,10 +498,8 @@ def replay(args) -> int:
                      "corpus": str(corpus.dir), "lock": str(LOCK), "scenarios": [], "mismatches": [],
                      "restart_fault": args.restart_fault, "status": "fail"}
     try:
-        state = corpus.verify()
-        receipt["integrity"] = {"locked_cases": len(state["latest"]), "manifest_entries": state["entries"],
-                                "manifest_head": state["manifest_head"], "problems": state["problems"],
-                                "unanchored": sorted({e["case"] for e in state["unanchored"]})}
+        state = verify_against_trusted(corpus, args)
+        receipt["integrity"] = integrity_summary(state, args)
         if state["problems"]:
             raise CorpusError("corpus integrity: " + "; ".join(state["problems"][:5]))
         known = load_known_diffs()
@@ -561,12 +559,25 @@ def replay(args) -> int:
     return 0 if receipt["status"] == "pass" else 1
 
 
+def verify_against_trusted(corpus: Corpus, args) -> dict:
+    return corpus.verify(trusted=trusted_lock(args.mc_version, args.trusted_ref, REPO_ROOT))
+
+
+def integrity_summary(state: dict, args) -> dict:
+    return {"locked_cases": len(state["latest"]), "manifest_entries": state["entries"],
+            "manifest_head": state["manifest_head"], "problems": state["problems"],
+            "unanchored": sorted({e["case"] for e in state["unanchored"]}), "trusted_ref": args.trusted_ref,
+            "re_recorded_since_trusted": state["re_recorded"], "added_since_trusted": state["added"]}
+
+
 def verify(args) -> int:
     corpus = Corpus(corpus_root(args.corpus), args.mc_version)
-    state = corpus.verify()
-    print(json.dumps({"corpus": str(corpus.dir), "locked_cases": len(state["latest"]),
-                      "manifest_entries": state["entries"], "problems": state["problems"],
-                      "unanchored": sorted({e["case"] for e in state["unanchored"]})}, indent=1))
+    try:
+        state = verify_against_trusted(corpus, args)
+    except CorpusError as error:
+        print(f"quirk-parity verify: {error}")
+        return 1
+    print(json.dumps({"corpus": str(corpus.dir), **integrity_summary(state, args)}, indent=1))
     return 1 if state["problems"] else 0
 
 
@@ -578,6 +589,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[str, argparse.Namespace]:
     parser.add_argument("--mc-version", default=DEFAULT_MC)
     parser.add_argument("--corpus", default=None, help="corpus root (default KRASNOKAMEN_ORACLE_CORPUS "
                                                        "or <work>/oracle-corpus)")
+    parser.add_argument("--trusted-ref", default="main",
+                        help="Git ref whose corpus lock this tree may only extend (default main)")
     if command != "verify":
         parser.add_argument("--out", type=Path, required=True)
         parser.add_argument("--scenario", action="append", default=[])

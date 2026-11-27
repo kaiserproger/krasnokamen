@@ -17,6 +17,11 @@ that produced it. Replay fails closed when a locked version is missing or edited
 a manifest line or the chain was altered, or when a lock line was dropped. Recording
 appends to both files; a case only changes through ``re-record`` (new version with a
 stated reason; the old version, its lock line and the old manifest stay).
+
+The lock is also checked against the trusted Git baseline (``main``): every lock line
+there must still be here, so dropping a newer version's line cannot roll a case back,
+and a case whose replayed version differs from the baseline's must have reached it by
+``re-record`` with a reason. Cases the baseline does not have yet are listed as added.
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -68,22 +74,38 @@ def lock_line(mc_version: str, entry: dict) -> str:
                       "sha256": entry["sha256"], "scenario_sha256": entry["scenario_sha256"]}).decode()
 
 
-def read_lock(mc_version: str, path: Path = LOCK) -> list[dict]:
-    if not path.is_file():
-        return []
+def parse_lock(text: str, mc_version: str, source: str) -> list[dict]:
     rows = []
-    for number, raw in enumerate(path.read_text().splitlines(), 1):
+    for number, raw in enumerate(text.splitlines(), 1):
         if not raw.strip():
             continue
         try:
             row = json.loads(raw)
         except ValueError as error:
-            raise CorpusError(f"{path}:{number}: not JSON: {error}") from error
+            raise CorpusError(f"{source}:{number}: not JSON: {error}") from error
         if set(row) != {"mc", "case", "version", "sha256", "scenario_sha256"}:
-            raise CorpusError(f"{path}:{number}: unexpected lock fields {sorted(row)}")
+            raise CorpusError(f"{source}:{number}: unexpected lock fields {sorted(row)}")
         if row["mc"] == mc_version:
             rows.append(row)
     return rows
+
+
+def read_lock(mc_version: str, path: Path = LOCK) -> list[dict]:
+    return parse_lock(path.read_text(), mc_version, str(path)) if path.is_file() else []
+
+
+def trusted_lock(mc_version: str, ref: str, repo: Path, path: Path = LOCK) -> list[dict]:
+    """The lock as the trusted Git ref has it; a ref without the lock file has no locked cases."""
+    rel = path.resolve().relative_to(repo.resolve()).as_posix()
+    if subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=repo,
+                      capture_output=True, check=False).returncode:
+        raise CorpusError(f"trusted ref {ref!r} is not a commit of {repo}: name the baseline with --trusted-ref")
+    shown = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=repo, capture_output=True, text=True, check=False)
+    if shown.returncode == 0:
+        return parse_lock(shown.stdout, mc_version, f"{ref}:{rel}")
+    if "does not exist" in shown.stderr or "exists on disk, but not in" in shown.stderr:
+        return []
+    raise CorpusError(f"cannot read {ref}:{rel}: {shown.stderr.strip()}")
 
 
 class Corpus:
@@ -98,12 +120,14 @@ class Corpus:
             return []
         return self.manifest.read_text().splitlines()
 
-    def verify(self) -> dict[str, Any]:
+    def verify(self, trusted: list[dict] | None = None) -> dict[str, Any]:
         """Integrity of the manifest chain, every case file and the Git lock.
 
         Returns `latest` (case -> newest locked manifest entry), `problems` (any one fails
         the gate), `unanchored` (recorded by another tree, not in this tree's lock) and the
-        manifest head hash and length.
+        manifest head hash and length. With `trusted` (the lock of the trusted Git baseline)
+        it also returns `re_recorded` (cases replaying another version than the baseline, each
+        reached by re-record with a reason) and `added` (cases the baseline does not have).
         """
         problems: list[str] = []
         entries: list[dict] = []
@@ -150,8 +174,34 @@ class Corpus:
             if entry is not None:
                 latest[case] = entry
         anchored = {(row["case"], row["version"]) for rows in locked.values() for row in rows}
-        return {"latest": latest, "problems": problems, "manifest_head": prev, "entries": len(entries),
-                "unanchored": [entry for key, entry in by_key.items() if key not in anchored]}
+        state = {"latest": latest, "problems": problems, "manifest_head": prev, "entries": len(entries),
+                 "unanchored": [entry for key, entry in by_key.items() if key not in anchored]}
+        if trusted is not None:
+            state.update(self._against_trusted(trusted, locked, by_key, problems))
+        return state
+
+    def _against_trusted(self, trusted: list[dict], locked: dict[str, list[dict]],
+                         by_key: dict[tuple[str, int], dict], problems: list[str]) -> dict[str, Any]:
+        """Lines of the trusted lock still present; version changes since it made by re-record."""
+        here = {canonical(row) for rows in locked.values() for row in rows}
+        baseline: dict[str, int] = {}
+        for row in trusted:
+            baseline[row["case"]] = max(baseline.get(row["case"], 0), row["version"])
+            if canonical(row) not in here:
+                problems.append(f"lock line of {row['case']} v{row['version']} on the trusted baseline is gone: "
+                                "a recorded case only gains versions, it never rolls back")
+        re_recorded = []
+        for case, rows in sorted(locked.items()):
+            newest = max(row["version"] for row in rows)
+            if case not in baseline or newest == baseline[case]:
+                continue
+            steps = [by_key.get((case, version)) or {} for version in range(baseline[case] + 1, newest + 1)]
+            if any(step.get("op") != "re-record" or not step.get("reason") for step in steps):
+                problems.append(f"{case} replays v{newest} but the trusted baseline has v{baseline[case]}: "
+                                "a newer version of a recorded case needs `re-record --reason`")
+            re_recorded.append({"case": case, "from": baseline[case], "to": newest,
+                                "reasons": [step.get("reason") for step in steps]})
+        return {"re_recorded": re_recorded, "added": sorted(set(locked) - set(baseline))}
 
     def load(self, entry: dict) -> dict:
         data = (self.dir / entry["file"]).read_bytes()

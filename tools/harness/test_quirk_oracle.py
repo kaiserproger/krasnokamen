@@ -19,7 +19,7 @@ from unittest import mock
 
 from .quirk_parity import __main__ as oracle
 from .quirk_parity import compare, guard
-from .quirk_parity.corpus import Corpus, CorpusError, scenario_sha256
+from .quirk_parity.corpus import Corpus, CorpusError, read_lock, scenario_sha256, trusted_lock
 
 SCENARIO = {"id": "case-a", "family": "blocks", "box": [0, 0, 0, 1, 1, 1], "setup": ["setblock 0 0 0 stone"],
             "phases": [{"name": "p", "commands": [], "ticks": 1}],
@@ -111,6 +111,58 @@ class CorpusTests(unittest.TestCase):
         with self.assertRaises(CorpusError):
             self.corpus.append(doc("case-b"), op="record")
 
+    def rerecorded(self) -> list[dict]:
+        """case-a v1 and a re-recorded v2; returns the lock rows (the trusted baseline in these tests)."""
+        self.corpus.append(doc(), op="record")
+        self.corpus.append(dict(doc(version=2), supersedes={"version": 1}), op="re-record", reason="setup fixed")
+        return read_lock("26.3", self.lock)
+
+    def test_dropping_a_newer_version_line_rolls_back_only_without_the_trusted_baseline(self):
+        trusted = self.rerecorded()
+        self.lock.write_text(self.lock.read_text().splitlines()[0] + "\n")
+        # negative control: the tree's own lock alone accepts the rollback to v1
+        self.assertEqual(self.corpus.verify()["problems"], [])
+        state = self.corpus.verify(trusted=trusted)
+        self.assertTrue(any("case-a v2 on the trusted baseline is gone" in p for p in state["problems"]),
+                        state["problems"])
+
+    def test_a_newer_version_than_the_trusted_baseline_needs_a_rerecord_reason(self):
+        self.corpus.append(doc(), op="record")
+        trusted = read_lock("26.3", self.lock)
+        self.corpus.append(doc(version=2), op="record")  # a fix appending v2 of an existing case
+        state = self.corpus.verify(trusted=trusted)
+        self.assertTrue(any("replays v2 but the trusted baseline has v1" in p for p in state["problems"]),
+                        state["problems"])
+
+    def test_rerecords_and_added_cases_since_the_trusted_baseline_are_listed(self):
+        self.corpus.append(doc(), op="record")
+        trusted = read_lock("26.3", self.lock)
+        self.corpus.append(dict(doc(version=2), supersedes={"version": 1}), op="re-record", reason="setup fixed")
+        self.corpus.append(doc("case-b"), op="record")
+        state = self.corpus.verify(trusted=trusted)
+        self.assertEqual(state["problems"], [])
+        self.assertEqual(state["re_recorded"], [{"case": "case-a", "from": 1, "to": 2, "reasons": ["setup fixed"]}])
+        self.assertEqual(state["added"], ["case-b"])
+
+    def test_trusted_lock_reads_the_ref_and_fails_closed_on_an_unknown_ref(self):
+        repo = self.tmp / "repo"
+        lock = repo / "tools" / "corpus-lock.jsonl"
+        lock.parent.mkdir(parents=True)
+        git = lambda *args: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                                           cwd=repo, check=True, capture_output=True)
+        git("init", "-q", "-b", "main")
+        (repo / "README").write_text("x\n")
+        git("add", "README")
+        git("commit", "-q", "-m", "no lock yet")
+        self.assertEqual(trusted_lock("26.3", "main", repo, lock), [])
+        self.corpus.append(doc(), op="record")
+        lock.write_text(self.lock.read_text())
+        git("add", "tools/corpus-lock.jsonl")
+        git("commit", "-q", "-m", "lock")
+        self.assertEqual(trusted_lock("26.3", "main", repo, lock), read_lock("26.3", self.lock))
+        with self.assertRaises(CorpusError):
+            trusted_lock("26.3", "no-such-ref", repo, lock)
+
 
 class ReplayTests(unittest.TestCase):
     def setUp(self):
@@ -122,7 +174,8 @@ class ReplayTests(unittest.TestCase):
         self.patches = [mock.patch("tools.harness.quirk_parity.corpus.LOCK", self.lock),
                         mock.patch.object(oracle, "LOCK", self.lock),
                         mock.patch.object(oracle, "SCENARIO_DIR", self.scenarios),
-                        mock.patch.object(oracle, "KNOWN_DIFFS", self.tmp / "known-diffs.json")]
+                        mock.patch.object(oracle, "KNOWN_DIFFS", self.tmp / "known-diffs.json"),
+                        mock.patch.object(oracle, "trusted_lock", return_value=[])]
         for patch in self.patches:
             patch.start()
         self.addCleanup(lambda: [patch.stop() for patch in self.patches])
@@ -132,7 +185,7 @@ class ReplayTests(unittest.TestCase):
 
     def replay(self, krasnokamen: dict) -> tuple[int, dict, mock.Mock]:
         args = SimpleNamespace(out=self.tmp / "out", corpus=str(self.tmp / "corpus"), mc_version="26.3",
-                               scenario=[], family=[], restart_fault=None)
+                               scenario=[], family=[], restart_fault=None, trusted_ref="main")
         with mock.patch.object(oracle, "run_krasnokamen", return_value=krasnokamen) as runner:
             code = oracle.replay(args)
         return code, json.loads((self.tmp / "out" / "receipt.json").read_text()), runner
@@ -151,7 +204,7 @@ class ReplayTests(unittest.TestCase):
         (self.scenarios / "case-b.json").write_text(json.dumps(dict(SCENARIO, id="case-b")))
         args = SimpleNamespace(out=self.tmp / "rec", corpus=str(self.tmp / "corpus"), mc_version="26.3",
                                scenario=["case-b"], family=[], jar=str(jar), java=None, reason=None,
-                               fuzz_seed=[], fuzz_cells=64, fuzz_style="mixed")
+                               fuzz_seed=[], fuzz_cells=64, fuzz_style="mixed", trusted_ref="main")
         with mock.patch.object(oracle, "run_vanilla") as vanilla, \
                 mock.patch.object(oracle, "resolve_java", return_value="/bin/true"), \
                 mock.patch.object(oracle, "java_version", return_value="test"):
