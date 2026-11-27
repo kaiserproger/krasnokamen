@@ -76,10 +76,12 @@ Check: `git -C <worktree> log -1 --format=%H` is the head you report and
 **A pipeline hid the failure it should have reported.** A piped test run was
 read as green from the last command's status (2026-11-23), and a pin-citation
 scan with `rg -o -h` printed nothing, so a cited crash pin was classified
-uncited and planned for deletion (2026-11-27). Use `set -o pipefail`, read the
-command's own exit (`${PIPESTATUS[0]}` or the harness `result.json`), and give
-every scan a positive control that must be found. Check: break it once (make
-the build fail, hide a known citation) and see the check fail.
+uncited and planned for deletion (2026-11-27). The opposite also bit deploy
+scripts: under `set -e` a `| grep -v` filter with empty output exits 1 and stops
+the script. Use `set -o pipefail`, read the command's own exit
+(`${PIPESTATUS[0]}` or the harness `result.json`), and give every scan a positive
+control that must be found. Check: break it once (make the build fail, hide a
+known citation) and see the check fail.
 
 **A relayed number was wrong.** An owner decision (D60, 2026-11-19) quoted
 "96/96 green" for a driver that number never described and an 8/8 helper count
@@ -87,6 +89,14 @@ for the failed script, both passed along from other agents' reports. Never
 forward an agent's or advisor's claim as fact: read the receipt or the
 `file:line` yourself. Check: every number in a report names the receipt it
 came from.
+
+**Release notes claimed more than the receipts showed.** RC4's Windows note
+rested on three runs of which only two used fresh profiles, and three of the four
+RC5 review rejections were claim errors, not code. Every note claim names its
+receipt and run count, read from the receipt itself; say "3 of 3", not "always",
+and "not run" for an unrun platform. Check: `.analysis/releases/<tag>/claims.md`
+maps each sentence to a receipt before review
+([release text](development/release-and-tags.md#core-release-cut)).
 
 ## The owner host
 

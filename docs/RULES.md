@@ -59,6 +59,8 @@ Design choices are in [DECISIONS.md](../DECISIONS.md), mistakes already made in
 - Main commits small Conventional Commits often and pushes core and sibling `main` after merged slices; a not-yet-green commit may land, a broken push gets a follow-up fix. (2026-11-07, 2026-11-15)
 - Workers commit only on their own worktree branch and never push. Never change Git configuration, never reset, clean or stage unrelated dirty files, and keep hooks and signing.
 - Tags, releases and publication need the owner's explicit authorization and two read-only release reviewers; the advisor issues no `[approved]`. (2026-11-07)
+- No client release or demo with known bugs; a failed minimum gate leaves the release a draft. Prefer a new tag over moving an announced one, and never roll back published refs without authorization. (2026-10-24)
+- No bots on the public test server's live world without owner approval; deploys wait until the owner says deploy. (2026-10-24)
 - Independent read-only review: ledger promotion batches of five or more rows; persistence, WAL, protocol, custody or battle-core changes before Main commits; client threading or entity tick at design and before merge. None for docs- or test-only changes; fixing review findings needs no second review. (2026-11-07, 2026-11-15)
 - Reviewers come from another vendor than the implementer (Sol, Opus, or an Opus + Sol committee with one collective verdict), and one standing committee reviews by area, not a reviewer per task. (D14, D15, D25)
 - Main alone checks the owner's open issues, hourly and before commits: `gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open`. (contract)
