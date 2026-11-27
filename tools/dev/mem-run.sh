@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Run one heavy command (cargo build/test/clippy/check, harness run, gradle) under a
 # hard memory cap inside solaris-heavy.slice (all heavy commands together <=25G).
-# No memory slots and no admission queue (owner 2026-10-28): every command starts at
-# once in its own scope, except that a compile command first waits for one of three
-# build tokens (owner 2026-11-11, see "Build tokens" below). Each scope registers its
+# No memory slots, no admission queue and no build tokens (owner 2026-10-28, D127
+# 2026-11-27: every command starts at once in its own scope; CPU is shared by the
+# jobserver, never queued). Each scope registers its
 # cgroup, expected peak and a preemptible flag;
 # heavy-watchdog.py (a user service this script starts) freezes the youngest
 # preemptible command only on real memory shortage (slice PSI or the slice hitting
@@ -45,7 +45,6 @@
 # Usage: mem-run.sh [-x] [-p] [-m 8G] command args...
 set -euo pipefail
 trap 'echo "mem-run: failed (exit $?) at line $LINENO" >&2' ERR
-args=("$@")  # passed again when a compile command re-execs under a build token
 mem=8G
 exclusive=0
 perf=0
@@ -70,7 +69,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
 # Release builds are pins (owner 2026-11-15): tools/dev/release-build-policy.sh refuses
 # `cargo build|test|run --release` and `--profile release*` unless tools/dev/pin-release,
-# the harness/ledger tooling or Main's override asks for one. Before any slot or token.
+# the harness/ledger tooling or Main's override asks for one. Before any slot.
 # shellcheck source=release-build-policy.sh
 source "$here/release-build-policy.sh"
 release_build_guard "$@"
@@ -108,104 +107,16 @@ cmd=("${key_words[@]:$i}")
 if [ "${cmd[0]:-}" = nice ]; then
   if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
 fi
-# A bad cancel grace must fail in a second, not after a token wait or an -x freeze (N12).
+# A bad cancel grace must fail in a second, not after an -x freeze (N12).
 _grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
 if ! awk -v g="$_grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0 && g + 0 <= 86400) }'; then
   echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds no larger than 86400, got '$_grace'" >&2
   exit 75
 fi
-# Build tokens (owner 2026-11-11): at most six compile commands run host-wide (owner
-# D124, 2026-11-27: raised from three to lift the launch limit while ten lanes wait;
-# CPU stays bounded by the shared jobserver at nproc and memory by each scope's
-# MemoryMax plus the watchdog).
-# Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
-# with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
-# pin-release, harness `run build|clippy|code-health|correctness|test|regressions|
-# regressions-client|java|standard-pack` and harness `ledger probe|promote`. Running built
-# binaries, gates and servers takes none. A compile re-execs this script under
-# slot-lock.py (the scene-slot mechanism), which blocks on every token at once (no
-# polling, no CPU) and leaves the won lock at fd 9: this runner keeps it, the scope
-# guardian gets a copy (--send-locks) and the command does not, so the token returns
-# once the scope is empty, on any exit, kill or OOM. KRASNOKAMEN_BUILD_TOKEN{,_PID} name the
-# token and the runner holding it; a compile whose ancestor process is that runner
-# (harness runs and pin-release run mem-run or cargo again inside) reuses it, so outer
-# holders never wait on their own nested builds. The token is taken before the -x
-# lock: a queued compile never delays a -x window, and a -x window never waits for a
-# token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
-# KRASNOKAMEN_BUILD_LANE=background: such compiles may take any token, but they give a
-# freed token to a waiting normal-lane compile first: a normal-lane waiter holds
-# tokens/priority.gate, a background waiter yields to it. Battle-video work (takes,
-# render, live-take pins) keeps the normal lane, so it gets the next freed token first:
-# that keeps the owner's 2026-11-12 goal ("the battle video gets resources first"). The
-# token-3 reserve for that goal stays removed (owner D27 p.7, 2026-11-18); restore a
-# reserve only for live-take windows if a take is starved. A four-token trial (owner D27
-# p.6) was ended at 12:1x on 2026-11-18: the 15-minute load stayed above 20 (21.3, 24.1, 23.9).
-# Six tokens (owner D124, 2026-11-27) supersede that trial's count: the fleet measures
-# load and the slice's own OOM counters in receipts/D124/disk/TOKENS.md instead of fixing
-# the limit in advance.
-build_tokens=6
-token_slots=$(seq -s, "$build_tokens")
-token_gate=(--hold-gate "$dir/tokens/priority.gate")
-if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
-  token_gate=(--yield-gate "$dir/tokens/priority.gate")
-fi
-tool=("${cmd[@]}")
-while :; do
-  # screen_audio_graph.sh (tools/harness) runs its argv inside a private PipeWire graph: look through it too,
-  # or a wrapped `ledger promote` gets no token and ledger.py refuses it (Main 2026-11-12).
-  case "${tool[0]:-}" in nice|ionice|timeout|env|screen_audio_graph.sh|*/screen_audio_graph.sh) ;; *) break ;; esac
-  w=${tool[0]}
-  tool=("${tool[@]:1}")
-  while [[ ${tool[0]:-} == -* || ${tool[0]:-} == *=* ]]; do
-    case ${tool[0]} in
-      -n|-c|-s|-k|-u|-C) tool=("${tool[@]:2}") ;;
-      *) tool=("${tool[@]:1}") ;;
-    esac
-  done
-  [ "$w" = timeout ] && tool=("${tool[@]:1}")  # its DURATION
-done
-compile=0
-case "${tool[0]:-}" in
-  cargo|*/cargo)
-    sub=
-    for w in "${tool[@]:1}"; do [[ $w == [-+]* ]] || { sub=$w; break; }; done
-    case "$sub" in
-      ''|fmt|fetch|tree|metadata|clean|update|generate-lockfile|locate-project|pkgid|search|help|version|verify-project) ;;
-      *) compile=1 ;;
-    esac ;;
-  gradle|*/gradle|gradlew|*/gradlew|pin-release|*/pin-release) compile=1 ;;
-  python|python3|python3.*|*/python|*/python3|*/python3.*)
-    if [[ ${tool[1]:-} == pin-release || ${tool[1]:-} == */pin-release ]]; then
-      compile=1
-    elif [ "${tool[1]:-}" = -m ] && [ "${tool[2]:-}" = tools.harness ]; then
-      case "${tool[3]:-} ${tool[4]:-}" in
-        "run build"|"run clippy"|"run code-health"|"run correctness"|"run test"|"run regressions"|\
-        "run regressions-client"|"run java"|"run standard-pack"|"ledger probe"|"ledger promote") compile=1 ;;
-      esac
-    fi ;;
-esac
-token_ancestor() {  # is the runner named by KRASNOKAMEN_BUILD_TOKEN_PID an ancestor of this one?
-  local p=$PPID want=${KRASNOKAMEN_BUILD_TOKEN_PID:-}
-  [[ $want =~ ^[0-9]+$ ]] || return 1
-  while [ "${p:-0}" -gt 1 ]; do
-    [ "$p" = "$want" ] && return 0
-    p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null) || p=0
-  done
-  return 1
-}
-token=none
-if [ "$compile" = 1 ]; then
-  if [ "${KRASNOKAMEN_BUILD_TOKEN_PID:-}" = "$$" ]; then
-    token=${KRASNOKAMEN_BUILD_TOKEN:-?}
-  elif token_ancestor; then
-    token="${KRASNOKAMEN_BUILD_TOKEN:-?}(reused)"
-  else
-    exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
-      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" "${token_gate[@]}" \
-      --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
-      -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
-  fi
-fi
+# Owner D127 (2026-11-27) removed build tokens entirely: no compile/gate/run admission
+# throttles remain. Every command starts at once; the shared jobserver (one token per
+# logical CPU) shares cores without queueing, and each scope's MemoryMax plus
+# heavy-watchdog bound memory. tools/dev/fleet-status shows what is running.
 slice=solaris-heavy.slice
 # Capacity is derived from the host (owner host since 2026-11-10: Aeza, 16 CPUs, 90 GiB):
 # the slice gets all RAM but 16 GiB kept for agents and the system, and every CPU, but
@@ -294,8 +205,8 @@ else
   # starts meanwhile always sees this command and waits for it. A command nested in a
   # running scope (a ledger promote's builds and gates) does not wait: the window
   # already waits for its ancestor, so waiting here deadlocked both (2026-11-12).
-  # The flock child never gets the build token (fd 9): when this runner was killed
-  # while waiting, an orphaned `flock -s 3` kept token 1 for 36 min (2026-11-15).
+  # The lock fd is not inherited by the flock child (9>&-): a runner killed while
+  # waiting must not leave an orphaned `flock -s 3` holding the -x window open.
   exec 3>"$dir/exclusive.lock"
   [ "$nested" = 1 ] || flock -s 3 9>&-
   if [ "$perf" = 1 ]; then
@@ -303,26 +214,45 @@ else
     flock 6 9>&-
   fi
 fi
-# Disk floor (owner, 2026-11-13: 250 GiB): below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
-# slot-gc --delete first. It takes each slot's pool lock itself (busy slots are
-# skipped), removes artifacts of removed trees and superseded incremental sessions,
-# then rotates idle slots in LRU order while still short. It never delays the command
-# by more than KRASNOKAMEN_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
-# error is printed and the command starts anyway. Not run for -x and -p, whose
-# windows are quiet measurements.
-if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
-  gc_root=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
-  gc_floor=$(( ${KRASNOKAMEN_SLOT_MIN_FREE_GB:-250} + 10 ))
-  gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
-  if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
-    echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
-    if gc_out=$(timeout "${KRASNOKAMEN_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 9>&- 2>&1); then
-      printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
-    else
-      gc_st=$?
-      printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
-      echo "mem-run: slot-gc failed (exit $gc_st); continuing" >&2
-    fi
+# Disk exhaustion guard (owner D127, 2026-11-27): free space is a safety limit, not a
+# launch budget. The 250 GiB floor is gone; the owner keeps >=280 GiB free by
+# *cleaning*, never by blocking runs. Automatic reclaim runs below
+# KRASNOKAMEN_DISK_GC_BELOW_GB (default 300): an ordinary command first asks slot-gc to
+# rotate idle slots, drop superseded incremental sessions and dead units, then
+# rechecks. slot-gc takes each slot's pool lock itself (busy slots are skipped) and
+# never delays the command by more than KRASNOKAMEN_SLOT_GC_TIMEOUT seconds (default
+# 120), and never fails it: an error is printed and the command starts anyway. Not run
+# for -x and -p, whose windows are quiet measurements. The only refusal is the
+# last-resort exhaustion guard below KRASNOKAMEN_DISK_REFUSE_BELOW_GB (default 20):
+# there world/WAL writes could fail, so the command does not start (exit 75).
+gc_root=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+gc_below=${KRASNOKAMEN_DISK_GC_BELOW_GB:-300}
+refuse_below=${KRASNOKAMEN_DISK_REFUSE_BELOW_GB:-20}
+disk_free() { df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9; }
+for v in "$gc_below" "$refuse_below"; do
+  case $v in
+    ''|*[!0-9]*) echo "mem-run: disk guard thresholds must be whole GiB, got gc='$gc_below' refuse='$refuse_below'" >&2; exit 75 ;;
+  esac
+done
+gc_free=$(disk_free)
+if [ -n "$gc_free" ] && [ "$gc_free" -lt "$refuse_below" ]; then
+  echo "mem-run: ${gc_free}G free on $gc_root, below the ${refuse_below}G exhaustion guard (owner D127); refusing to start (world/WAL writes would fail: free space first with slot-gc --delete, or reports cleanup)" >&2
+  exit 75
+fi
+if [ -n "$gc_free" ] && [ "$exclusive" = 0 ] && [ "$perf" = 0 ] && [ "$gc_free" -lt "$gc_below" ]; then
+  echo "mem-run: ${gc_free}G free, below ${gc_below}G: running slot-gc --delete on idle slots" >&2
+  gc_target=$(( gc_below > 10 ? gc_below - 10 : 0 ))
+  if gc_out=$(timeout "${KRASNOKAMEN_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --min-free-gb "$gc_target" --lock-dir "$dir" 3>&- 6>&- 9>&- 2>&1); then
+    printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
+  else
+    gc_st=$?
+    printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
+    echo "mem-run: slot-gc failed (exit $gc_st); continuing" >&2
+  fi
+  gc_free=$(disk_free)
+  if [ -n "$gc_free" ] && [ "$gc_free" -lt "$refuse_below" ]; then
+    echo "mem-run: ${gc_free}G free on $gc_root after slot-gc, below the ${refuse_below}G exhaustion guard; refusing to start" >&2
+    exit 75
   fi
 fi
 # Target dir and its slot locks: see slot-select.sh (ownership of pooled slots,
@@ -444,7 +374,7 @@ if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$excl
 fi
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
-echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target token=$token expect=$((est_kib / 1024))MiB key='$key'" >&2
+echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf cpus=${cpu_pin[*]:-all} slice=$slice target=$target expect=$((est_kib / 1024))MiB key='$key'" >&2
 # The wrapper registers its scope, expectation, preemptible flag and target dir with
 # the watchdog (the watchdog never freezes a command whose target dir another running
 # command uses: cargo's build lock would chain them), releases the shared -x lock,
@@ -454,7 +384,7 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
 unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
-# The grace was validated next to argument parsing (before any token wait); pass it on unchanged.
+# The grace was validated next to argument parsing; pass it on unchanged.
 grace=$_grace
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
@@ -483,7 +413,7 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
 notify start
 "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
 # A cancellation must reach the whole scope, not only the direct child: a descendant that ignores
-# TERM would otherwise hold the wrapper in `wait`, the scope alive and the build token unspent until
+# TERM would otherwise hold the wrapper in `wait` and the scope alive until
 # a SIGKILL (#G5, CS341). Forward TERM to every process in the scope cgroup and ask the guardian to
 # escalate to cgroup.kill after its grace, so the wrapper always ends.
 cancel() {

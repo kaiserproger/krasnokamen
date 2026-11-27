@@ -59,7 +59,7 @@ def seed_snapshot(world):
 
 
 def test(tree, out, crate, name):
-    env = dict(os.environ, KRASNOKAMEN_BUILD_LANE='background', CORE_UNLOAD_OUT=str(out))
+    env = dict(os.environ, CORE_UNLOAD_OUT=str(out))
     # Never use pooled output paths: their lease ends before cargo returns to
     # this caller. A private per-tree target cannot be rebuilt by another lane.
     target = Path('/run/media/kaiserroman/games/solaris-work/targets') / ('CoreUnloadImpl-bytecheck-' + digest(str(tree).encode())[:16])
