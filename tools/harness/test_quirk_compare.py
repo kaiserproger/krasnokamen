@@ -230,6 +230,18 @@ class FuzzVerdictShapeTests(unittest.TestCase):
             out["trace"] = True
         return out
 
+    def test_configured_fuzz_waiver_is_refused_even_when_replay_matches(self):
+        from .quirk_parity import __main__ as qmain
+
+        fuzz_scenario = self.fuzz_scenario(CELL_SPEC)
+        replay = {"command_log": [], "phases": [{"name": name, "snapshot": snapshot(1)}
+                                                for name in ("setup", "repower")]}
+        self.assertEqual(qmain.verdict(fuzz_scenario, [replay, replay], replay)["status"], "pass")
+        waiver = {"reason": "old observation", "rows": [["repower/cells/0/blocks/0,0,0", "stone", "air"]]}
+        result = qmain.verdict(fuzz_scenario, [replay, replay], replay, known=waiver)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("known-diffs.json does not support waivers for fuzz cases", result["reasons"])
+
     def test_cell_count_mismatch_fails_the_fuzz_gate(self):
         from .quirk_parity import __main__ as qmain
 

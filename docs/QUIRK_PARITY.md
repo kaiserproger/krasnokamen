@@ -125,9 +125,12 @@ tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version t
   promotes (HEAD plus uncommitted state) against the same tree with the whole fix
   reversed, test hunks included. A fix that no longer reverses there as a whole is
   refused ("fix no longer reverses on the candidate; use patch: mode"); no
-  historical commit stands in for the candidate. Uncommitted edits to test
-  files, inline Rust test content or `.config/nextest.toml` are refused before
-  listing: otherwise they would affect both trees and hide a missing test.
+  historical commit stands in for the candidate. The index and candidate must
+  not contain uncommitted test edits (including inline and conditionally
+  compiled tests) or changes to Cargo manifests, lockfiles, `build.rs`,
+  `.cargo/`, toolchain pins or nextest config. Those changes would affect both
+  comparison trees and could hide a missing test. Uncommitted production-only
+  patches and other non-test edits are still supported.
   Test identities are compared in `default` and (when configured) `ci`
   separately with `cargo nextest list --all-targets` for each touched package
   on both trees, or for the whole workspace when the fix touches a `Cargo.toml`
@@ -159,8 +162,9 @@ the reason (with repro or ledger row) and `rows`, the exact triples
 `[path, vanilla, krasnokamen]` copied from `difference_rows`. Match every row,
 including later rows grouped under the same mismatch id. The id is for
 diagnostics only. Any unlisted row fails, and so does a row that no longer
-occurs as pinned; remove it when the gap
-closes. Never make Krasnokamen stricter than vanilla to remove a difference.
+occurs as pinned; remove it when the gap closes. Seeded fuzz cases do not support
+waivers; the gate rejects a configured waiver instead of ignoring it. Never
+make Krasnokamen stricter than vanilla to remove a difference.
 
 ## Scenario file (`tools/harness/quirk_parity/scenarios/*.json`)
 
