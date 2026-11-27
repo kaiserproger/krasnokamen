@@ -84,15 +84,26 @@ fn push_framed(
     });
 }
 
+/// Encode `packet` and frame it once; an oversized packet is dropped like an
+/// encode failure.
+fn push_encoded<P: Packet>(
+    out: &mut Vec<PlannedPacket>,
+    connection: ConnectionId,
+    packet: &P,
+    reliable: bool,
+) {
+    let mut body = Vec::new();
+    if crate::vanilla_items::encode(connection, packet, &mut body).is_ok() {
+        push_framed(out, connection, P::ID, &body, reliable);
+    }
+}
+
 pub(crate) fn push_reliable<P: Packet>(
     out: &mut Vec<PlannedPacket>,
     connection: ConnectionId,
     packet: &P,
 ) {
-    let mut body = Vec::new();
-    if crate::vanilla_items::encode(connection, packet, &mut body).is_ok() {
-        push_framed(out, connection, P::ID, &body, true);
-    }
+    push_encoded(out, connection, packet, true);
 }
 
 pub(crate) fn push_best_effort<P: Packet>(
@@ -100,8 +111,5 @@ pub(crate) fn push_best_effort<P: Packet>(
     connection: ConnectionId,
     packet: &P,
 ) {
-    let mut body = Vec::new();
-    if crate::vanilla_items::encode(connection, packet, &mut body).is_ok() {
-        push_framed(out, connection, P::ID, &body, false);
-    }
+    push_encoded(out, connection, packet, false);
 }

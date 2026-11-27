@@ -2,29 +2,39 @@
 //! snapshot.
 use super::*;
 
+/// 26.3 `ArmorStand` data index that holds its client flags.
+const ARMOR_STAND_DATA_INDEX: u8 = 15;
+/// Shared entity flags; `0x20` makes the stand invisible.
+const INVISIBLE_FLAG: i8 = 0x20;
+/// Armor-stand client flags; `0x10` turns the stand into a marker.
+const ARMOR_STAND_MARKER_FLAG: i8 = 0x10;
+
+/// Release one seat: clear the passenger list, then remove the stand.
+fn push_seat_release(viewer: &ViewerState, out: &mut Vec<PlannedPacket>, seat: i32) {
+    push_best_effort(
+        out,
+        viewer.connection,
+        &mc_protocol::packets::play::ClientboundSetPassengers {
+            vehicle_id: seat,
+            passenger_ids: Vec::new(),
+        },
+    );
+    push_best_effort(
+        out,
+        viewer.connection,
+        &RemoveEntities {
+            entity_ids: vec![seat],
+        },
+    );
+}
+
 pub(super) fn clear_seats(
     viewer: &mut ViewerState,
     out: &mut Vec<PlannedPacket>,
     credit: &mut WorldCredit,
 ) -> bool {
     while let Some((&rider, &(seat, _))) = viewer.seats.iter().next() {
-        if !try_push(out, credit, |out| {
-            push_best_effort(
-                out,
-                viewer.connection,
-                &mc_protocol::packets::play::ClientboundSetPassengers {
-                    vehicle_id: seat,
-                    passenger_ids: Vec::new(),
-                },
-            );
-            push_best_effort(
-                out,
-                viewer.connection,
-                &RemoveEntities {
-                    entity_ids: vec![seat],
-                },
-            );
-        }) {
+        if !try_push(out, credit, |out| push_seat_release(viewer, out, seat)) {
             return false;
         }
         viewer.seats.remove(&rider);
@@ -37,33 +47,17 @@ pub(super) fn plan_seats(
     out: &mut Vec<PlannedPacket>,
     credit: &mut WorldCredit,
 ) {
-    loop {
-        let removed = viewer.seats.iter().find_map(|(&rider, &(id, pos))| {
-            (viewer
-                .tracked_entities
-                .get(&rider)
-                .and_then(|tracked| tracked.appearance.villager_seat)
-                != Some(pos))
-            .then_some((rider, id))
-        });
-        let Some((rider, id)) = removed else { break };
-        if !try_push(out, credit, |out| {
-            push_best_effort(
-                out,
-                viewer.connection,
-                &mc_protocol::packets::play::ClientboundSetPassengers {
-                    vehicle_id: id,
-                    passenger_ids: Vec::new(),
-                },
-            );
-            push_best_effort(
-                out,
-                viewer.connection,
-                &RemoveEntities {
-                    entity_ids: vec![id],
-                },
-            );
-        }) {
+    // Seats whose rider is no longer seated where the ride put them (or that
+    // left tracking) are released before new seats are planned.
+    while let Some((rider, id)) = viewer.seats.iter().find_map(|(&rider, &(id, pos))| {
+        (viewer
+            .tracked_entities
+            .get(&rider)
+            .and_then(|tracked| tracked.appearance.villager_seat)
+            != Some(pos))
+        .then_some((rider, id))
+    }) {
+        if !try_push(out, credit, |out| push_seat_release(viewer, out, id)) {
             return;
         }
         viewer.seats.remove(&rider);
@@ -111,11 +105,11 @@ pub(super) fn plan_seats(
                     values: vec![
                         WireEntityDataValue::Byte {
                             index: ENTITY_DATA_SHARED_FLAGS_INDEX,
-                            value: 0x20,
+                            value: INVISIBLE_FLAG,
                         },
                         WireEntityDataValue::Byte {
-                            index: 15,
-                            value: 0x10,
+                            index: ARMOR_STAND_DATA_INDEX,
+                            value: ARMOR_STAND_MARKER_FLAG,
                         },
                     ],
                 },

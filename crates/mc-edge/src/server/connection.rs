@@ -1,5 +1,4 @@
 //! Per-connection lifecycle: accept, login/config/play handling, play writer.
-//! Moved verbatim from `server.rs`.
 
 use super::*;
 

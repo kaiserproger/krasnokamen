@@ -1,5 +1,4 @@
 //! Tick output pump: outbox routing, publication and join waiting.
-//! Moved verbatim from `server.rs`.
 
 use super::*;
 use mc_domain::EntityId;
