@@ -251,39 +251,51 @@ class VanillaOracle:
                 return int(found.group(1))
         raise VanillaError(f"`time query gametime` printed no game time; see {self.log_path}")
 
+    def load_ticks(self, ticks: int) -> None:
+        """Let chunks load before the scenario starts; these ticks are not scenario ticks."""
+        self.send(f"tick sprint {ticks}")
+        self.expect("Sprint completed")
+
     def sprint(self, ticks: int) -> None:
         """Advance the frozen world by exactly `ticks` game ticks.
 
-        From a frozen world `tick sprint N` runs N + 1 ticks: the sprint check reads the frozen
-        tick's stale `runGameElements`, so the first unfrozen tick is not counted
-        (ServerTickRateManager.checkShouldSprintThisTick, 26.3). One tick is `tick step 1`, which
-        logs nothing once its tick ran, and console commands run between ticks, so an auto impulse
-        command block at the bottom of `step_marker` says when it did: its scheduled tick runs
-        only in that stepped tick. The game time proves the count.
+        `tick sprint N` runs N + 1 ticks when the tick before it was frozen and N when that tick
+        ran: the sprint check reads the previous tick's `runGameElements`
+        (ServerTickRateManager.checkShouldSprintThisTick, 26.3), and console commands run between
+        ticks, so which case applies is timing. The driver sprints N - 1 and adds one marked step
+        when the game time shows N - 1; one tick is that step alone. The game time proves the count.
         """
         if ticks <= 0:
             return
         before = self.game_time()
-        if ticks == 1:
-            if self.step_marker is None:
-                raise VanillaError("a one-tick step needs `step_marker`, a resident column")
-            x, z = self.step_marker
-            self._sync += 1
-            marker = f"QP_STEP_{self._sync}"
-            problems = self.run_checked(
-                [f'setblock {x} {MIN_Y} {z} minecraft:command_block{{auto:1b,Command:"say {marker}"}}'])
-            self.send("tick step 1")
-            self.expect(f"[@] {marker}")
-            problems += self.run_checked([f"setblock {x} {MIN_Y} {z} minecraft:air"])
-            if problems:
-                raise VanillaError(f"one-tick step marker refused: {problems}; see {self.log_path}")
-        else:
+        if ticks > 1:
             self.send(f"tick sprint {ticks - 1}")
             self.expect("Sprint completed")
+        if ticks == 1 or self.game_time() - before == ticks - 1:
+            self._step_one()
         ran = self.game_time() - before
         if ran != ticks:
             raise VanillaError(f"the world advanced {ran} game ticks instead of {ticks}; see {self.log_path}")
         self.game_ticks += ticks
+
+    def _step_one(self) -> None:
+        """`tick step 1`, returning once that tick ran.
+
+        The step logs nothing when its tick has run, so an auto impulse command block at the
+        bottom of `step_marker` says a marker: its scheduled tick runs only in the stepped tick.
+        """
+        if self.step_marker is None:
+            raise VanillaError("a one-tick step needs `step_marker`, a resident column")
+        x, z = self.step_marker
+        self._sync += 1
+        marker = f"QP_STEP_{self._sync}"
+        problems = self.run_checked(
+            [f'setblock {x} {MIN_Y} {z} minecraft:command_block{{auto:1b,Command:"say {marker}"}}'])
+        self.send("tick step 1")
+        self.expect(f"[@] {marker}")
+        problems += self.run_checked([f"setblock {x} {MIN_Y} {z} minecraft:air"])
+        if problems:
+            raise VanillaError(f"one-tick step marker refused: {problems}; see {self.log_path}")
 
     def freeze(self) -> None:
         self.run("tick freeze")

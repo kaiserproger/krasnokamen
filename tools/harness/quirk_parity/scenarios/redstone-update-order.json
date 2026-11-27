@@ -36,7 +36,7 @@
    "commands": [
     "setblock 1 64 2 minecraft:lever[face=floor,facing=east,powered=true]"
    ],
-   "ticks": 12
+   "ticks": 16
   },
   {
    "name": "torch-off",
@@ -64,7 +64,7 @@
    "commands": [
     "setblock 1 64 2 minecraft:lever[face=floor,facing=east,powered=false]"
    ],
-   "ticks": 12
+   "ticks": 16
   }
  ],
  "compare": {

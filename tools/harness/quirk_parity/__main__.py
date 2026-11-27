@@ -118,7 +118,7 @@ def _prepare(oracle: VanillaOracle, boxes: list, *, restarted: bool) -> None:
             if any("QP_LOADED" in line for line in lines):
                 break
             if not restarted:
-                oracle.sprint(20)
+                oracle.load_ticks(20)
         else:
             raise VanillaError("forceloaded box never became resident")
     if restarted:

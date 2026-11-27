@@ -33,12 +33,13 @@ refused and the tests passed. Format and protocol tests read bytes vanilla
 produced (a generated world, a wire probe), not bytes we wrote. Check: each
 format has at least one fixture from a real vanilla run.
 
-**The vanilla oracle ran one tick more than the scenario said.** From a frozen
-world `tick sprint N` runs N + 1 ticks (26.3 `ServerTickRateManager` does not
-count the first unfrozen tick), so the first 26.3 quirk corpus (2026-11-27) was
-recorded one tick late per phase and Krasnokamen looked a tick slow (TNT fuse 89
-against 90). An oracle's step count is measured, not assumed. Check: the vanilla
-driver compares `time query gametime` before and after every phase.
+**The vanilla oracle ran one tick more than the scenario said.** `tick sprint N`
+runs N + 1 ticks when the tick before it was frozen (26.3 `ServerTickRateManager`
+reads the previous tick's state) and N when it ran, so the first 26.3 quirk corpus
+(2026-11-27) was recorded up to a tick late per phase and per traced row, and
+Krasnokamen looked a tick slow (TNT fuse 89 against 90). An oracle's step count is
+measured, not assumed. Check: the vanilla driver compares `time query gametime`
+before and after every phase.
 
 **The tests were green and the feature was broken.** The tests of a new config
 key (D52, 2026-11-19) only parsed the key and never saw the value reach the

@@ -156,13 +156,14 @@ closes. Never make Krasnokamen stricter than vanilla to remove a difference.
 Both servers execute the same console command strings. Vanilla: a void superflat
 world, `tick freeze`, `forceload` of every box, exactly N ticks per phase, then
 `save-all flush` and the saved Anvil files are decoded
-(`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items). From a
-frozen world `tick sprint N` runs N + 1 ticks (the sprint check reads the frozen
-tick's stale state and does not count the first unfrozen tick), so the driver
-sends `tick sprint N-1`, or `tick step 1` for one tick (an auto command block at
-the bottom of the first box's column says when that tick ran, since console
-commands run between ticks and the step logs nothing), and fails unless
-`time query gametime` advanced by exactly N. A restart phase stops vanilla with
+(`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items).
+`tick sprint N` runs N + 1 ticks when the tick before it was frozen and N when
+that tick ran (the sprint check reads the previous tick's state), and console
+commands run between ticks, so which applies is timing. The driver sprints N - 1
+and adds one `tick step 1` when the game time shows N - 1; an auto command block
+at the bottom of the first box's column says when the stepped tick ran, since the
+step itself logs nothing. Every phase fails unless `time query gametime`
+advanced by exactly N. A restart phase stops vanilla with
 `stop` (every loaded chunk saved) and reopens the same world; vanilla does not
 persist `tick freeze`, so restart scenarios must have settled before the restart.
 Krasnokamen: the same commands through the console command path, `run_tick` per
