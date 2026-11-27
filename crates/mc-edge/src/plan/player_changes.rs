@@ -7,6 +7,7 @@
 
 use mc_core::boundary::{BossBarChange, PlayerAttribute, PlayerChange, TitleChange};
 use mc_data::item_stack::ItemStack;
+use mc_domain::ConnectionId;
 use mc_protocol::codec::Identifier;
 use mc_protocol::packets::play::{
     AttributeId, AttributeModifierOperation, BlockChangedAck, BlockUpdate, BossOperation,
@@ -912,7 +913,7 @@ fn plan_merchant_offers(
 fn plan_recipes_reloaded(
     viewer: &mut ViewerState,
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     reload: &mc_core::boundary::RegistryReload,
 ) {
     if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
@@ -928,7 +929,7 @@ fn plan_recipes_reloaded(
 fn plan_recipes_unlocked(
     viewer: &mut ViewerState,
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     registry: &mc_core::boundary::RecipeSource,
     recipes: &[String],
     replace: bool,
@@ -960,7 +961,7 @@ fn plan_recipes_unlocked(
 /// packets that make the client look the block up (sign editor, block event).
 fn push_block_update(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     position: i64,
     state_id: u32,
 ) {
@@ -978,7 +979,7 @@ fn push_block_update(
 /// ack, so its block is installed before vanilla looks up the block entity.
 fn plan_sign_editor(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     block_pos: mc_core::boundary::BlockPos,
     front: bool,
     block: u32,
@@ -999,7 +1000,7 @@ fn plan_sign_editor(
 /// state, then the event itself.
 fn plan_block_event(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     block_pos: mc_core::boundary::BlockPos,
     block: u32,
     state: u32,
@@ -1023,7 +1024,7 @@ fn plan_block_event(
 /// The death screen's combat-kill message, when the component encodes.
 fn push_death(
     out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
+    conn: ConnectionId,
     player_id: i32,
     message: &mc_nbt::Tag,
 ) {
@@ -1043,11 +1044,7 @@ fn push_death(
 /// A styled chat line. A component is any NBT root: a bare string
 /// (`tellraw @s "text"`) and a list are valid vanilla components, so the
 /// compound-only `write_network` would drop them.
-fn push_styled_chat(
-    out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
-    content: &mc_nbt::Tag,
-) {
+fn push_styled_chat(out: &mut Vec<PlannedPacket>, conn: ConnectionId, content: &mc_nbt::Tag) {
     let mut content_nbt = Vec::new();
     if mc_nbt::write_network_value(&mut content_nbt, content).is_ok() {
         push_reliable(
@@ -1062,11 +1059,7 @@ fn push_styled_chat(
 }
 
 /// The game-mode event and the abilities that go with it.
-fn plan_game_mode(
-    out: &mut Vec<PlannedPacket>,
-    conn: mc_core::boundary::ConnectionId,
-    game_mode: u8,
-) {
+fn plan_game_mode(out: &mut Vec<PlannedPacket>, conn: ConnectionId, game_mode: u8) {
     push_reliable(
         out,
         conn,
