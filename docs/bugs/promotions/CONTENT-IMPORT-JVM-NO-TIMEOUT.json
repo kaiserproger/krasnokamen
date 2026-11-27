@@ -1,0 +1,64 @@
+{
+  "id": "CONTENT-IMPORT-JVM-NO-TIMEOUT",
+  "verdict": "promoted",
+  "fix_commit": "patch:3a8e252a227f42a396d6a694c6539ca098fa1bb8dab1fa6a87d8dc39c9a81ead",
+  "fix_commit_full": "patch:3a8e252a227f42a396d6a694c6539ca098fa1bb8dab1fa6a87d8dc39c9a81ead",
+  "promoted_at": "2026-11-27T09:38:40+00:00",
+  "tree_head": "7953824376652934793d90358c2b2689f1e1a8c9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "fdfa7cfd18571c9ddc30d3877a5213ca79bbfc9bd87249d9d7ef39f975375fa8",
+  "control_tree_head": "7953824376652934793d90358c2b2689f1e1a8c9",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "3a8e252a227f42a396d6a694c6539ca098fa1bb8dab1fa6a87d8dc39c9a81ead",
+  "reversed_files": [
+    "crates/mc-edge/src/content_import.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:content_import::tests::a_bounded_child_returns_its_output": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_dropped_jvm_child_is_killed": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_stalled_jvm_child_is_killed_at_the_deadline": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/content_import_tests.rs",
+        "line": 551,
+        "error": "panic",
+        "class": "unknown"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:content_import::tests::a_bounded_child_returns_its_output": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_dropped_jvm_child_is_killed": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_stalled_jvm_child_is_killed_at_the_deadline": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D124PackCoreRows/.analysis/validation/20261127T084148-ledger-promote-gbjfejbp"
+}
