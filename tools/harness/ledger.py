@@ -3012,8 +3012,8 @@ def _cited_by_other_rows(root, ref, ident):
 def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None, dry_run=False, ctx, runner=run_refs):
     """Record the graphical negative control of an already promoted row (backfill).
 
-    Promotion of a client-visible row records its graphical control `unrunnable` when no build token
-    allowed a reverted-pin run (`docs/bugs/README.md`). This re-runs only those graphical refs against
+    Promotion of a client-visible row records its graphical control `unrunnable` when no reverted-pin
+    run was available at promotion time (`docs/bugs/README.md`). This re-runs only those graphical refs against
     the reversed tree, or validates a receipt of such a run, and writes the red into the row's
     promotion receipt. It never changes a row's status and never accepts a green or a non-assertion."""
     row = next((bug for bug in load_rows(root) if bug['id'] == ident), None)
