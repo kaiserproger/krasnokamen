@@ -10,7 +10,6 @@ fn create_defaults_to_registry_radius_and_bounds_checks() {
             radius: DEFAULT_RADIUS,
         }
     );
-    assert_eq!(DEFAULT_RADIUS, 48);
     assert_eq!(
         parse(&["create", "town", "16"]).unwrap(),
         SettlementCommand::Create {

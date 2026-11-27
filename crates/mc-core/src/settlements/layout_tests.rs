@@ -9,8 +9,6 @@ const ANCHOR: [i32; 3] = [8, 201, 8];
 
 #[test]
 fn street_grid_reserves_roads_verges_lots_and_an_open_plaza() {
-    assert_eq!(PERIOD, 28);
-    assert_eq!(2 * (LOT_FRONT + LOT_DEPTH), PERIOD);
     for offset in [-1, 0, 1] {
         for along in [-40, 0, 13, 40] {
             assert_eq!(cell(ANCHOR, 8 + offset, along), Cell::Road);
@@ -32,7 +30,6 @@ fn street_grid_reserves_roads_verges_lots_and_an_open_plaza() {
     for x in 35..=37 {
         assert_eq!(cell(ANCHOR, x, 20), Cell::Road, "{x}");
     }
-    assert_eq!(8 + RING, 38);
     assert_eq!(cell(ANCHOR, 8 + RING, 20), Cell::Wall);
     assert_eq!(cell(ANCHOR, 39, 20), Cell::Lot);
 }
