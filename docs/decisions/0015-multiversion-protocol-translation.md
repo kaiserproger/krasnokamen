@@ -38,8 +38,7 @@ were captured with `tools/dump-vanilla-protocol.sh`. Artifacts are ignored:
 The dump script's historical printed 26.1.2 label is not a version oracle;
 these filenames, manifest checksums and SharedConstants identify each input.
 Mojang jars, classes, reports and derived snapshots remain local, never in Git
-(ADRs [0001](0001-vanilla-data-as-runtime-input.md) and
-[0002](0002-vanilla-protocol-metadata-as-reference.md)).
+(decisions [C1 and C2](../../DECISIONS.md#content-and-protocol)).
 
 ### Adjacent wire deltas
 
@@ -138,7 +137,7 @@ Adding an up step changes edge codecs/profiles, not core authority.
 installs every endpoint using the existing verified Mojang download, datagen and
 vanilla RegistryData capture path, and a first start with no cache runs the same
 importer; an existing cache is only discovered and validated
-([ADR 0001](0001-vanilla-data-as-runtime-input.md),
+([decision C1](../../DECISIONS.md#content-and-protocol),
 `crates/mc-edge/src/content_cache.rs` `prepare_startup`). This does **not** depend on the proposed
 native importer in [ADR 0022](0022-content-without-java.md). Only canonical
 content needs the gameplay extractors; other endpoints need reports, their own

@@ -656,7 +656,7 @@ same step side by side with any viewer or a few lines of Pillow.
   textures load from game resources at runtime; entity rigs are authored by eye
   from public visuals with provenance notes outside Git; agents do not open
   decompiled sources. (Server packet ids and layouts come from local reports and
-  `javap`: [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md).)
+  `javap`: [decision C2](../../DECISIONS.md#content-and-protocol).)
 - The owner workstation cannot reach minecraft.wiki; reference files are fetched
   through the test server (`ssh "$KRASNOKAMEN_TEST_HOST" "curl ..."` into
   `/tmp/wiki-ref`, rsynced back), which needs the owner's SSH access.

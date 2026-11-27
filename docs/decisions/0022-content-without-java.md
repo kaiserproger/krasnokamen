@@ -4,9 +4,8 @@
 **Status:** Proposed. The native `RegistryData` encoder (step 1) is
 implemented and proven against vanilla captures but not wired into
 `content import`. Nothing else has changed; the owner's questions are at the end.  
-**Related:** [0001](0001-vanilla-data-as-runtime-input.md) (local vanilla
-content, no copied Mojang implementations),
-[0002](0002-vanilla-protocol-metadata-as-reference.md) (protocol provenance),
+**Related:** decisions [C1 and C2](../../DECISIONS.md#content-and-protocol)
+(local vanilla content, protocol provenance, no copied Mojang implementations),
 [0015](0015-multiversion-protocol-translation.md) (26.1.2 clients through a
 legacy cache), [client release and the singleplayer content bundle](../development/release-and-tags.md#client-release-and-the-singleplayer-content-bundle),
 the launcher in `../solaris-client` (`launcher/src/pins.rs`,
@@ -59,7 +58,7 @@ The facts bundle already carries the 26.3 `blocks.json`, `registries.json`,
 `block_light.json`, `block_mining.json` and item components. Not yet in it:
 `block_explosion.json`, `block_map_colors.json` and `overworld_expanded.json`.
 The last is not a file in any jar: the oracle runs vanilla's overworld biome
-builder, and ADR 0001 forbids porting that code, so it can only be a fact table.
+builder, and decision C2 forbids porting that code, so it can only be a fact table.
 The 775 path reads only the 26.1.2 registry dirs, tags, `registry_network_nbt`,
 `packets.json`, `registries.json` and `blocks.json`
 (`mc-edge/src/translation/mod.rs`, profile loading).
@@ -205,7 +204,7 @@ listed there as an undecided proposal.
   shares (`crates/mc-data/data/required_blocks.json` shows the repository
   already tracks some derived tables).
 - **Port the overworld biome builder** to drop `overworld_expanded.json`:
-  ADR 0001 forbids mechanically translating Mojang implementations.
+  decision C2 forbids mechanically translating Mojang implementations.
 
 ## Owner questions
 

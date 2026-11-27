@@ -6,8 +6,6 @@ design needs more than a row; each is linked from its row.
 
 | Record | Rows |
 | --- | --- |
-| [0001](0001-vanilla-data-as-runtime-input.md) vanilla data as local runtime input | C1 |
-| [0002](0002-vanilla-protocol-metadata-as-reference.md) vanilla protocol metadata as a reference | C2 |
 | [0010](0010-krasnokamen-loader-contract.md) one untrusted client-bundle contract | C5 |
 | [0013](0013-core-model-v2.md) native core model v2 | K1–K4, W1–W3, R1 |
 | [0015](0015-multiversion-protocol-translation.md) adjacent protocol translation | P1, C4 |
@@ -23,7 +21,8 @@ design needs more than a row; each is linked from its row.
 
 Retired records (0003–0009, 0011, 0012, 0014) are in Git history, for example
 `git show 973e6e60e:docs/decisions/0012-earth-worldplan-and-native-overlay.md`;
-their binding content is in the table.
+their binding content is in the table. 0001 and 0002 were folded into rows C1
+and C2: a code comment citing "ADR 0001" or "ADR 0002" means that row.
 
 A change to authority, threading, waiting, persistence ordering or module
 policy updates the row and, where one exists, the record in the same change.

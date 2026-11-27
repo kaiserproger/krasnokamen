@@ -188,6 +188,10 @@ state is connection-scoped, and disconnect or content remount drops it rather
 than replaying it into another session. Fixed bindings do not add rebinding UI,
 chords, mouse/gamepad or client guest execution.
 
+The shared mixin declares `JAVA_21` compatibility because Forge's bundled
+Mixin 0.8.7 does not recognize `JAVA_25` (Minecraft still runs on Java 25); the
+Forge development run, which loads class directories, supplies `--mixin.config`.
+
 Client fields and input remain untrusted; no server physical-key authority
 table is introduced. Plugins own mechanic state, while native view/session
 owners enforce delivery and cleanup. MCP named-key batches are validated on
