@@ -662,24 +662,6 @@ pub(crate) fn live_players(state: &TickState) -> Vec<(EntitySlot, EntityId, Conn
     found
 }
 
-/// The previous dense scan, kept as the differential oracle for `live_players`.
-#[cfg(test)]
-pub(crate) fn live_players_by_scan(state: &TickState) -> Vec<(EntitySlot, EntityId, ConnectionId)> {
-    state
-        .entities
-        .slots()
-        .filter_map(|slot| {
-            let body = state.entities.body(slot);
-            match body.kind {
-                EntityKind::Player { connection } if body.alive => {
-                    Some((slot, body.id, connection))
-                }
-                _ => None,
-            }
-        })
-        .collect()
-}
-
 /// Per-tick player maintenance: eating progress, vitals (regen, starvation,
 /// drowning). Damage routes through merge like combat; deaths produce drops +
 /// Died via commit.

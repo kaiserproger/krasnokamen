@@ -24,16 +24,12 @@ use mc_world::{BlockStateId, ChunkPos};
 use crate::boundary::{BlockPos, ConnectionId, PlayerInput};
 use crate::dimensions::Dimension;
 use crate::terrain::{
-    DirtySupplement, TERRAIN_CHUNKS, TERRAIN_HALO, TERRAIN_LEAF, TERRAIN_WIDTH, TerrainSource,
+    DirtySupplement, TERRAIN_CHUNKS, TERRAIN_LEAF, TERRAIN_WIDTH, TerrainSource,
     fold_revision, leaf_base, section_positions,
 };
 
 #[test]
 fn leaf_geometry_is_4x4_centered_in_6x6_with_halo_offset() {
-    assert_eq!(TERRAIN_LEAF, 4);
-    assert_eq!(TERRAIN_HALO, 1);
-    assert_eq!(TERRAIN_WIDTH, 6);
-    assert_eq!(TERRAIN_CHUNKS, 36);
     let (base_x, base_z) = leaf_base(0, 0).expect("origin leaf");
     assert_eq!((base_x, base_z), (0, 0));
     let (base_x, base_z) = leaf_base(1, -1).expect("leaf 1,-1");

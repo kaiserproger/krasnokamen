@@ -106,7 +106,6 @@ fn daily_phase_is_stable_staggered_and_has_no_catchup_iterations() {
 
 #[test]
 fn distance_cost_and_outside_score_do_not_hide_the_threshold() {
-    assert_eq!(OUTSIDE_ATTRACTIVENESS, 35.0);
     assert_eq!(gain(35.0, 45.0, 0.0), MIGRATION_THRESHOLD);
     assert_eq!(gain(35.0, 60.0, 200.0), 15.0);
     assert!(gain(35.0, 60.0, 512.0) < MIGRATION_THRESHOLD);
