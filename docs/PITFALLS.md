@@ -166,9 +166,10 @@ value in the plugin (or store a digest) and unit-test the worst case. Check:
 **A WIT change broke every prebuilt plugin.** After a WIT change each old
 `plugin.wasm` failed at load (`failed to convert function to given type`); a
 guest's API version must equal `COMPONENT_PLUGIN_API_VERSION`. Rebuild every
-first-party package and bump each `plugin.toml` in the same change; a capability
-name core's manifest parser does not know is a core bug. Check: the standard
-pack loads on the changed core.
+first-party package and bump each `plugin.toml` in the same change, and bump the
+API version only when a surviving consumer needs it; a capability name core's
+manifest parser does not know is a core bug. Check: the standard pack loads on
+the changed core.
 
 **A shared plugin candidate gave passes that proved nothing.** Gates that ran on
 a candidate other agents wrote into, or rebuilt in place, could not be tied to
