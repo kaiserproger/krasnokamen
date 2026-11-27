@@ -33,22 +33,22 @@
 </p>
 
 > [!IMPORTANT]
-> **Krasnokamen 1.0 "Pauline" is a release candidate (RC5, prerelease).** Survival,
-> multiplayer, crash recovery and real-client compatibility are tested on every
-> release, and each release's notes list what was validated and what is known to
-> be unsupported. Gameplay is vanilla-like, not bit-identical, and Java mods do not
-> run. Back up worlds before trusting it with a long-running server.
+> **Krasnokamen 1.0 "Pauline" is a release candidate (RC5, prerelease).** What
+> works and how each part was last checked is in [status](docs/STATUS.md); each
+> release's notes list what was validated and what is unsupported. Gameplay is
+> vanilla-like, not bit-identical, and Java mods do not run. Back up worlds before
+> trusting it with a long-running server.
 
 ## What is Krasnokamen?
 
 Krasnokamen is an independent Minecraft: Java Edition server written from scratch in
 Rust. It is a full server, not a framework: it reimplements the game itself, from
 world generation, mobs and redstone to villages, combat and inventories. Players
-join with a **normal, unmodified Minecraft Java client**. **Version support:**
-every release from **26.1.2 through 26.3** (775, 776, 777); canonical is 26.3.
-Content import and first start install each version's cache automatically
-([details](docs/OPERATING.md#client-protocol-compatibility)). A bump adds a
-translation step without dropping older versions. No client mods or launcher tricks.
+join with a **normal, unmodified Minecraft Java client**: every release from
+**26.1.2 through 26.3** (775, 776, 777), canonical 26.3. `content import`
+installs the data of every supported version
+([details](docs/OPERATING.md#client-protocol-compatibility)), and a version bump
+adds a translation step without dropping older clients.
 
 It is built for the things the vanilla server is bad at:
 
@@ -105,7 +105,8 @@ flowchart LR
   data lives out of line, so a pass over 100,000 mobs touches far less memory.
 - **Storage that follows the tick.** A native database plus the tick log is the
   only save format. Vanilla Anvil worlds are imported and exported with an
-  offline command; the import keeps unknown data verbatim.
+  offline command; import keeps unknown fields as opaque records and reports
+  what it cannot keep ([migration](docs/MIGRATION.md)).
 - **The game tick never waits on the network.** Networking and per-player view
   tracking run on their own threads.
 
@@ -114,6 +115,10 @@ Deep dive: [architecture overview](docs/ARCHITECTURE.md) ·
 [operating guide](docs/OPERATING.md).
 
 ## What works today
+
+Which parts a real vanilla client or a vanilla differential checked, which only
+our native client or tests, the newest run of each and the known gaps per area:
+[status](docs/STATUS.md#feature-areas).
 
 | Area | What you get |
 | :-- | :-- |
@@ -125,14 +130,12 @@ Deep dive: [architecture overview](docs/ARCHITECTURE.md) ·
 | **Multiplayer** | Many players in one world, chat, teams and scoreboards |
 | **Operators** | Console, bans and whitelist, live backups, block and container history (`/co`), RCON, Query, Velocity forwarding, anti-xray, Distant Horizons support and an optional read-only web dashboard |
 
-Krasnokamen targets the vanilla network protocol and supports offline Anvil world
-import and export, with compatibility still partial. Gameplay aims to feel like
-vanilla, not to be bit-identical: exact AI timing and vanilla bugs are not
-reproduced. Map-making support is partial: directory `/function` datapacks,
-command blocks, `/clone`, storage `/data` and `/execute` work within
-[documented limits](docs/OPERATING.md#datapacks-and-command-blocks); datapack
-worldgen beyond the experimental jigsaw inputs is refused. What works, how it
-was last checked and which client supports what: [status](docs/STATUS.md).
+Gameplay aims to feel like vanilla, not to be bit-identical: exact AI timing and
+vanilla bugs are not reproduced, except the quirks players build on (TNT duping,
+quasi-connectivity), which are checked against a real vanilla server. Map-making
+works within [documented limits](docs/OPERATING.md#datapacks-and-command-blocks):
+directory and ZIP datapacks, functions, command blocks, `/clone`, `/data` and
+`/execute`; datapack worldgen beyond the experimental jigsaw inputs is refused.
 
 ### Settlements
 
@@ -189,17 +192,21 @@ and [benchmarks](docs/performance/BENCHMARKS.md).
 
 Krasnokamen is tested the way players break servers:
 
-- **7,300+ Rust tests** across the workspace, plus crash and restart tests that
-  kill the server mid-checkpoint and check that the world comes back whole.
-- **Real-client gates:** graphical Minecraft clients under Xvfb play scripted
-  scenarios including inventory, mounts and autonomous villages against a
-  release build.
-- **A public bug ledger:** 334 bugs tracked with their original repro; each of the
-  132 fixed rows lists a regression check. Cargo checks run on integration; client
-  checks run in the client tier. See [the ledger](docs/bugs/README.md).
+- **Differential tests against vanilla:** redstone quirk and farm-rate scenarios
+  run the same commands on a real Mojang server and on Krasnokamen and compare
+  the worlds ([quirk gate](docs/QUIRK_PARITY.md)).
+- **Real-client gates:** vanilla Java, Loader and native clients under Xvfb play
+  scripted scenarios (inventory, chat, datapacks, settlements, battles, voice)
+  against a release build; the newest run per area is in
+  [status](docs/STATUS.md#feature-areas).
+- **Crash tests** kill the server mid-checkpoint and check that the world comes
+  back whole.
+- **A public bug ledger:** 746 bugs tracked with their original repro, 548 fixed
+  and 198 open on 2026-11-27. A row becomes fixed only when reverting the fix
+  turns its regression check red. See [the ledger](docs/bugs/README.md).
 
-Since the first commit on 2026-05-12: 1,593 commits and 750,000+ lines of Rust in
-this repository alone.
+Since the first commit on 2026-05-12: more than 6,200 commits and about one
+million lines of Rust in this repository alone.
 
 <details>
 <summary><b>Milestones</b></summary>
@@ -241,7 +248,7 @@ solaris content import --version 26.3 --download
 solaris --config example.toml
 ```
 
-Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
+Then connect a Minecraft Java client (26.1.2 to 26.3) to `127.0.0.1:25565`.
 
 > [!CAUTION]
 > The example config listens on all interfaces with **offline authentication**.
@@ -287,8 +294,9 @@ of compatibility with current source.
 
 ## FAQ
 
-**Do players need a special client?** No. The unmodified Minecraft Java 26.3
-client joins directly. The Krasnokamen Client is an optional extra.
+**Do players need a special client?** No. Any unmodified Minecraft Java client
+from 26.1.2 through 26.3 joins directly. The Krasnokamen Client is an optional
+extra.
 
 **Can I run my Paper plugins or Fabric mods?** No; see the note under
 [the ecosystem](#the-krasnokamen-ecosystem). Write a Wasm plugin instead, or use a
