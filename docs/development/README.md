@@ -1,11 +1,10 @@
 # Development playbooks
 
 How work is done on Krasnokamen, by contributors and on the owner host.
-Authority follows [AGENTS' precedence order](../../AGENTS.md#which-rule-wins):
-the [owner contract](owner-contract.md), the
-[Constitution](../AGENT_CONSTITUTION.md) and AGENTS.md win over these pages, and
-code, tests and observed runtime win over any prose; fix the page when they
-disagree. Older wording is in Git history (`git log -p -- docs/development/<page>.md`).
+Authority follows the [owner rules](../RULES.md#which-rule-wins): they and the
+[pitfalls](../PITFALLS.md) win over these pages, and code, tests and observed
+runtime win over any prose; fix the page when they disagree. Older wording is
+in Git history (`git log -p -- docs/development/<page>.md`).
 
 ## When to read what
 
@@ -28,7 +27,6 @@ disagree. Older wording is in Git history (`git log -p -- docs/development/<page
 | move to a new Minecraft version | [Bumping the Minecraft version](minecraft-version-bump.md) |
 | ask for review, attack a change, run a committee vote, or write a worker prompt | [Advisor, reviewer, breaker and committee](review-committee-and-breaker.md) |
 | split a giant module or audit the architecture | [Module extraction and architecture audits](refactoring-and-audits.md) |
-| learn from past mistakes | [Lessons](lessons.md) |
 | work from your own fork, without the owner host | [Contributing: coding agents on a fork](../../CONTRIBUTING.md#coding-agents-on-a-fork) |
 
 Validation levels, receipts and the harness catalogue are in

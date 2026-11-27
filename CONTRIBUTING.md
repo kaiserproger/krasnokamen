@@ -105,45 +105,97 @@ every profile and what it needs.
 
 ## Making a change
 
-1. Read the owning page from the [documentation index](docs/README.md) and check
-   [open transitions](docs/STATUS.md#open-transitions) for the area.
-2. Keep the [project invariants](AGENTS.md#project-invariants): the native store
-   plus tick WAL is the only save format and fails closed; gameplay authority
-   stays in the native tick; no compatibility shims (migrate callers, delete the
-   old path); debug builds by default.
-3. A behaviour change needs a regression that goes **red when only the fix hunks
-   are reverted** (negative control). A unit test cannot close a known
-   client-visible failure: that needs a real-client check. Substantial tests go
-   in a focused sibling `*_tests.rs`.
-4. Record anything broken you observed as `docs/bugs/rows/<ID>.toml`
-   ([filing a bug](docs/bugs/README.md#filing-a-bug));
-   `python3 -m tools.harness ledger show <ID>` reads one row and
-   `ledger list --status open` lists the open ones. A fix adds `regression` references. Leave
-   `fix_commit` out of a PR (the maintainer records it once the merged commit id
-   is final) and **never set `status = "fixed"` by hand**: only
-   `ledger promote` does, after running the negative control.
+1. Read the owning page from the [documentation index](docs/README.md), the
+   [decisions](DECISIONS.md) for the area and its
+   [open transitions](docs/STATUS.md#open-transitions). A change that goes
+   against a decision changes that row in the same commit.
+2. **Every fix comes with a test that fails without it.** Run it once against
+   the old code to see it fail. A bug fix's regression goes red when only the
+   fix hunks are reverted (the negative control `ledger promote` records). A
+   unit test cannot close a known client-visible failure: that needs a
+   real-client check ([evidence rules](DECISIONS.md#evidence)).
+3. **Fix the implementation, never the oracle.** A mismatch with vanilla is a
+   Krasnokamen bug: do not edit the recorded vanilla result, the scenario's
+   expectation or the fixture to make it pass. **Never widen a tolerance,
+   bound, timeout or retry count** to make a mismatch go away; a difference
+   beyond the bound is a bug.
+4. **Intended differences from vanilla are named per case with a reason**
+   (`known_divergence` in the scenario, [decision P7](DECISIONS.md#product)).
+   The marker fails the gate once Krasnokamen matches; remove it then. An
+   unnamed difference is a bug.
+5. **Three changes without a gained case: stop and ask.** When three edits in
+   a row leave the failing case as it was, stop editing, write down the
+   remaining mismatch and the premise you worked from, and ask the maintainer
+   (Main on the owner host): they may know the rule you are missing.
+6. A green run with no test of your change proves nothing: a behaviour change
+   adds its own test or scenario where the [table below](#where-tests-go) puts
+   it.
+7. To silence a lint, write `#[expect(lint, reason = "…")]`, not `#[allow]`,
+   so it is flagged once it no longer applies; convert an old `#[allow]` when
+   you touch its code.
+8. Comments say only what the code cannot (an invariant, a vanilla reference,
+   why the obvious way is wrong); the reasoning for a change goes in the
+   commit message.
+9. Every published number is measured on a quiet machine, with the command,
+   the hardware and core count, and the slow cases beside the mean
+   ([performance windows](docs/development/performance-windows-and-profiling.md)).
+10. Check a command's own exit status (`set -o pipefail`, `${PIPESTATUS[0]}`,
+    the harness `result.json`), and break the fix once to see the check fail
+    before you trust it green.
+11. Record anything broken you observed as `docs/bugs/rows/<ID>.toml`
+    ([filing a bug](docs/bugs/README.md#filing-a-bug));
+    `python3 -m tools.harness ledger show <ID>` reads one row and
+    `ledger list --status open` lists the open ones. A fix adds `regression`
+    references. Leave `fix_commit` out of a PR (the maintainer records it once
+    the merged commit id is final) and **never set `status = "fixed"` by
+    hand**: only `ledger promote` does, after running the negative control.
+
+Mistakes already made, with the check for each, are in
+[pitfalls](docs/PITFALLS.md).
+
+## Where tests go
+
+| Behaviour | Where | Run |
+|---|---|---|
+| Vanilla mechanics, redstone quirks, farm rates | a scenario in `tools/harness/quirk_parity/scenarios/`, run on a real vanilla server and on Krasnokamen ([quirk parity](docs/QUIRK_PARITY.md)) | `python3 -m tools.harness run quirk-parity -- --family <family>` |
+| Movement and physics | local vanilla captures ([physics oracles](docs/physics-oracles.md)) | as that page says |
+| What a player sees or does in a client | a harness real-client scenario ([native scenario rules](docs/development/real-client-gates.md#native-scenario-rules)) | `python3 -m tools.harness run <profile>` |
+| A bug fix | the test or scenario the row's `regression` names ([ledger](docs/bugs/README.md#filing-a-bug)) | `python3 -m tools.harness ledger show <ID>` |
+| Logic inside one module | a focused sibling `<module>_tests.rs` beside the module | `python3 -m tools.harness run test -p <crate> --lib <filter>` |
+| Saves, WAL and recovery | `crates/mc-core` tests through checkpoint, action and restart with replay ([persistence](docs/architecture/persistence.md)) | same |
+| Packets and codecs | `crates/mc-protocol/src/*_tests.rs` from wire-probe bytes; version steps in `crates/mc-edge/src/translation/adjacent/*_tests.rs` | same |
+| World import and export | `crates/mc-world-conversion/src/*_tests.rs`, on worlds vanilla wrote | same |
+| Content data (recipes, loot) | `crates/mc-data/tests/` | same |
+| Plugin host and package contract | `crates/mc-plugin-host/tests/` | same |
+| The harness itself | `tools/harness/test_*.py`, for a failure the harness really had | `python3 -m unittest tools.harness.test_<name>` |
+| Performance | a profile, not a test ([performance profiles](docs/performance/PROFILES.md)) | as that page says |
+| Native client, Loader, plugins | their own repositories | their READMEs |
 
 ## Pull requests
 
 - Fork, work on a branch, open a PR. The owner reviews and merges; pushing,
   tagging and publishing are owner actions.
-- One revertible **Conventional Commit** per completed checkpoint
-  (`fix(scope): …`, `docs: …`). Leave Git hooks and signing alone; change
-  `Cargo.lock` only for a concrete dependency reason.
-- Never stage ignored local state (`.analysis/`, `data/vanilla*`, worlds, logs,
-  tool scratch directories); preserve unrelated local changes.
-- Review expects quoted L1/L2 receipts (or the draft note above), doclinks green
-  for documentation, the invariants kept, and a regression that fails without
-  the fix. Docs- and test-only PRs still say what a player observes differently.
+- One change per commit and per PR: two fixes are two revertible
+  **Conventional Commits** (`fix(scope): …`, `docs: …`). Say what was wrong,
+  how to reproduce it, how the change fixes it, and **what you could not
+  test** (another OS, a client, real hardware).
+- Leave Git hooks and signing alone; change `Cargo.lock` only for a concrete
+  dependency reason. Never stage ignored local state (`.analysis/`,
+  `data/vanilla*`, worlds, logs, tool scratch directories); preserve
+  unrelated local changes.
+- Review expects quoted L1/L2 receipts (or the draft note above), doclinks
+  green for documentation and a regression that fails without the fix.
+  Docs- and test-only PRs still say what a player observes differently.
 
 ## Coding agents on a fork
 
-The [Agent Constitution](docs/AGENT_CONSTITUTION.md) and [AGENTS.md](AGENTS.md)
-apply to agents too. Rules marked *owner host* (the `mem-run.sh` runner,
-`pin-release`, `wt-new`, `<work>` paths) and Main's integration, queue and
-publication duties do not: run commands directly, work on a branch in your fork
-and leave upstream `main`, tags and releases to the maintainer. Missing harness
-inputs are not passing evidence; only `ledger promote` closes a bug row.
+[AGENTS.md](AGENTS.md), with the [owner rules](docs/RULES.md) and
+[pitfalls](docs/PITFALLS.md) it includes, applies to agents too. Rules about
+the owner host (the `mem-run.sh` runner, `pin-release`, `wt-new`, `<work>`
+paths) and Main's integration, queue and publication duties do not: run
+commands directly, work on a branch in your fork and leave upstream `main`,
+tags and releases to the maintainer. Missing harness inputs are not passing
+evidence; only `ledger promote` closes a bug row.
 
 ## Licence
 

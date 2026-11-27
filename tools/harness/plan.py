@@ -35,8 +35,8 @@ from .runtime import SIBLING_NAMES, sibling_root
 
 # ------------------------------------------------------------------ sources
 
-AGENTS_VALIDATION = "AGENTS.md#build-and-validation"
-AGENTS_RULE5 = "AGENTS.md#working-rules (rule 5)"
+VALIDATION_DOC = "CONTRIBUTING.md#validation"
+REVIEW_RULES = "docs/RULES.md#commits-reviews-and-publication"
 TOOLING_TEST = "docs/AGENT_TOOLING.md#test-gate-nextest"
 PERSISTENCE_DOC = "docs/architecture/persistence.md#startup-and-recovery"
 PROTOCOL_DOC = "docs/development/protocol-changes.md#implement-and-test"
@@ -231,7 +231,7 @@ AREAS = (
 )
 
 # Profiles marked variable: timing-, seed- or concurrency-dependent behaviour
-# needs a pass rate over at least three runs (AGENTS.md, QA protocol "Variance").
+# needs a pass rate over at least three runs (QA protocol "Variance").
 VARIABLE_PROFILES = {
     "civilization-seed-qa": f"{SETTLEMENT_GATES}#civilization-observation: generated seed, accelerated ticks",
     "village-autonomy-qa": f"{SETTLEMENT_GATES}#autonomous-village: generated village, real restart timing",
@@ -349,14 +349,14 @@ class Rule:
 
 
 RULES: tuple[Rule, ...] = (
-    Rule("rust-l0", "core", AGENTS_VALIDATION,
+    Rule("rust-l0", "core", VALIDATION_DOC,
          "L0: tests for the affected crate scope while editing",
          RUST_GLOBS, ("@cargo-l0",)),
-    Rule("rust-l1", "core", AGENTS_VALIDATION, "L1: finishing a slice",
+    Rule("rust-l1", "core", VALIDATION_DOC, "L1: finishing a slice",
          RUST_GLOBS,
          ("python3 -m tools.harness run fmt", "python3 -m tools.harness run code-health"),
          when="slice"),
-    Rule("rust-l2", "core", AGENTS_VALIDATION, "L2: a code commit needs the correctness gate",
+    Rule("rust-l2", "core", VALIDATION_DOC, "L2: a code commit needs the correctness gate",
          RUST_GLOBS, ("python3 -m tools.harness run correctness",), when="commit"),
     Rule("persistence", "core", PERSISTENCE_DOC,
          "persistence paths need restart/recovery tests and the independent reviewer",
@@ -364,17 +364,17 @@ RULES: tuple[Rule, ...] = (
     Rule("protocol", "core", PROTOCOL_DOC,
          "protocol paths need protocol tests, both versions when translation changes, and a real-client gate",
          PROTOCOL_GLOBS, ("@protocol-tests", "@no-gate:protocol"), reviewer="protocol"),
-    Rule("custody", "core", f"{AGENTS_RULE5}; {TOOLING_TEST}",
+    Rule("custody", "core", f"{REVIEW_RULES}; {TOOLING_TEST}",
          "custody changes need the conservation tests and the independent reviewer",
          CUSTODY_GLOBS, ("@custody-tests",), reviewer="custody"),
-    Rule("gameplay-client-surface", "core", f"{AGENTS_VALIDATION}; docs/bugs/README.md",
+    Rule("gameplay-client-surface", "core", f"{VALIDATION_DOC}; docs/bugs/README.md",
          "client-surface and gameplay changes need a real-client gate: a unit test cannot close a client failure",
          GAMEPLAY_GLOBS, ("@area-gates",), exclude=GAMEPLAY_EXCLUDE, tests_trigger=False),
-    Rule("changed-gate", "core", f"{AGENTS_VALIDATION}; {QA_HYGIENE}",
+    Rule("changed-gate", "core", f"{VALIDATION_DOC}; {QA_HYGIENE}",
          "a new or changed gate needs a negative control, every new branch on a real client, "
          "and at least 3 runs when variable",
          GATE_GLOBS, ("@changed-gates",), tests_trigger=False),
-    Rule("harness-python", "core", f"{AGENTS_VALIDATION} (L0, L1); docs/AGENT_TOOLING.md#harness-entrypoint",
+    Rule("harness-python", "core", f"{VALIDATION_DOC} (L0, L1); docs/AGENT_TOOLING.md#harness-entrypoint",
          "harness Python: tests of the touched modules, then the whole harness suite",
          HARNESS_PY_GLOBS, ("@py-l0", HARNESS_SUITE)),
     Rule("innovation", "core", INNOVATION_DOC,
@@ -385,7 +385,7 @@ RULES: tuple[Rule, ...] = (
     Rule("ledger", "core", LEDGER_DOC,
          "ledger edits run the regression gate; a status change goes through `ledger promote`",
          ("docs/bugs/rows/*.toml", "docs/bugs/promotions/**"), ("@ledger",)),
-    Rule("markdown", "core", AGENTS_VALIDATION,
+    Rule("markdown", "core", VALIDATION_DOC,
          "Markdown-only changes need doclinks, not Cargo or harness gates",
          ("**/*.md",), ("python3 tools/doclinks.py",)),
     Rule("client-rust", "client", "../solaris-client/docs/AGENT_TESTING.md (tests, strict Clippy, native scenario)",
@@ -428,7 +428,7 @@ STATIC_NOTES = (
     "paths do not show (for example tick/merge.rs releasing container items is custody). "
     "The absence of a class is not proof it does not apply.",
     "Owner host: wrap heavy commands in mem-run.sh and graphical gates in scene-slot.sh; real-client "
-    "gates take a release server and a pinned client binary (AGENTS.md, real-client-gates.md).",
+    "gates take a release server and a pinned client binary (DECISIONS.md B3, real-client-gates.md).",
     "Results cite this plan: every gate listed is run, or named in gaps with its blocker "
     "(docs/development/agent-fleet.md#briefs).",
 )
@@ -698,7 +698,7 @@ def scenario_command(scenario_id: str, catalog: dict[str, dict[str, Any]]) -> st
 
 
 def _variable_note(profile: str, variable: str) -> str:
-    return f"{profile} is variable ({variable}): at least 3 runs ({QA_HYGIENE}, AGENTS.md)"
+    return f"{profile} is variable ({variable}): at least 3 runs ({QA_HYGIENE})"
 
 
 def _profile_gate(ctx: Context, profile: str, why: str, *, negative_control: bool = False,
@@ -817,7 +817,7 @@ def _expand_restart_tests(ctx: Context, rule: Rule, hits: list[str]) -> None:
             f"python3 -m tools.harness run test -p {crate} --lib {' '.join(PERSISTENCE_FILTERS)}",
             why=f"{rule.source}: {rule.why}", paths=tuple(paths),
             notes=("a change to persistence order or recovery also updates docs/architecture/persistence.md "
-                   "and the owning ADR (AGENTS.md#project-invariants)",))
+                   "and its row in DECISIONS.md#persistence",))
 
 
 def _expand_protocol_tests(ctx: Context, rule: Rule, hits: list[str]) -> None:
@@ -993,7 +993,7 @@ def _expand_ledger(ctx: Context, rule: Rule, hits: list[str]) -> None:
                      paths=tuple(paths[i] for i in promoted), when="integrate")
     if len(promoted) >= LEDGER_BATCH_MIN:
         ctx.reviewers.setdefault("ledger-batch", []).append(
-            f"{AGENTS_RULE5}: {len(promoted)} rows changed status (batch of {LEDGER_BATCH_MIN} or more)")
+            f"{REVIEW_RULES}: {len(promoted)} rows changed status (batch of {LEDGER_BATCH_MIN} or more)")
         for entry in ctx.plan.entries.values():
             if entry.gate.startswith("python3 -m tools.harness ledger promote"):
                 if "ledger-batch" not in entry.reviewer:

@@ -1,6 +1,6 @@
 # Real-client gates in practice
 
-What counts as evidence is fixed elsewhere: [AGENTS.md](../../AGENTS.md)
+What counts as evidence is fixed elsewhere: the [evidence decisions](../../DECISIONS.md#evidence)
 (actual-client gates, release server, breaker), the
 [bug regression contract](../bugs/README.md), the
 [QA protocol](../QA_AGENT_PROTOCOL.md) (gate hygiene, negative controls,
