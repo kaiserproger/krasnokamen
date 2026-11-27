@@ -1,10 +1,10 @@
 # ADR 0020 - Entity checkpoints and reopen at one million entities
 
 **Date:** 2026-11-04  
-**Status:** Accepted by the owner on 2026-11-05 on the step-3 measurements below,
-with the strict latency rule failing on the listed regressions and the
-untested items left untested. Steps 1–2 implemented (2026-11-04).
-ADR 0013 "Durability" now describes explicit entity tombstones.  
+**Status:** Accepted by the owner on 2026-11-05 with its strict latency
+criterion unmet; implemented 2026-11-04 (replay boxing, then option C as one
+cutover). The [proof](#proof) has not been run (see
+[measurement boundary](#measurement-boundary)).
 **Parent contract:** [0013](0013-core-model-v2.md) (atomic native checkpoints, recovery).
 
 ## Problem
@@ -33,7 +33,7 @@ encodes every record, decodes and compares every stored row, and scans the whole
 
 1. **No disk wait on the tick.** Handoff is bounded, with one periodic
    checkpoint in flight. Exception: shutdown queues a final checkpoint FIFO
-   behind an in-flight one (`core/tick_loop.rs` 465–467).
+   behind an in-flight one (`core/tick_loop.rs`).
 2. **Exact recovery.** Recovery is checkpoint `c` plus the complete WAL after
    `c`. Mob motion and idle counters are checkpoint-durable only.
 3. **WAL first.** The WAL is fsynced through `c` before writes. One Immediate
@@ -50,28 +50,12 @@ encodes every record, decodes and compares every stored row, and scans the whole
 | C. Incremental (dirty-set) checkpoints | O(dirty) records + one `u64` scan per slot | ≈4.5 KB × dirty | O(dirty + tombstones) | Medium; needs the custody list below |
 | D. Status quo | O(N), ≈2–3 s | ≈+4.2 GiB | O(N) + scan | Fails 1M in 8 GiB |
 
-**A.** Chunks already work this way: capture freezes dirty chunks by `Arc`.
-`EntityViews` carry only the wire view: identity, type, pose, velocity, ground,
-equipment, item, health, name and wire data. The rest is missing:
-
-- retained `ColdRow`/`Body` state: villager state, every `EntityStateImage`
-  field, full active effects, projectile state, pickup delay;
-- `TickState` raid, spawner and End-fight fields.
-
-There are two ways to add it. Publishing that state per tick duplicates the
-journal baselines: +0.5–0.9 GB steady [INFERENCE]. Paged copy-on-write rows add
-a copy check to every mutable path. Deferring A is an engineering choice, since
-it means a wider ownership change in the hottest store. It is not a measured
-impossibility.
-
-**B.** The image must be consistent at `c`, and only the owner can read live
-state before tick `c+1` changes it. So the owner emits every record before it
-advances, and the backlog it needs equals the writer's maximum accumulated lag.
-Only a whole-image backlog guarantees no checkpoint backpressure under an
-arbitrary writer delay, such as fsync contention or a slow previous commit, and
-that backlog costs as much memory as D. The measured prototype cut capture
-allocation by 98% but was 22.66×/21.72× slower. This rejects that prototype and
-the lack of a guarantee, not every intermediate budget.
+A was deferred, not shown impossible: the published `EntityViews` carry only
+the wire view, so encoding from them needs either per-tick publication of all
+cold state (+0.5–0.9 GB steady [INFERENCE]) or copy-on-write on every mutable
+row path. B cannot promise no checkpoint backpressure without a whole-image
+backlog, which costs as much memory as D; its prototype cut capture allocation
+by 98% but ran 22.66×/21.72× slower.
 
 **C.** `ENTITIES` is already a materialized base, updated in place in one
 transaction. The checkpoint writes every row whose persisted projection may
@@ -79,7 +63,7 @@ have changed, plus explicit tombstones, so the DB still holds the full image at
 `c`. Recovery, WAL order and the disk format are unchanged. Idle rows cost
 nothing; when every row is dirty, C costs the same as D.
 
-## Decision (proposed): C, plus a replay-layout fix
+## Decision: C, plus a replay-layout fix
 
 **Dirty rule.** Capture a row at `c` when its persisted projection may differ
 from its stored DB row:
@@ -89,7 +73,7 @@ from its stored DB row:
 2. **Tick-relative projection.** Today one field depends on the capture tick:
    a pending villager `golem_detected_recently` deadline. It is encoded as a ttl
    relative to the capture tick and decoded against the manifest tick
-   (`villager/persistence.rs` 634–651, 1034–1050). Skipping the row would extend
+   (`villager/persistence.rs`). Skipping the row would extend
    the deadline after reopen. Such rows are captured every checkpoint while the
    deadline is pending. The cutover audits every encoder that reads the capture
    tick.
@@ -122,25 +106,23 @@ keeps `durable_tick`, the last ACKed checkpoint.
 **Custody list (cutover contract, `f96a4d93`).** These paths write persisted
 state without WAL marks. Each must set `changed_tick`:
 
-- **`entities.rs` methods:**
-  - `advance_age` and `advance_admitted_ages` (420, 435);
-  - `advance_villager_clocks` (484), only when a projected clock moved, and
-    `set_harvest_ticks` (1132);
-  - `set_motion_state` and `apply_motion_result` (1188–1268);
-  - `set_pos`, `set_vel`, `set_rot` and `set_ground` (1311–1370).
+- **`EntityStore` methods:** `advance_age` and `advance_admitted_ages`;
+  `advance_villager_clocks` (only when a projected clock moved) and
+  `set_harvest_ticks`; `set_motion_state` and `apply_motion_result`;
+  `set_pos`, `set_vel`, `set_rot` and `set_ground`.
 - **Projection writers:** lifecycle counters and embedded-projectile timers
-  (`entity_life.rs` 1065–1138), `FallDistance` (`mob_fall.rs` 29–83) and a
-  changed villager `brain_clock` flag use `row_mut_projected`: no WAL or wire
-  mark, checkpoint mark only. `row_mut_unmarked` keeps its cache-only meaning
-  (allocator and door take/put-back) and marks nothing, or every resident
-  villager would be rewritten after each reopen.
-- **`spawn` then `set_uuid`** (`plugin_npcs.rs` 460–470): `set_uuid` logs the
-  previous UUID as a removal.
-- **`remove` (665) and `transfer_to` (727–828):** log the UUID, move the mark
-  with the swapped slot, and mark the destination.
+  (`entity_life.rs`), `FallDistance` (`mob_fall.rs`) and a changed villager
+  `brain_clock` flag use `row_mut_projected`: no WAL or wire mark, checkpoint
+  mark only. `row_mut_unmarked` keeps its cache-only meaning (allocator and door
+  take/put-back) and marks nothing, or every resident villager would be
+  rewritten after each reopen.
+- **`spawn` then `set_uuid`** (`plugin_npcs.rs`): `set_uuid` logs the previous
+  UUID as a removal.
+- **`remove` and `transfer_to`:** log the UUID, move the mark with the swapped
+  slot, and mark the destination.
 - **`begin_dying`:** logs the UUID of a killed living mob at death.
 
-Chunk eviction (`world.rs` 624–667) removes chunks, not entities, so it never
+Chunk eviction (`world.rs`) removes chunks, not entities, so it never
 creates an entity tombstone. Checkpoint marks are independent of WAL and wire
 marks.
 
@@ -151,12 +133,12 @@ tick's WAL, so checkpoint restart and crash replay agree. Breaking deployed
 wear drops nothing: deployed stands have zero equipment drop chances.
 
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
-and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`
-881–883, 935–947). So the fold must record `(uuid, tick)` before dropping. An
+and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`).
+So the fold must record `(uuid, tick)` before dropping. An
 `Entity` post-image whose UUID differs from the record it replaces (`set_uuid`)
 retires the old UUID the same way. The fold also lists rows that got a tail
 post-image or a non-zero clock projection.
-`advance_replay_clocks` (987–1007) restamps every record's tick, so the tick
+`advance_replay_clocks` restamps every record's tick, so the tick
 alone cannot identify them.
 
 Restore seeds `changed_tick` and the removal log from those lists. It inserts
@@ -200,16 +182,6 @@ host. Remeasure in an exclusive `-x` A/B. Accept only if readiness median is
 within +10%. If it fails, any recovery redesign needs its own amendment; no
 fallback is pre-accepted.
 
-## Staged plan
-
-1. **Replay boxing and reservation**, gated as above.
-2. **C as one cutover, without a flag.** This covers the dirty rule, tick marks,
-   removal log, writer tombstones and fold-time seeding. Delete the live
-   full-capture path. Offline `encode_checkpoint` and Anvil export keep
-   materialized capture. Update "full entity membership/tombstones" in 0013.
-3. **Proof**, as below, then mark this ADR Accepted. Revisit A only if dirty
-   sets from real play exceed the checkpoint budget.
-
 ## Implementation (2026-11-04, steps 1–2)
 
 - Replay records box villager, projectile, special-mob, bee and allay state;
@@ -242,16 +214,12 @@ fallback is pre-accepted.
 ## Measurement boundary
 
 The owner accepted the decision with the strict latency criterion unmet.
-The 1–2-core profile, exact-UUID offline fold after reopen and SIGKILL after a
-committed checkpoint were not run. Historical receipts are not available in a
-clean checkout; the proof below describes the required checks, not a pass.
-Revalidated on main `73761dc5` (2026-11-14): the criterion is still unmet and
-pending. The only post-cutover measurements on record are the custody-oracle
-unit tests (all passing; the Ckpt1M cutover receipts record step-3 measurements
-pending). No 1–2-core latency profile, no 1M memory/SIGKILL arm and no
-exact-UUID offline fold after reopen has been run. Closing the criterion needs
-the Proof section below on a pinned release binary in an exclusive `-x` window.
-
+Revalidated on main `73761dc5` (2026-11-14): the only post-cutover evidence is
+the custody-oracle unit tests above. No 1–2-core latency profile, no 1M
+memory/SIGKILL arm and no exact-UUID offline fold after reopen has been run.
+Closing the criterion needs the proof below on a pinned release binary in an
+exclusive `-x` window. Revisit option A only if dirty sets from real play exceed
+the checkpoint budget.
 
 ## Proof
 
@@ -298,24 +266,3 @@ the Proof section below on a pinned release binary in an exclusive `-x` window.
     and `max` and `oom` are 0.
   - **Limit:** C does not promise all-active 1M in 8 GiB. With dirty ≈ N its
     transient returns to D's ≈4.2 GiB.
-
-## Rollback
-
-The disk format and recovery are unchanged. A DB written by C is a valid full
-checkpoint for the old binary, whose next full write tombstones and rewrites as
-before, and the reverse also holds. Rollback is a revert and redeploy with no
-migration. Replay boxing is in-memory only.
-
-**Battle allegiance extension (2026-11-14).** Native `Body.faction: u16`
-uses existing padding: the body remains 72 bytes. The existing entity NBT
-payload carries nonzero allegiance as `krasnokamen:Faction` (`TAG_Int`,
-u16 range checked); `EntityStateImage.faction` carries full/compact WAL images.
-Zero is omitted from both formats, so unaffiliated entities add no disk bytes.
-Absent allegiance decodes as zero; malformed or out-of-range state fails closed.
-`set_faction` marks touched + changed custody through normal body mutation,
-including a reset to zero. Recovery and authored summon use that setter.
-The key is visible to `/data` and NBT selectors while nonzero, with no wire metadata.
-The derived runtime battle membership index contains native slots and is not
-persisted. No battle membership table, journal domain, checkpoint fence or
-alternate persistence owner is introduced here. Targets and battle timers remain transient.
-Regression: `battle_faction_survives_native_checkpoint_wal_and_restart`.

@@ -99,8 +99,8 @@ How it works: [persistence](docs/architecture/persistence.md).
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| E1 | The in-game computer and screen sharing are an opt-in edge service, off by default and operator-only; world authority stays in the core. Draft implementation. | [ADR 0018](docs/decisions/0018-in-game-computer.md). |
-| E2 | Proximity voice is relayed by the edge on a Play channel without decoding audio; the Simple Voice Chat bridge is opt-in. Draft implementation. | [ADR 0019](docs/decisions/0019-voice-chat.md). |
+| E1 | The in-game computer and screen sharing are an opt-in edge service, off by default and operator-only; world authority stays in the core. Draft implementation; screen sharing passed its real-client gate (2026-11-26), the terminal has none. | [ADR 0018](docs/decisions/0018-in-game-computer.md). |
+| E2 | Proximity voice is relayed by the edge on a Play channel without decoding audio; the Simple Voice Chat bridge is opt-in. Draft implementation; passed its real-client gate with Fabric SVC and native clients (2026-11-26). | [ADR 0019](docs/decisions/0019-voice-chat.md). |
 | E3 | Edge limits an operator needs to tune are configuration, not constants: per-address pre-play connections and the per-player chunk send rate. Memory and protocol guards and vanilla timeouts stay in code. | Owner D52, D53. |
 | E4 | Play keepalive follows vanilla: one outstanding challenge, a strict 30 s echo deadline, keepalive written before other frames. | [Runtime](docs/architecture/runtime.md#connection-liveness). |
 

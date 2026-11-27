@@ -47,6 +47,7 @@ authoritative.
 - [Mutation routes](architecture/mutations.md)
 - [Native store, WAL, recovery and backup](architecture/persistence.md)
 - [Settlement authority and code locations](architecture/settlements.md)
+- [Battles: tick order, facing, steering and combat](architecture/battles.md)
 - [Chunk residency, activation and tickets](architecture/residency.md)
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
 - [Horizon `horizon:lod` far-terrain acceptance](development/horizon-lod-acceptance.md)

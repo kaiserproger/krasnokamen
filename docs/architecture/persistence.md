@@ -840,8 +840,8 @@ The key is visible to `/data` and NBT selectors while allegiance is nonzero;
 no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
 dense compaction.
 The native checkpoint/WAL/restart regression is
-`battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's
-allegiance extension. Persistence changes require Main's independent review.
+`battle_faction_survives_native_checkpoint_wal_and_restart`. Persistence
+changes require Main's independent review.
 
 Shield presentation is entity appearance, not a runtime action clock: the
 living-flags byte in `appearance.extra` is present in WAL entity post-images but

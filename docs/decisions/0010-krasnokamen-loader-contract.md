@@ -4,8 +4,8 @@
 **Status:** Accepted, staged implementation
 **Current wire contract:** Loader wire **3** with artifact index schema **2**
 (`crates/mc-loader/src/lib.rs`). The server plugin frontend is the Wasmtime
-component contract `krasnokamen:plugin@0.9.0`; the Luau 0.6.0 frontend is retired
-(see the historical note below). Neither runs guest code on the client.
+component contract `krasnokamen:plugin@0.9.0` (the Luau frontend is retired).
+Neither runs guest code on the client.
 
 ## Problem
 
@@ -41,13 +41,10 @@ NeoForge, and Forge adapters supply only platform identity, loader version,
 granted permissions, and cached identities. Platform networking and lifecycle
 code must call this shared core rather than reinterpret the plugin manifest.
 
-Source ownership (2026-09-06): the complete Java/Gradle workspace lives in the
-independent sibling `krasnokamen-loader` repository, not under the Rust core.
-The wire protocol and shared-core/platform split are unchanged. Core retains
-server-side protocol handling and cross-repository integration scenarios;
-`python3 -m tools.harness` resolves the sibling by default, with
-`KRASNOKAMEN_LOADER_ROOT` for another checkout. A core production build does not
-require Java or a Loader checkout.
+The Java/Gradle workspace lives in the sibling `krasnokamen-loader` repository;
+core keeps the server-side protocol and the cross-repository harness scenarios
+(`KRASNOKAMEN_LOADER_ROOT` selects another checkout). A core production build
+needs neither Java nor a Loader checkout.
 
 Downloaded bytes remain untrusted. A missing exact identity is requested
 explicitly; the server may answer only with the matching validated plugin
@@ -191,12 +188,6 @@ state is connection-scoped, and disconnect or content remount drops it rather
 than replaying it into another session. Fixed bindings do not add rebinding UI,
 chords, mouse/gamepad or client guest execution.
 
-The shared mixin declares `JAVA_21` compatibility because Forge's bundled
-Mixin 0.8.7 does not recognize `JAVA_25`; Minecraft still runs on Java 25.
-Forge's packaged jar registers it through `MixinConfigs`; the development run,
-which loads class directories rather than that jar manifest, supplies
-`--mixin.config`. Fabric and NeoForge use their mod metadata registration.
-
 Client fields and input remain untrusted; no server physical-key authority
 table is introduced. Plugins own mechanic state, while native view/session
 owners enforce delivery and cleanup. MCP named-key batches are validated on
@@ -250,19 +241,6 @@ storage. Block updates and chunk palettes project each canonical state to that
 exact session's acknowledged carrier id.
 Projected chunk frames bypass the cross-session prepared-frame cache, so one
 client's runtime id cannot leak to another.
-
-**Historical (removed CP-REFACTOR-070).** The Luau-era guest call
-`krasnokamen.place_loader_block(request_id, block_id, x, y, z)` was never part of
-the current WIT contract and had no component-export producer: nothing
-constructed `ScriptCommand::PlaceLoaderBlock` from a guest request. CP-REFACTOR-070
-established the origin does not exist and deleted the dead command/result route
-(`ScriptCommand::PlaceLoaderBlock`, `ScriptLoaderBlockPlacementRequest`,
-`ScriptLoaderBlockPlacementFailure`, `ScriptEventKind::LoaderBlockPlacementResult`,
-`route_loader_block_admitted`, `script_loader_block_failure`). The shared
-simulation helper survives under the neutral name
-`apply_server_owned_block_edit`, used by the live `SetWorldBlock` route and its
-test. The live Loader block path is `grant-loader-block-item` plus ordinary
-survival `UseItemOn` placement below.
 
 The same exact owner may call the WIT command
 `grant-loader-block-item(request, session, block, count)` for a

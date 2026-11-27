@@ -258,7 +258,7 @@ with the jar hashes and capture commands below; Mojang bytecode remains local.
 `enchanting_26_1_2` remains protocol-neutral gameplay; neither is a session
 profile, a chain bypass, nor an alias for the retired translator module.
 
-## Validation and historical evidence
+## Validation
 
 Current focused gates are the `translation` unit tests and
 `translation::join_tests::protocol_{775,776,777}_login_configuration_play`.
@@ -286,14 +286,3 @@ template, returns it to another hotbar slot and back, and compares complete
 screen's mouse path, not the survival-menu click RPC. Run with
 `python3 -m tools.harness run scenario java-protocol-pot-creative-echo --client java`;
 the release pin, adapter checkout and fresh-cache environment belong in its receipt.
-
-The original 2026-10-28 graphical evidence is historical, not proof of this
-chain cutover: 775 survival/inventory receipts were
-`.analysis/validation/20261028T065419-survival-qu1chur_/` and
-`20261028T065648-inventory-lyaogt0n/`; 777 core-client/inventory/survival/entities
-receipts were `20261028T095727-core-client-ny4t4eqy/`,
-`20261028T095829-inventory-gvlkvyux/`, `20261028T095920-survival-_pf6nb4e/` and
-`20261028T100001-entities-74xk4fiv/` in their respective validation checkouts.
-Those bounded passes still observed trial-spawner/pot NBT presentation defects;
-they did not establish complete parity. New chain receipts and its negative
-control must be reported against the exact committed tree and pinned release.
