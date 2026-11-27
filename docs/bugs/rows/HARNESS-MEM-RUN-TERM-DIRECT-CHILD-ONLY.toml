@@ -1,6 +1,6 @@
 [[bug]]
 id = "HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY"
-title = "`mem-run` forwards a stop signal to its direct child only, so a descendant that ignores it keeps the wrapper, the scope and the build token held until the wrapper is SIGKILLed"
+title = "`mem-run` forwards a stop signal to its direct child only, so a descendant that ignores it keeps the wrapper and scope alive until the wrapper is SIGKILLed"
 area = "harness"
 severity = "minor"
 status = "fixed"
@@ -10,7 +10,7 @@ regression = [
   "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_ignoring_descendant_does_not_hold_the_scope",
   "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_cancelled_child_receives_exactly_one_term",
   "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_honouring_child_ends_the_scope_before_the_escalation",
-  "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_the_token_is_held_during_the_scope_and_free_after_a_cancellation",
+  "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_cargo_scope_takes_no_token_and_ends_on_cancellation",
   "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts",
 ]
 failing_first = "not recorded"

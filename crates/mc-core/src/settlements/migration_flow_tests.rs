@@ -517,6 +517,11 @@ fn outside_arrival_flips_at_the_production_attractiveness_floor() {
     let mut state = fixture();
     let destination = town(&mut state, "destination", 8, 32);
     house(&mut state, destination, 8);
+    observe(&mut state, destination);
+    assert!(
+        capacity(&state, destination) > 0,
+        "the destination must have live bed capacity before testing the floor"
+    );
     // members 10, beds 15 (housing 0.5), no jobs, no deaths (safety 1): food
     // moves the score either side of the floor without naming 35.0.
     let facts = |food_points| Facts {
