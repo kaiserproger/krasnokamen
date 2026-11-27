@@ -133,50 +133,13 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             },
         ),
         PlayerChange::RecipesReloaded { reload } => {
-            if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
-                // The recipe book entries that follow come from these recipes;
-                // the catalog is recorded so the book does not send it again.
-                viewer.advancements = std::sync::Arc::clone(&packets.advancements);
-                push_reliable(out, conn, &packets.catalog.update);
-                viewer.recipe_catalog = Some(std::sync::Arc::clone(&packets.catalog));
-            }
+            plan_recipes_reloaded(viewer, out, conn, reload)
         }
         PlayerChange::RecipesUnlocked {
             registry,
             recipes,
             replace,
-        } => {
-            let catalog = crate::recipes::catalog(&registry.0);
-            if viewer
-                .recipe_catalog
-                .as_ref()
-                .is_none_or(|previous| !std::sync::Arc::ptr_eq(previous, &catalog))
-            {
-                // Catalog precedes book displays and refreshed station menus,
-                // including a join racing reload or multiple lagged reloads.
-                push_reliable(out, conn, &catalog.update);
-                viewer.recipe_catalog = Some(std::sync::Arc::clone(&catalog));
-            }
-            let entries = recipes
-                .iter()
-                .filter_map(|id| {
-                    let mut entry = catalog.entries.get(id)?.clone();
-                    if *replace {
-                        // Joining never replays the unlock toast.
-                        entry.flags = 0;
-                    }
-                    Some(entry)
-                })
-                .collect();
-            push_reliable(
-                out,
-                conn,
-                &ClientboundRecipeBookAdd {
-                    entries,
-                    replace: *replace,
-                },
-            );
-        }
+        } => plan_recipes_unlocked(viewer, out, conn, registry, recipes, *replace),
         PlayerChange::VehicleCorrected {
             position,
             yaw,
@@ -277,21 +240,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             players, removed, ..
         } => plan_roster(viewer, out, players, removed),
         PlayerChange::TextBurst { lines } => plan_text_burst(lines, viewer, out),
-        PlayerChange::StyledChat { content, .. } => {
-            // A component is any NBT root: a bare string (`tellraw @s "text"`) and a list are
-            // valid vanilla components, so the compound-only `write_network` would drop them.
-            let mut content_nbt = Vec::new();
-            if mc_nbt::write_network_value(&mut content_nbt, content).is_ok() {
-                push_reliable(
-                    out,
-                    conn,
-                    &ClientboundSystemChat {
-                        content_nbt,
-                        overlay: false,
-                    },
-                );
-            }
-        }
+        PlayerChange::StyledChat { content, .. } => push_styled_chat(out, conn, content),
         PlayerChange::PluginClientSound { sound, .. } => push_reliable(
             out,
             conn,
@@ -371,13 +320,11 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         ),
         PlayerChange::BlockResynced {
             position, block, ..
-        } => push_reliable(
+        } => push_block_update(
             out,
             conn,
-            &BlockUpdate {
-                position: pack_block_pos(position.x, position.y, position.z),
-                state_id: *block as i32,
-            },
+            pack_block_pos(position.x, position.y, position.z),
+            *block,
         ),
         PlayerChange::BlockActionsAcked { sequence, .. } => push_reliable(
             out,
@@ -405,27 +352,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             front,
             block,
             ..
-        } => {
-            let position = pack_block_pos(position.x, position.y, position.z);
-            // The predicted sign may have been rolled back by an ack:
-            // install its block before vanilla looks up its entity.
-            push_reliable(
-                out,
-                conn,
-                &BlockUpdate {
-                    position,
-                    state_id: *block as i32,
-                },
-            );
-            push_reliable(
-                out,
-                conn,
-                &ClientboundOpenSignEditor {
-                    position,
-                    is_front_text: *front,
-                },
-            );
-        }
+        } => plan_sign_editor(out, conn, *position, *front, *block),
         PlayerChange::BlockEntityData { .. } => unreachable!("routed before planning"),
         PlayerChange::BlockEvent {
             position,
@@ -434,27 +361,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             action,
             parameter,
             ..
-        } => {
-            let position = pack_block_pos(position.x, position.y, position.z);
-            push_reliable(
-                out,
-                conn,
-                &BlockUpdate {
-                    position,
-                    state_id: *state as i32,
-                },
-            );
-            push_reliable(
-                out,
-                conn,
-                &ClientboundBlockEvent {
-                    position,
-                    action: *action,
-                    parameter: *parameter,
-                    block_type: *block as i32,
-                },
-            );
-        }
+        } => plan_block_event(out, conn, *position, *block, *state, *action, *parameter),
         PlayerChange::BellRung { position } => push_reliable(
             out,
             conn,
@@ -631,19 +538,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 experience_level: *level,
             },
         ),
-        PlayerChange::Died { message } => {
-            let mut message_nbt = Vec::new();
-            if mc_nbt::write_network(&mut message_nbt, message).is_ok() {
-                push_reliable(
-                    out,
-                    conn,
-                    &ClientboundPlayerCombatKill {
-                        player_id: viewer.entity_id.0,
-                        message_nbt,
-                    },
-                );
-            }
-        }
+        PlayerChange::Died { message } => push_death(out, conn, viewer.entity_id.0, message),
         PlayerChange::WeatherChanged {
             raining,
             rain_level,
@@ -695,17 +590,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             };
             plan_respawn(&respawn, viewer, out);
         }
-        PlayerChange::GameModeChanged { game_mode, .. } => {
-            push_reliable(
-                out,
-                conn,
-                &GameEvent {
-                    event: GameEvent::EVENT_CHANGE_GAME_MODE,
-                    value: f32::from(*game_mode),
-                },
-            );
-            push_reliable(out, conn, &abilities_for_mode(*game_mode));
-        }
+        PlayerChange::GameModeChanged { game_mode, .. } => plan_game_mode(out, conn, *game_mode),
         PlayerChange::DifficultyChanged { difficulty, .. } => push_reliable(
             out,
             conn,
@@ -1024,6 +909,177 @@ fn plan_merchant_offers(
             can_restock,
         },
     );
+}
+
+/// A registry reload replaces the catalog: record it so the following book
+/// entries and station menus do not resend it.
+fn plan_recipes_reloaded(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    reload: &mc_core::boundary::RegistryReload,
+) {
+    if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
+        viewer.advancements = std::sync::Arc::clone(&packets.advancements);
+        push_reliable(out, conn, &packets.catalog.update);
+        viewer.recipe_catalog = Some(std::sync::Arc::clone(&packets.catalog));
+    }
+}
+
+/// Newly unlocked recipes. The catalog goes first when the viewer does not hold
+/// it yet (a join racing a reload, or several lagged reloads); a replace event
+/// drops the unlock toast, which joining never replays.
+fn plan_recipes_unlocked(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    registry: &mc_core::boundary::RecipeSource,
+    recipes: &[String],
+    replace: bool,
+) {
+    let catalog = crate::recipes::catalog(&registry.0);
+    if viewer
+        .recipe_catalog
+        .as_ref()
+        .is_none_or(|previous| !std::sync::Arc::ptr_eq(previous, &catalog))
+    {
+        // Catalog precedes book displays and refreshed station menus.
+        push_reliable(out, conn, &catalog.update);
+        viewer.recipe_catalog = Some(std::sync::Arc::clone(&catalog));
+    }
+    let entries = recipes
+        .iter()
+        .filter_map(|id| {
+            let mut entry = catalog.entries.get(id)?.clone();
+            if replace {
+                entry.flags = 0;
+            }
+            Some(entry)
+        })
+        .collect();
+    push_reliable(out, conn, &ClientboundRecipeBookAdd { entries, replace });
+}
+
+/// Install an already packed block position reliably, the precondition for
+/// packets that make the client look the block up (sign editor, block event).
+fn push_block_update(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    position: i64,
+    state_id: u32,
+) {
+    push_reliable(
+        out,
+        conn,
+        &BlockUpdate {
+            position,
+            state_id: state_id as i32,
+        },
+    );
+}
+
+/// Open the sign editor. The predicted sign may have been rolled back by an
+/// ack, so its block is installed before vanilla looks up the block entity.
+fn plan_sign_editor(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    block_pos: mc_core::boundary::BlockPos,
+    front: bool,
+    block: u32,
+) {
+    let position = pack_block_pos(block_pos.x, block_pos.y, block_pos.z);
+    push_block_update(out, conn, position, block);
+    push_reliable(
+        out,
+        conn,
+        &ClientboundOpenSignEditor {
+            position,
+            is_front_text: front,
+        },
+    );
+}
+
+/// A block event (chest open, note-block note, ...): install the event's block
+/// state, then the event itself.
+fn plan_block_event(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    block_pos: mc_core::boundary::BlockPos,
+    block: u32,
+    state: u32,
+    action: u8,
+    parameter: u8,
+) {
+    let position = pack_block_pos(block_pos.x, block_pos.y, block_pos.z);
+    push_block_update(out, conn, position, state);
+    push_reliable(
+        out,
+        conn,
+        &ClientboundBlockEvent {
+            position,
+            action,
+            parameter,
+            block_type: block as i32,
+        },
+    );
+}
+
+/// The death screen's combat-kill message, when the component encodes.
+fn push_death(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    player_id: i32,
+    message: &mc_nbt::Tag,
+) {
+    let mut message_nbt = Vec::new();
+    if mc_nbt::write_network(&mut message_nbt, message).is_ok() {
+        push_reliable(
+            out,
+            conn,
+            &ClientboundPlayerCombatKill {
+                player_id,
+                message_nbt,
+            },
+        );
+    }
+}
+
+/// A styled chat line. A component is any NBT root: a bare string
+/// (`tellraw @s "text"`) and a list are valid vanilla components, so the
+/// compound-only `write_network` would drop them.
+fn push_styled_chat(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    content: &mc_nbt::Tag,
+) {
+    let mut content_nbt = Vec::new();
+    if mc_nbt::write_network_value(&mut content_nbt, content).is_ok() {
+        push_reliable(
+            out,
+            conn,
+            &ClientboundSystemChat {
+                content_nbt,
+                overlay: false,
+            },
+        );
+    }
+}
+
+/// The game-mode event and the abilities that go with it.
+fn plan_game_mode(
+    out: &mut Vec<PlannedPacket>,
+    conn: mc_core::boundary::ConnectionId,
+    game_mode: u8,
+) {
+    push_reliable(
+        out,
+        conn,
+        &GameEvent {
+            event: GameEvent::EVENT_CHANGE_GAME_MODE,
+            value: f32::from(game_mode),
+        },
+    );
+    push_reliable(out, conn, &abilities_for_mode(game_mode));
 }
 
 /// A death respawn (`travel == false`) or a portal/command dimension change.
