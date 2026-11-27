@@ -59,14 +59,14 @@
  },
  "vanilla_expect": [
   {
-   "phase": "t700",
+   "phase": "t250",
    "check": "block",
    "pos": [
     2,
     64,
     2
    ],
-   "equals": "minecraft:furnace[facing=north,lit=false]"
+   "equals": "minecraft:furnace[facing=north,lit=true]"
   }
  ]
 }

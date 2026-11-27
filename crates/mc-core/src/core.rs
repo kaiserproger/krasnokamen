@@ -2007,6 +2007,10 @@ mod entity_state_persistence_tests;
 mod mounts_persistence_tests;
 
 #[cfg(test)]
+#[path = "core/quirk_parity_restart.rs"]
+pub(crate) mod quirk_parity_restart;
+
+#[cfg(test)]
 #[path = "raids_recovery_tests.rs"]
 mod raids_recovery_tests;
 

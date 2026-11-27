@@ -101,22 +101,28 @@ def fuzz_scenarios(args) -> list[dict]:
 
 
 def _prepare(oracle: VanillaOracle, boxes: list, *, restarted: bool) -> None:
-    oracle.run_checked(["tick freeze"])
+    """Freeze time and make every box resident.
+
+    A fresh world loads its forced chunks while sprinting real ticks (it holds nothing yet).
+    A restarted world runs unfrozen from startup (vanilla does not persist `tick freeze`) and
+    reloads its persisted forced chunks on its own; it is frozen once they are resident, never
+    sprinted, so the recorded state does not advance.
+    """
+    if not restarted:
+        oracle.run_checked(["tick freeze"])
     for x1, _, z1, x2, _, z2 in boxes:
         oracle.run_checked([f"forceload add {x1} {z1} {x2} {z2}"])
-    # Chunks load on server tasks: run real ticks until every far corner is resident. A
-    # restarted world must already hold them (forced chunks load with the level): ticking
-    # it would advance the recorded state.
     for box in boxes:
         for _ in range(200):
             lines = oracle.run(f"execute if loaded {box[3]} {box[4]} {box[5]} run say QP_LOADED")
             if any("QP_LOADED" in line for line in lines):
                 break
-            if restarted:
-                raise VanillaError("forceloaded box not resident after the restart")
-            oracle.sprint(20)
+            if not restarted:
+                oracle.sprint(20)
         else:
             raise VanillaError("forceloaded box never became resident")
+    if restarted:
+        oracle.run_checked(["tick freeze"])
 
 
 def run_vanilla(scenario: dict, workdir: Path, jar: Path, java: str) -> dict:
@@ -151,8 +157,11 @@ def run_vanilla(scenario: dict, workdir: Path, jar: Path, java: str) -> dict:
     return result
 
 
-def run_krasnokamen(scenarios: list[dict], out: Path) -> dict[str, dict]:
-    """Krasnokamen observations of resolved scenarios: the in-process native tick driver."""
+def run_krasnokamen(scenarios: list[dict], out: Path, restart_fault: str | None = None) -> dict[str, dict]:
+    """Krasnokamen observations of resolved scenarios: the in-process native tick driver.
+
+    Restart scenarios keep their native worlds under DIR/krasnokamen/worlds; `restart_fault`
+    damages each store between the stop and the reopen (negative control: they must fail)."""
     krasnokamen_dir = out / "krasnokamen"
     krasnokamen_dir.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -161,7 +170,11 @@ def run_krasnokamen(scenarios: list[dict], out: Path) -> dict[str, dict]:
         path.write_text(json.dumps(scenario, indent=1))
         paths.append(str(path))
     receipt = krasnokamen_dir / "receipt.json"
-    env = dict(os.environ, KRASNOKAMEN_QUIRK_SCENARIOS=":".join(paths), KRASNOKAMEN_QUIRK_RECEIPT=str(receipt))
+    env = dict(os.environ, KRASNOKAMEN_QUIRK_SCENARIOS=":".join(paths), KRASNOKAMEN_QUIRK_RECEIPT=str(receipt),
+               KRASNOKAMEN_QUIRK_WORLDS=str(krasnokamen_dir / "worlds"))
+    env.pop("KRASNOKAMEN_QUIRK_RESTART_FAULT", None)
+    if restart_fault:
+        env["KRASNOKAMEN_QUIRK_RESTART_FAULT"] = restart_fault
     command = ["cargo", "test", "-p", "mc-core", "--lib", TEST_NAME, "--", "--ignored", "--exact", "--nocapture"]
     if MEM_RUN.is_file():
         command = [str(MEM_RUN), "-m", "12G"] + command
@@ -227,6 +240,13 @@ def verdict(scenario: dict, vanilla: dict, krasnokamen: dict | None, *,
     if krasnokamen_rejections(krasnokamen) and not scenario.get("allow_krasnokamen_command_errors"):
         reasons.append("Krasnokamen rejected commands vanilla accepted")
         entry["krasnokamen_command_errors"] = krasnokamen_rejections(krasnokamen)[:20]
+    if krasnokamen.get("error"):
+        reasons.append(f"Krasnokamen run failed: {krasnokamen['error']}")
+    restarted = {phase["name"] for phase in krasnokamen["phases"] if phase.get("restarted")}
+    skipped = [phase["name"] for phase in scenario.get("phases", []) if phase.get("restart")
+               and phase["name"] not in restarted]
+    if skipped:
+        reasons.append(f"Krasnokamen did not checkpoint and recover before restart phase(s) {skipped}")
     rows: list = []
     if scenario.get("fuzz"):
         fuzz_verdict(scenario, vanilla, krasnokamen, entry, reasons, wildcards, rows)
@@ -455,7 +475,7 @@ def replay(args) -> int:
     corpus = Corpus(corpus_root(args.corpus), args.mc_version)
     receipt: dict = {"profile": "quirk-parity", "command": "replay", "mc_version": args.mc_version,
                      "corpus": str(corpus.dir), "lock": str(LOCK), "scenarios": [], "mismatches": [],
-                     "status": "fail"}
+                     "restart_fault": args.restart_fault, "status": "fail"}
     try:
         state = corpus.verify()
         receipt["integrity"] = {"locked_cases": len(state["latest"]), "manifest_entries": state["entries"],
@@ -486,7 +506,8 @@ def replay(args) -> int:
                 docs[case] = doc
         if not docs and not receipt["scenarios"]:
             raise CorpusError("no recorded cases selected")
-        krasnokamen = run_krasnokamen([doc["scenario"] for doc in docs.values()], out) if docs else {}
+        krasnokamen = run_krasnokamen([doc["scenario"] for doc in docs.values()], out,
+                                      args.restart_fault) if docs else {}
         groups: dict[str, list[dict]] = {}
         for case, doc in docs.items():
             if doc.get("group"):
@@ -540,6 +561,9 @@ def parse_args(argv: list[str] | None = None) -> tuple[str, argparse.Namespace]:
         parser.add_argument("--out", type=Path, required=True)
         parser.add_argument("--scenario", action="append", default=[])
         parser.add_argument("--family", action="append", default=[])
+    if command == "replay":
+        parser.add_argument("--restart-fault", choices=["delete-store", "garble-store"], default=None,
+                            help="negative control: damage each restart scenario's store before it reopens")
     if command in ("record", "re-record"):
         parser.add_argument("--jar", default=None)
         parser.add_argument("--java", default=None)

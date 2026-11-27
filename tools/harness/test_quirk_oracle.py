@@ -12,6 +12,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -131,7 +132,7 @@ class ReplayTests(unittest.TestCase):
 
     def replay(self, krasnokamen: dict) -> tuple[int, dict, mock.Mock]:
         args = SimpleNamespace(out=self.tmp / "out", corpus=str(self.tmp / "corpus"), mc_version="26.3",
-                               scenario=[], family=[])
+                               scenario=[], family=[], restart_fault=None)
         with mock.patch.object(oracle, "run_krasnokamen", return_value=krasnokamen) as runner:
             code = oracle.replay(args)
         return code, json.loads((self.tmp / "out" / "receipt.json").read_text()), runner
@@ -140,6 +141,42 @@ class ReplayTests(unittest.TestCase):
         code, receipt, _ = self.replay({"case-a": dict(run({"0,0,0": "minecraft:stone"}), server="krasnokamen")})
         self.assertEqual((code, receipt["status"]), (0, "pass"), receipt)
         self.assertEqual(receipt["integrity"]["problems"], [])
+
+    def record_with_jar(self, version: str, bundler: bool = True) -> tuple[int, dict, mock.Mock]:
+        jar = self.tmp / f"server-{version}.jar"
+        with zipfile.ZipFile(jar, "w") as archive:
+            archive.writestr("version.json", json.dumps({"id": version}))
+            if bundler:
+                archive.writestr("META-INF/versions.list", "x\t26.1.2\t26.1.2/server-26.1.2.jar\n")
+        (self.scenarios / "case-b.json").write_text(json.dumps(dict(SCENARIO, id="case-b")))
+        args = SimpleNamespace(out=self.tmp / "rec", corpus=str(self.tmp / "corpus"), mc_version="26.3",
+                               scenario=["case-b"], family=[], jar=str(jar), java=None, reason=None,
+                               fuzz_seed=[], fuzz_cells=64, fuzz_style="mixed")
+        with mock.patch.object(oracle, "run_vanilla") as vanilla, \
+                mock.patch.object(oracle, "resolve_java", return_value="/bin/true"), \
+                mock.patch.object(oracle, "java_version", return_value="test"):
+            code = oracle.record(args)
+        return code, json.loads((self.tmp / "rec" / "receipt.json").read_text()), vanilla
+
+    def test_recording_with_another_release_jar_is_refused_and_changes_nothing(self):
+        before = (self.lock.read_text(), self.corpus.manifest.read_text())
+        for version, bundler, message in (("26.1.2", True, "is vanilla '26.1.2', not 26.3"),
+                                          ("26.3", False, "inner game jar")):
+            with self.subTest(version=version, bundler=bundler):
+                code, receipt, vanilla = self.record_with_jar(version, bundler)
+                self.assertEqual((code, receipt["status"]), (1, "fail"))
+                self.assertIn(message, receipt["error"])
+                vanilla.assert_not_called()
+                self.assertEqual((self.lock.read_text(), self.corpus.manifest.read_text()), before)
+
+    def test_restart_phase_krasnokamen_did_not_restart_fails(self):
+        scenario = dict(SCENARIO, phases=[{"name": "p", "restart": True, "commands": [], "ticks": 1}])
+        vanilla = run({"0,0,0": "minecraft:stone"})
+        self.assertEqual(oracle.verdict(scenario, vanilla, vanilla)["status"], "fail")
+        restarted = dict(vanilla, phases=[vanilla["phases"][0], dict(vanilla["phases"][1], restarted=True)])
+        self.assertEqual(oracle.verdict(scenario, vanilla, restarted)["status"], "pass")
+        failed = dict(restarted, error="native store refused: missing native/state.redb")
+        self.assertEqual(oracle.verdict(scenario, vanilla, failed)["status"], "fail")
 
     def test_edited_case_fails_replay_without_running_krasnokamen(self):
         path = self.corpus.dir / self.entry["file"]

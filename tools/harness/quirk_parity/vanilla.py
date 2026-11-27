@@ -8,6 +8,7 @@ wait is on a specific server log line.
 """
 from __future__ import annotations
 
+import json
 import os
 import queue
 import shutil
@@ -15,6 +16,7 @@ import socket
 import subprocess
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 from . import anvil
@@ -39,10 +41,24 @@ def resolve_java(explicit: str | None = None) -> str:
 
 
 def resolve_jar(mc_version: str, explicit: str | None = None) -> Path:
-    """`--jar`, else `<work>/tools-cache/minecraft/<version>/server.jar` (the Mojang bundler)."""
+    """`--jar`, else `<work>/tools-cache/minecraft/<version>/server.jar` (the Mojang bundler).
+
+    The bundler's own `version.json` must name `mc_version`: a recording is stored as that
+    release, so a jar of another release is refused before any server starts.
+    """
     jar = Path(explicit) if explicit else TOOLS_CACHE / "minecraft" / mc_version / "server.jar"
     if not jar.is_file():
         raise VanillaError(f"no vanilla {mc_version} server bundler at {jar} (docs/QUIRK_PARITY.md)")
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            names = set(archive.namelist())
+            version = json.loads(archive.read("version.json"))
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile) as error:
+        raise VanillaError(f"{jar} is not a vanilla server bundler with a version.json: {error}") from error
+    if version.get("id") != mc_version:
+        raise VanillaError(f"{jar} is vanilla {version.get('id')!r}, not {mc_version}")
+    if "META-INF/versions.list" not in names:
+        raise VanillaError(f"{jar} is the inner game jar, not the server bundler (no META-INF/versions.list)")
     return jar
 
 

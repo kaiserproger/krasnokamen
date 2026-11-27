@@ -1,0 +1,84 @@
+{
+ "id": "save-restart",
+ "family": "persistence",
+ "description": "State across a clean server stop and restart (vanilla `stop` and reopen; Krasnokamen native checkpoint and recovery): block states, container contents, a water source, door halves, an AI-less pig, a gravity-less armor stand and a resting item stack must read back unchanged. Placed high above any terrain; everything has settled before the restart.",
+ "box": [
+  0,
+  149,
+  0,
+  15,
+  160,
+  15
+ ],
+ "setup": [
+  "fill 0 149 0 15 149 15 minecraft:stone",
+  "setblock 1 150 1 minecraft:oak_stairs[facing=east,half=top,shape=straight,waterlogged=false]",
+  "setblock 3 150 1 minecraft:oak_log[axis=x]",
+  "setblock 5 150 1 minecraft:redstone_lamp[lit=false]",
+  "setblock 7 150 1 minecraft:red_wool",
+  "setblock 9 150 1 minecraft:oak_door[facing=south,half=lower,hinge=right,open=true,powered=false]",
+  "setblock 9 151 1 minecraft:oak_door[facing=south,half=upper,hinge=right,open=true,powered=false]",
+  "setblock 1 150 4 minecraft:chest[facing=east,type=single,waterlogged=false]",
+  "item replace block 1 150 4 container.0 with minecraft:diamond 5",
+  "item replace block 1 150 4 container.13 with minecraft:oak_planks 64",
+  "item replace block 1 150 4 container.26 with minecraft:iron_pickaxe 1",
+  "setblock 4 150 4 minecraft:barrel[facing=up,open=false]",
+  "item replace block 4 150 4 container.2 with minecraft:wheat_seeds 17",
+  "setblock 7 150 4 minecraft:furnace[facing=west,lit=false]",
+  "item replace block 7 150 4 container.0 with minecraft:raw_iron 9",
+  "setblock 10 150 4 minecraft:dispenser[facing=up,triggered=false]",
+  "item replace block 10 150 4 container.4 with minecraft:arrow 32",
+  "fill 12 150 1 14 150 3 minecraft:glass",
+  "setblock 13 150 2 minecraft:water"
+ ],
+ "settle_ticks": 2,
+ "phases": [
+  {
+   "name": "settled",
+   "commands": [
+    "summon minecraft:pig 3.5 150.0 9.5 {NoAI:1b,PersistenceRequired:1b}",
+    "summon minecraft:armor_stand 6.5 152.0 9.5 {NoGravity:1b}",
+    "summon minecraft:item 9.5 150.0 9.5 {Item:{id:\"minecraft:emerald\",count:12},PickupDelay:32767s,Age:-32768s}"
+   ],
+   "ticks": 40
+  },
+  {
+   "name": "restarted",
+   "restart": true,
+   "commands": [],
+   "ticks": 1
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts",
+  "containers": "exact",
+  "entity_positions": {
+   "types": [
+    "minecraft:pig",
+    "minecraft:armor_stand",
+    "minecraft:item"
+   ],
+   "epsilon": 0.05
+  }
+ },
+ "vanilla_expect": [
+  {
+   "phase": "restarted",
+   "check": "block",
+   "pos": [
+    9,
+    151,
+    1
+   ],
+   "equals": "minecraft:oak_door[facing=south,half=upper,hinge=right,open=true,powered=false]"
+  },
+  {
+   "phase": "restarted",
+   "check": "count",
+   "key": "minecraft:item|minecraft:emerald",
+   "min": 12,
+   "max": 12
+  }
+ ]
+}
