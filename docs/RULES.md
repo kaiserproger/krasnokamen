@@ -57,6 +57,7 @@ Design choices are in [DECISIONS.md](../DECISIONS.md), mistakes already made in
 ## Commits, reviews and publication
 
 - Main commits small Conventional Commits often and pushes core and sibling `main` after merged slices; a not-yet-green commit may land, a broken push gets a follow-up fix. (2026-11-07, 2026-11-15)
+- After each push to `main` and its landing receipt, Main runs `tmux wait-for -S solaris-main-landed` on the host: that signal, not a poll, is how the owner's laptop hears about a landing, and it also marks the next batch ready. (2026-11-28, D140, D141)
 - Workers commit only on their own worktree branch and never push. Never change Git configuration, never reset, clean or stage unrelated dirty files, and keep hooks and signing.
 - Tags, releases and publication need the owner's explicit authorization and two read-only release reviewers; the advisor issues no `[approved]`. (2026-11-07)
 - No client release or demo with known bugs; a failed minimum gate leaves the release a draft. (2026-10-24)
