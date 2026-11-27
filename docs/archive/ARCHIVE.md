@@ -115,18 +115,17 @@ real-client acceptance not recorded.
 Superseded: final v1 release before the 0013/0014 core replacement.
 Replaced by: `docs/releases/v0.0.8.md`.
 
-## docs/VALIDATION_LEDGER.md historical slices (2026-06-13 .. 2026-07-11, v1)
+## docs/VALIDATION_LEDGER.md (2026-06 .. 2026-10, v1 M100 ledger)
 
-Archived 2026-10-24: 91 per-slice sections (lines ~43-1441, ~290KB) plus 2
-Oct-11 pre-gate slices (fixture surface selection; W1 projectile/respawn roots),
-summarized below. Kept in place: header/runtime-era notice, status vocabulary,
-M77 preflight, `## Frozen M100 Denominator`, non-goals appendix, M78-M100
-targets, 80% blockers, M95 audit (tooling input to `coverage-audit`), and the
-2026-10-11 Parity Wave 1 integrated native gate (latest L2 leg).
-All archived slices carry the ledger's own runtime-era warning: v1 trees,
-deleted `mc-server`/`mc-net` commands and quality labels apply to their
-recorded trees, not the current server; no row auto-revalidates on cutover.
-Full text in Git history (`git log -- docs/VALIDATION_LEDGER.md`).
+Said: the frozen v1 M100 denominator (per-area rows with status, evidence and
+gaps), its targets and blockers, and per-slice validation notes; its only reader
+was `mc-test-harness`'s `coverage-audit` binary. Superseded by the bug ledger
+(`docs/bugs/`) and the evidence labels in `docs/STATUS.md`; no harness profile,
+CI job or ledger row ran `coverage-audit`. Deleted with the binary on 2026-11-27
+(owner D125). Full text in Git history (`git log -- docs/VALIDATION_LEDGER.md`).
+
+The per-slice sections archived on 2026-10-24 (v1 trees; their commands and
+quality labels apply to their recorded trees only):
 
 - Post-M95 local automated validation update: generated gitignored
   `block_light.json`, reran fmt/clippy/test gates; stabilization label, no
