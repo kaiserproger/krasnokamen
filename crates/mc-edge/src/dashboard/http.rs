@@ -116,31 +116,11 @@ where
                 .await;
                 return;
             };
-            let Ok(body) = serde_json::to_vec(&proof) else {
-                let _ = write_response(
-                    stream,
-                    "500 Internal Server Error",
-                    "text/plain",
-                    b"encode error",
-                )
-                .await;
-                return;
-            };
-            let _ = write_response(stream, "200 OK", "application/json", &body).await;
+            respond_json(stream, &proof).await;
         }
         "/stats" => {
             let snapshot = state.snapshot();
-            let Ok(body) = serde_json::to_vec(&snapshot) else {
-                let _ = write_response(
-                    stream,
-                    "500 Internal Server Error",
-                    "text/plain",
-                    b"encode error",
-                )
-                .await;
-                return;
-            };
-            let _ = write_response(stream, "200 OK", "application/json", &body).await;
+            respond_json(stream, &snapshot).await;
         }
         "/tps" => {
             let snapshot = state.snapshot();
@@ -191,17 +171,7 @@ where
                 return;
             };
             snapshot.wait_timed_out = wait_timed_out;
-            let Ok(body) = serde_json::to_vec(&snapshot) else {
-                let _ = write_response(
-                    stream,
-                    "500 Internal Server Error",
-                    "text/plain",
-                    b"encode error",
-                )
-                .await;
-                return;
-            };
-            let _ = write_response(stream, "200 OK", "application/json", &body).await;
+            respond_json(stream, &snapshot).await;
         }
         "/telemetry.jsonl" => {
             let Some((query, _)) =
@@ -303,4 +273,24 @@ where
     stream.write_all(head.as_bytes()).await?;
     stream.write_all(body).await?;
     stream.flush().await
+}
+
+/// Encode `value` and answer it as JSON, or answer 500 text when the value
+/// does not encode.
+async fn respond_json<S, T>(stream: &mut S, value: &T)
+where
+    S: AsyncWrite + Unpin,
+    T: serde::Serialize,
+{
+    let Ok(body) = serde_json::to_vec(value) else {
+        let _ = write_response(
+            stream,
+            "500 Internal Server Error",
+            "text/plain",
+            b"encode error",
+        )
+        .await;
+        return;
+    };
+    let _ = write_response(stream, "200 OK", "application/json", &body).await;
 }
