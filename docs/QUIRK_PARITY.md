@@ -11,7 +11,7 @@ scenario that vanilla itself does not show is a failing scenario.
 # whole gate (needs .analysis/server.jar = vanilla 26.1.2 bundler, Java 25, a built mc-core test binary)
 python3 -m tools.harness run quirk-parity -- --family quasi-connectivity
 python3 -m tools.harness.quirk_parity --out DIR [--scenario ID] [--family F] [--vanilla-only|--krasnokamen-only]
-python3 -m tools.harness.quirk_parity --out DIR --fuzz-seed 1 --fuzz-cells 256 --fuzz-style dense|mixed|bud|slime3d
+python3 -m tools.harness.quirk_parity --out DIR --fuzz-seed 1 --fuzz-cells 256 --fuzz-style mixed|dense|bud|slime3d|timing
 ```
 
 Receipts: `DIR/receipt.json` (per scenario `status`: `pass`, `fail`,
@@ -100,14 +100,19 @@ parity gate.
 
 ## Scenario families
 
+Tracked scenarios live in `tools/harness/quirk_parity/scenarios/` and
+`player_scenarios/`; `--fuzz-seed` generates the `fuzz-*` ones
+(`tools/harness/quirk_parity/seeded.py`).
+
 | family | scenarios | what must match vanilla |
 |---|---|---|
-| quasi-connectivity | `qc-*` | piston/dropper/dispenser powered through the block above, only reacting on a neighbour update |
-| tnt-duping | `tnt-*` | BUD TNT duplication through piston push order (destroy-list/shape-update), controls |
-| update-order | `fuzz-*` | seeded piston/TNT/rail/carpet/coral/observer contraptions: every vanilla duplication cell must match, other differences are `findings` |
-| zero-tick | `zerotick-*` | 0-tick behaviours that still exist in 26.1.2 |
-| player | `player_scenarios/*` | diagonal sprint speed acceptance, attribute swapping (see `tools/harness/quirk_parity/player.py`) |
-| farm-* | `farm-*` | production per hour over several seeds within tolerance |
+| `quasi-connectivity` | `qc-piston-bud` | piston/dropper/dispenser powered through the block above, only reacting on a neighbour update |
+| `redstone` | `redstone-lever-lamp` | a lamp follows a floor lever while an isolated control lamp stays dark |
+| `tnt-duping` | `tnt-duper-found-bud`, `tnt-bud-push-destroy-list` | BUD TNT duplication through piston push order (destroy list, shape updates) |
+| `fuzz-dupers` | generated `fuzz-mixed-<seed>`, `fuzz-dense-<seed>`, `fuzz-bud-<seed>`, `fuzz-slime3d-<seed>` | every vanilla duplication cell must match; other differences are `findings` |
+| `zero-tick` | generated `fuzz-timing-<seed>` (`--fuzz-style timing`) | on+off or off+on pulses inside one tick, compared per cell |
+| player | `player_scenarios/attribute-swap`, `diagonal-speed` | attribute swapping and diagonal sprint speed (`tools/harness/quirk_parity/player.py`) |
+| `farm` | `farm-*` (chicken eggs, cane, wheat, gold nuggets, iron golem, mob kill chamber, villager breeder) | production per hour over several seeds within tolerance |
 
 Rules: never "fix" a divergence by making Krasnokamen stricter than vanilla. A
 Krasnokamen divergence is either fixed with a regression test (small fix) or
