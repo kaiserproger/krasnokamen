@@ -26,7 +26,7 @@ owns creation, archival, refusal conditions and pin mechanics:
 **Every file-tool edit/write uses an absolute worktree path.** Shell `cd` does
 not retarget file tools. Put this rule in every worktree brief; parents forward
 it to children. Investigate suspected Main clobber by finding successful
-relative `crates/...` edits in the transcript (2026-10-16 incident).
+relative `crates/...` edits in the transcript ([pitfall](../PITFALLS.md#the-owner-host)).
 
 Harness sibling discovery (`tools/harness/runtime.py::sibling_root`,
 `regression.sh`, `prepare-real-client-scenario.sh`) resolves beside the main

@@ -153,8 +153,8 @@ The brief overrides the following defaults:
 - Absolute assigned-worktree paths; `wt-new`, authorized `wt-done`, release gates
   only from `pin-release`. Default **no commits**; report
   `git diff <base> --binary | sha256sum`.
-- One heavy command at a time through Main's runner; `-x`/`-p` serialize without
-  GO. Stale slot-era skills lose to AGENTS (14 removed on 2026-11-07).
+- Heavy commands through Main's runner (no per-agent cap, owner D127); `-x`/`-p`
+  serialize without GO. Stale slot-era skills lose to AGENTS (14 removed on 2026-11-07).
 - Smallest correct change; behavioral fix needs fix-only negative control;
   record fail-first if observed, not a gate. Workers add regression/repro
   references, never mark rows fixed; Main uses `ledger promote`.
