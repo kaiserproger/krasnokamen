@@ -5,15 +5,18 @@ change what the recorded corpus replays. `ledger promote` calls `promotion_guard
 every core fix (a commit or a `patch:` fix) on the exact tree it promotes (HEAD plus the
 uncommitted state), before any control runs:
 
-- the baseline is that same tree with the whole fix reversed, test hunks included (for a
-  patch every hunk has to reverse there, so hunks outside the hashed identity cannot
-  offset anything; a committed fix whose diff no longer reverses on the tree is measured
-  at its own commit instead, and the receipt says so);
+- the baseline is that same tree with the whole fix reversed, test hunks included. A fix
+  that no longer reverses there as a whole is refused (re-record it as a `patch:` of the
+  candidate), so hunks outside a patch's hashed identity cannot offset anything and no
+  historical tree stands in for the promoted one;
 - tests are compared by identity: `cargo nextest list` of every package the fix touches,
-  on both trees. A test the baseline compiles and runs that the promoted tree no longer
-  lists, or lists as ignored, refuses the promotion, so a dropped `mod` declaration, a
-  deleted test replaced by another one or a new `#[ignore]` are all caught; assertion
-  counts are not compared (two asserts merged into one comparison lose nothing);
+  on both trees, or of the whole workspace when the fix touches a `Cargo.toml` or any
+  path outside `crates/` (`.config/nextest.toml`, `Cargo.lock`, `.cargo/`, data a build
+  reads). A test the baseline compiles and runs that the promoted tree no longer lists,
+  or lists as ignored or filtered out, refuses the promotion, so a dropped `mod`
+  declaration, a deleted test replaced by another one, a new `#[ignore]` or a nextest
+  filter are all caught; a moved test changes identity and is refused too (land the move
+  as its own commit); assertion counts are not compared;
 - `corpus-lock.jsonl`: a removed line, or a new line for a case the baseline already has
   (a new active version), refuses it; new cases may be added. A re-record is its own
   commit with a reason, never part of a fix.
@@ -33,8 +36,8 @@ from pathlib import Path
 LOCK_REL = "tools/harness/quirk_parity/corpus-lock.jsonl"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
-# (tree, packages) -> {"<binary-id>::<test name>": ignored}
-Lister = Callable[[Path, list[str]], dict[str, bool]]
+# (tree, packages or None for the whole workspace) -> {"<binary-id>::<test name>": not run}
+Lister = Callable[[Path, list[str] | None], dict[str, bool]]
 
 
 class GuardRefused(RuntimeError):
@@ -85,27 +88,36 @@ def _package_exists(tree: Path, name: str) -> bool:
     return False
 
 
-def _listing(tree: Path, packages: set[str], lister: Lister) -> dict[str, bool]:
+def _listing(tree: Path, packages: set[str] | None, lister: Lister) -> dict[str, bool]:
+    if packages is None:
+        return lister(tree, None)
     present = sorted(name for name in packages if _package_exists(tree, name))
     return lister(tree, present) if present else {}
+
+
+def workspace_wide(diff: str) -> bool:
+    """A `Cargo.toml` or a path outside `crates/` can change which tests any package compiles or runs."""
+    return any(not path.startswith("crates/") or path.rsplit("/", 1)[-1] == "Cargo.toml"
+               for path in changed_paths(diff))
 
 
 def _measure_pair(tree: Path, diff: str, lister: Lister) -> tuple[dict, dict] | None:
     """(baseline, after): `tree` with `diff` reversed, and `tree`; None when the diff does not reverse.
 
-    Both list the packages the diff touches in either tree, so a package the fix deletes loses
-    its tests and one it adds only adds tests.
+    Both list the packages the diff touches in either tree (a package the fix deletes loses its
+    tests, one it adds only adds tests), or the whole workspace (`workspace_wide`).
     """
     if _git(tree, "apply", "-R", "--check", "--whitespace=nowarn", "-", stdin=diff).returncode:
         return None
-    touched = _packages(tree, diff)
+    touched = None if workspace_wide(diff) else _packages(tree, diff)
     after = {"tests": _listing(tree, touched, lister), "lock": _lock_rows(tree)}
     reversed_ = _git(tree, "apply", "-R", "--whitespace=nowarn", "-", stdin=diff)
     if reversed_.returncode:
         raise GuardRefused(f"reversing the fix on {tree} failed: {reversed_.stderr.strip()}")
-    touched |= _packages(tree, diff)
+    if touched is not None:
+        touched |= _packages(tree, diff)
     baseline = {"tests": _listing(tree, touched, lister), "lock": _lock_rows(tree)}
-    return baseline, dict(after, packages=sorted(touched))
+    return baseline, dict(after, packages="workspace" if touched is None else sorted(touched))
 
 
 def _lock_problems(baseline: list[str], after: list[str]) -> tuple[list[str], dict]:
@@ -124,35 +136,30 @@ def _lock_problems(baseline: list[str], after: list[str]) -> tuple[list[str], di
                       "added_cases": sorted({row["case"] for row in added} - {case for _, case in known})}
 
 
-def promotion_guard(tree: Path, fix_diff: str, lister: Lister, *, patch: bool,
-                    fix_tree: Callable[[], Path] | None = None) -> dict:
+def promotion_guard(tree: Path, fix_diff: str, lister: Lister, *, patch: bool) -> dict:
     """Compare `tree` (the promoted tree) with itself minus the whole fix; refuse lost tests or corpus edits.
 
-    `tree` is left with the fix reversed: the caller restores it. `fix_tree` opens a clean tree at
-    the fix commit, used only when a committed fix no longer reverses on `tree`.
+    `tree` is left with the fix reversed: the caller restores it.
     """
-    measured_on = "candidate"
     pair = _measure_pair(tree, fix_diff, lister)
     if pair is None:
-        if patch or fix_tree is None:
-            raise GuardRefused("the fix does not reverse as a whole on the tree being promoted: every hunk of the "
-                               "patch, test hunks included, must be what that tree holds")
-        measured_on = "fix_commit"
-        pair = _measure_pair(fix_tree(), fix_diff, lister)
-        if pair is None:
-            raise GuardRefused("the fix commit's own diff does not reverse on the fix commit")
+        raise GuardRefused(
+            "the fix patch does not reverse as a whole on the candidate: every hunk, test hunks included, must be "
+            "what that tree holds" if patch else "fix no longer reverses on the candidate; use patch: mode")
     baseline, after = pair
     lost = sorted(name for name, ignored in baseline["tests"].items() if not ignored and name not in after["tests"])
     ignored = sorted(name for name, was in baseline["tests"].items()
                      if not was and after["tests"].get(name) is True)
     problems = []
     if lost:
-        problems.append(f"drops {len(lost)} test(s) the tree before it runs: {lost[:10]}")
+        problems.append(f"drops {len(lost)} test(s) the tree before it runs (test identity changed: "
+                        + ", ".join(f"{name} -> missing" for name in lost[:10])
+                        + "; land the move as its own commit)")
     if ignored:
         problems.append(f"ignores {len(ignored)} test(s) the tree before it runs: {ignored[:10]}")
     lock_problems, lock = _lock_problems(baseline["lock"], after["lock"])
     problems += lock_problems
-    record = {"measured_on": measured_on, "packages": after["packages"],
+    record = {"packages": after["packages"],
               "tests": {"baseline": len(baseline["tests"]), "after": len(after["tests"]), "lost": lost,
                         "newly_ignored": ignored,
                         "added": sorted(set(after["tests"]) - set(baseline["tests"]))},

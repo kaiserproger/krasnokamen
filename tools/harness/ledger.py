@@ -424,17 +424,18 @@ def _python_assertion(text):
 
 
 def _test_listing(ctx, tree, packages):
-    """{"<binary-id>::<test>": not run} for every test nextest compiles for `packages` in `tree` (D128 guard).
+    """{"<binary-id>::<test>": not run} for every test nextest compiles for `packages` (None: the whole
+    workspace) in `tree` (D128 guard).
 
     A test is "not run" when nextest lists it as ignored or its default filter leaves it out."""
-    package_args = [arg for name in packages for arg in ('-p', name)]
+    package_args = ['--workspace'] if packages is None else [arg for name in packages for arg in ('-p', name)]
     argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'list', *package_args, '--message-format', 'json'])
     ok, text = _exec(ctx, argv, 'guard-list', tree, env)
     try:
         listing = regressions._nextest_listing(text)
     except ValueError:
-        raise oracle_guard.GuardRefused(f"cannot list the tests of {', '.join(packages)} in {tree} "
-                                        f"({'build error?' if not ok else 'no listing'}); see {ctx.artifact_dir}") from None
+        raise oracle_guard.GuardRefused(f"cannot list the tests of {'the workspace' if packages is None else ', '.join(packages)} "
+                                        f"in {tree} ({'build error?' if not ok else 'no listing'}); see {ctx.artifact_dir}") from None
     return {f"{suite['binary-id']}::{name}": bool(case.get('ignored', False))
             or case.get('filter-match', {}).get('status') != 'matches'
             for suite in listing['rust-suites'].values() for name, case in suite.get('testcases', {}).items()}
@@ -2986,21 +2987,18 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                 raise Refused(f"{ident}: the fix patch's non-test hunks are {digest}, not the recorded {fix}")
             if _git(candidate, 'apply', '-R', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'), check=False)[0]:
                 raise Refused(f'{ident}: the fix patch does not apply in reverse on the candidate (edited or re-broken since it was recorded)')
-            control_tree, control_dir = 'head', candidate
-        # Control: reverse the fix's non-test hunks onto the candidate; only if a committed fix's
-        # hunks no longer apply there, reverse them at the historical fix_commit instead.
-        elif _git(candidate, 'apply', '-R', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'), check=False)[0] == 0:
-            control_tree, control_dir = 'head', candidate
-        elif test_only:
-            # M3: control A restores the old oracle on current code, so a `fix_commit` worktree is
-            # never a control for a test-only row (its tree predates the fix's own other commits).
-            raise Refused(f"{ident}: the fix's test hunks do not reverse onto the tree being promoted, so "
-                          'control A cannot run against current code (control_tree must be head)')
-        else:
-            control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix', control_set))
+        # Control: reverse the fix's non-test hunks onto the candidate; a committed fix whose hunks no
+        # longer apply there is re-recorded as a `patch:` of the candidate, never measured at its
+        # historical commit (D131 P1-1).
+        elif _git(candidate, 'apply', '-R', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'), check=False)[0]:
+            if test_only:
+                # M3: control A restores the old oracle on current code.
+                raise Refused(f"{ident}: the fix's test hunks do not reverse onto the tree being promoted, so "
+                              'control A cannot run against current code (control_tree must be head)')
+            raise Refused(f'{ident}: fix no longer reverses on the candidate; use patch: mode')
+        control_tree, control_dir = 'head', candidate
         # D128 guard, on the tree being promoted: its compiled tests and corpus lock against the same
-        # tree with the whole fix reversed (test hunks included); a committed fix that no longer
-        # reverses there is measured at its own commit. The candidate is restored afterwards.
+        # tree with the whole fix reversed (test hunks included). The candidate is restored afterwards.
         if patch_mode:
             fix_diff = fix_patch_text
         else:
@@ -3010,8 +3008,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                                '--', '.', ':!docs/bugs', ':!.analysis')
         try:
             test_guard = oracle_guard.promotion_guard(
-                candidate, fix_diff, test_lister or functools.partial(_test_listing, ctx), patch=patch_mode,
-                fix_tree=lambda: stack.enter_context(_worktree(root, full, 'guard', control_set)))
+                candidate, fix_diff, test_lister or functools.partial(_test_listing, ctx), patch=patch_mode)
         except oracle_guard.GuardRefused as error:
             raise Refused(f'{ident}: {error}')
         _materialize(root, candidate, tree_now)
