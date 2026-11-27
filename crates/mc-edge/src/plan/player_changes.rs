@@ -320,7 +320,12 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         ),
         PlayerChange::BlockResynced {
             position, block, ..
-        } => push_block_update(out, conn, *position, *block),
+        } => push_block_update(
+            out,
+            conn,
+            pack_block_pos(position.x, position.y, position.z),
+            *block,
+        ),
         PlayerChange::BlockActionsAcked { sequence, .. } => push_reliable(
             out,
             conn,
@@ -550,18 +555,19 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             pitch,
             game_mode,
             ..
-        } => plan_respawn_change(
-            viewer,
-            out,
-            *teleport_id,
-            *dimension,
-            *position,
-            *yaw,
-            *pitch,
-            *game_mode,
-            0,
-            false,
-        ),
+        } => {
+            let respawn = Respawn {
+                teleport_id: *teleport_id,
+                dimension: *dimension,
+                position: *position,
+                yaw: *yaw,
+                pitch: *pitch,
+                game_mode: *game_mode,
+                portal_cooldown: 0,
+                travel: false,
+            };
+            plan_respawn(&respawn, viewer, out);
+        }
         PlayerChange::DimensionChanged {
             teleport_id,
             dimension,
@@ -571,18 +577,19 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             game_mode,
             portal_cooldown,
             ..
-        } => plan_respawn_change(
-            viewer,
-            out,
-            *teleport_id,
-            *dimension,
-            *position,
-            *yaw,
-            *pitch,
-            *game_mode,
-            i32::from(*portal_cooldown),
-            true,
-        ),
+        } => {
+            let respawn = Respawn {
+                teleport_id: *teleport_id,
+                dimension: *dimension,
+                position: *position,
+                yaw: *yaw,
+                pitch: *pitch,
+                game_mode: *game_mode,
+                portal_cooldown: i32::from(*portal_cooldown),
+                travel: true,
+            };
+            plan_respawn(&respawn, viewer, out);
+        }
         PlayerChange::GameModeChanged { game_mode, .. } => plan_game_mode(out, conn, *game_mode),
         PlayerChange::DifficultyChanged { difficulty, .. } => push_reliable(
             out,
@@ -953,46 +960,19 @@ fn plan_recipes_unlocked(
     push_reliable(out, conn, &ClientboundRecipeBookAdd { entries, replace });
 }
 
-/// A death respawn (`travel == false`) or a portal/command dimension change.
-#[allow(clippy::too_many_arguments)]
-fn plan_respawn_change(
-    viewer: &mut ViewerState,
-    out: &mut Vec<PlannedPacket>,
-    teleport_id: i32,
-    dimension: mc_core::dimensions::Dimension,
-    position: [f64; 3],
-    yaw: f32,
-    pitch: f32,
-    game_mode: u8,
-    portal_cooldown: i32,
-    travel: bool,
-) {
-    let respawn = Respawn {
-        teleport_id,
-        dimension,
-        position,
-        yaw,
-        pitch,
-        game_mode,
-        portal_cooldown,
-        travel,
-    };
-    plan_respawn(&respawn, viewer, out);
-}
-
-/// Install a block state reliably, the precondition for packets that make the
-/// client look the block up (sign editor, block event).
+/// Install an already packed block position reliably, the precondition for
+/// packets that make the client look the block up (sign editor, block event).
 fn push_block_update(
     out: &mut Vec<PlannedPacket>,
     conn: mc_core::boundary::ConnectionId,
-    position: mc_core::boundary::BlockPos,
+    position: i64,
     state_id: u32,
 ) {
     push_reliable(
         out,
         conn,
         &BlockUpdate {
-            position: pack_block_pos(position.x, position.y, position.z),
+            position,
             state_id: state_id as i32,
         },
     );
@@ -1003,16 +983,17 @@ fn push_block_update(
 fn plan_sign_editor(
     out: &mut Vec<PlannedPacket>,
     conn: mc_core::boundary::ConnectionId,
-    position: mc_core::boundary::BlockPos,
+    block_pos: mc_core::boundary::BlockPos,
     front: bool,
     block: u32,
 ) {
+    let position = pack_block_pos(block_pos.x, block_pos.y, block_pos.z);
     push_block_update(out, conn, position, block);
     push_reliable(
         out,
         conn,
         &ClientboundOpenSignEditor {
-            position: pack_block_pos(position.x, position.y, position.z),
+            position,
             is_front_text: front,
         },
     );
@@ -1023,18 +1004,19 @@ fn plan_sign_editor(
 fn plan_block_event(
     out: &mut Vec<PlannedPacket>,
     conn: mc_core::boundary::ConnectionId,
-    position: mc_core::boundary::BlockPos,
+    block_pos: mc_core::boundary::BlockPos,
     block: u32,
     state: u32,
     action: u8,
     parameter: u8,
 ) {
+    let position = pack_block_pos(block_pos.x, block_pos.y, block_pos.z);
     push_block_update(out, conn, position, state);
     push_reliable(
         out,
         conn,
         &ClientboundBlockEvent {
-            position: pack_block_pos(position.x, position.y, position.z),
+            position,
             action,
             parameter,
             block_type: block as i32,
