@@ -29,12 +29,13 @@ use serde::{Deserialize, Serialize};
 
 use super::SettlementId;
 use super::households::{self, Departed, Household, Unit};
-use crate::boundary::{BlockPos, ChangeSet, EntityId};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::config::CoreError;
 use crate::dimensions::Dimension;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::journal::{JournalEntry, Replay, ReplayEntity};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// A point closer than this to the anchor is not an exit or entry point.
 pub(crate) const MIN_EDGE_DISTANCE: i32 = 16;

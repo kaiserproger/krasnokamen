@@ -14,8 +14,8 @@ const BLOCK_BREAK_EVENT: i32 = 2001;
 /// Vanilla `IronGolem.mobInteract`: heal 25, consuming only if health changes.
 pub(crate) fn repair(
     state: &mut TickState,
-    actor: crate::boundary::EntityId,
-    target: crate::boundary::EntityId,
+    actor: mc_domain::EntityId,
+    target: mc_domain::EntityId,
     hand: crate::boundary::Hand,
 ) -> bool {
     let Some(slot) = state.entities.slot_of(target) else {

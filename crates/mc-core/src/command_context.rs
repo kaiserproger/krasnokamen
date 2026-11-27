@@ -1,9 +1,10 @@
 //! Native command sources and bounded /execute continuations. Cross-world dispatch
 //! is admitted only by dimensions_travel at the shared tick boundary.
-use crate::boundary::{ChangeSet, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{ChangeSet, ConnectionId, PlayerChange};
 use crate::commands::Command;
 use crate::dimensions::Dimension;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 
 #[path = "command_context_deferred.rs"]

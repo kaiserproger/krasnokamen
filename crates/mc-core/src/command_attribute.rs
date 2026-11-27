@@ -1,11 +1,12 @@
 //! Operator attribute commands over retained mob attribute state.
-use crate::boundary::{ConnectionId, EntityId};
+use crate::boundary::ConnectionId;
 use crate::command_args::CommandError;
 use crate::commands::Target;
 use crate::entities::EntityKind;
 use crate::entity_loot::{EntityAttribute, EntityAttributeModifier};
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 
 #[derive(Debug, Clone, PartialEq)]

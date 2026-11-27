@@ -1,10 +1,10 @@
 use super::*;
-use crate::boundary::EntityId;
 use crate::settlements::allocator::tests::roofed_bed;
 use crate::settlements::allocator::{
     PICKUP_REACH, POI_REFRESH_CHUNKS_PER_TICK, Poi, PoiCache, PoiKind, PoiValidation,
     bed_has_baby_space, distance, find_path, find_path_exact, standing, validate_pois,
 };
+use mc_domain::EntityId;
 use mc_physics::BlockSampler;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;

@@ -1,11 +1,12 @@
 //! Warden anger, animation phases and attacks. Vanilla save keys and spawn data
 //! are measured from the 26.1.2 Warden/AngerManagement classes.
-use crate::boundary::{EntityDataValue, EntityId};
+use crate::boundary::EntityDataValue;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::entities::{ColdRow, EntitySlot};
 use crate::intent::Intent;
 use crate::special_mobs::{Attack, Retained, distance_sq, effect, event, metadata};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};

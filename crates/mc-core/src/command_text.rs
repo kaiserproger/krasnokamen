@@ -7,9 +7,9 @@
 
 use mc_nbt::{ListTag, Tag};
 
-use crate::boundary::EntityId;
 use crate::command_args::CommandError;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Parse a vanilla text-component argument (SNBT: a quoted/unquoted string, a
 /// `{..}` compound or a `[..]` list) into a network component tag.

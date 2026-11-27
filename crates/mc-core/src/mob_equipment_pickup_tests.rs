@@ -1,8 +1,8 @@
 use super::*;
 use crate::bees::tests::{item, mob, state};
-use crate::boundary::EntityId;
 use crate::entities::ColdRow;
 use mc_data::Identifier;
+use mc_domain::EntityId;
 
 const POS: [f64; 3] = [4.5, 201.0, 4.5];
 

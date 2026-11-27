@@ -88,7 +88,7 @@ fn supported(state: &TickState, slot: crate::entities::EntitySlot, position: [f6
 
 fn air_time_exception(
     state: &TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     slot: crate::entities::EntitySlot,
     position: [f64; 3],
 ) -> bool {
@@ -131,7 +131,7 @@ fn air_time_exception(
 
 fn exceeds_air_time(
     state: &mut TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     slot: crate::entities::EntitySlot,
     old: [f64; 3],
     new: [f64; 3],

@@ -1,11 +1,12 @@
 //! Portable checkpoint round trips and Linux abrupt-exit checkpoint + WAL tests.
 //! Every mutation is queued through Core; no TickState or capture API is exposed.
 use crate::test_support::Running;
-use mc_core::boundary::{ClickMode, ConnectionId, EntityId, Hand, PlayerChange, PlayerInput};
+use mc_core::boundary::{ClickMode, ConnectionId, Hand, PlayerChange, PlayerInput};
 use mc_core::dimensions::Dimension;
 use mc_core::native_checkpoint as bridge;
 use mc_core::villager::{VillagerProfession, VillagerState, VillagerTradeOffer};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use mc_world::native::NativeCheckpoint;
 use mc_world::{BlockStateId, Chunk, ChunkPos};

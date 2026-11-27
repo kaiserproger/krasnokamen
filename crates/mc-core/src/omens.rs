@@ -1,7 +1,7 @@
 //! Trial omens; village/raid admission remains in the raid owner.
-use crate::boundary::EntityId;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Conversion is vanilla's 18,000 ticks per Bad Omen level. Consumption occurs
 /// when the spawner accepts the player, never merely on range detection.

@@ -1,9 +1,10 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
 use crate::journal::{EntityStateImage, JournalWriter, Replay, replay_batches};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::EntityId;
 use std::sync::{Arc, LazyLock};
 
 /// Pattern origin: the head lands at `HEAD`, the body hangs below it.

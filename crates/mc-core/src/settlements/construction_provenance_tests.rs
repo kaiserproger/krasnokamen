@@ -404,7 +404,7 @@ const OWNER_CONNECTION: crate::boundary::ConnectionId = crate::boundary::Connect
 fn log_in(lot: &mut Lot) {
     lot.state.connections.insert(
         OWNER_CONNECTION,
-        crate::boundary::EntityId(77),
+        mc_domain::EntityId(77),
         OWNER,
         "Owner".into(),
     );

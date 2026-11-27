@@ -1,11 +1,11 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::EntityId;
 use crate::enderman;
 use crate::entities::EntitySlot;
 use crate::special_mobs::Retained;
 use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 
 fn fixture() -> (TickState, EntityId, EntityId, EntitySlot, [f64; 3]) {
     let (mut state, player, mut pos) = flat_player_fixture();

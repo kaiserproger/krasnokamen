@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{EffectParticle, EntityDataValue, EntityId};
+use crate::boundary::{EffectParticle, EntityDataValue};
 use crate::effects::{ActiveEffect, EffectId};
 use crate::hostile::CREEPER_SWELL_DIR_INDEX;
+use mc_domain::EntityId;
 
 fn registry() -> crate::registry::CoreRegistry {
     crate::registry::CoreRegistry::load(None).expect("registry loads")

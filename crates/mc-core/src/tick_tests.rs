@@ -145,7 +145,7 @@ fn terrain_test_state() -> TickState {
 
 /// Join one player, then wait for the off-tick loader to make its whole
 /// simulation square resident (tests probe blocks right after joining).
-fn join(state: &mut TickState, connection: u64, name: &str) -> crate::boundary::EntityId {
+fn join(state: &mut TickState, connection: u64, name: &str) -> mc_domain::EntityId {
     let (output, _, _) = run_tick(
         state,
         &[PlayerInput::Join {
@@ -2441,7 +2441,7 @@ fn checkpoint_holds_full_durable_state() {
             command: "xp add @s 7 levels".to_owned(),
             permission_level: 4,
         });
-        let mut mob: Option<crate::boundary::EntityId> = None;
+        let mut mob: Option<mc_domain::EntityId> = None;
         for _ in 0..10 {
             let output = rx.blocking_recv().expect("tick");
             if mob.is_none() {
@@ -3668,8 +3668,9 @@ fn pickup_losing_capacity_before_merge_does_not_block_another_player() {
 /// nothing and the entity survives; space for half takes half.
 #[test]
 fn partial_pickup_keeps_remainder_on_ground() {
-    use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+    use crate::boundary::{ConnectionId, PlayerInput};
     use crate::intent::{Footprint, Intent, IntentKind};
+    use mc_domain::EntityId;
     let mut state = test_state();
     let entity = join(&mut state, 103, "full-picker");
     let registry = test_registry();
@@ -5770,7 +5771,7 @@ fn container_break_drops_survive_restart_without_resurrection() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-fn flat_player_fixture() -> (TickState, crate::boundary::EntityId, [f64; 3]) {
+fn flat_player_fixture() -> (TickState, mc_domain::EntityId, [f64; 3]) {
     let mut state = test_state();
     let player = join(&mut state, 1, "sweep");
     let slot = state.entities.slot_of(player).unwrap();
@@ -6018,7 +6019,7 @@ fn block_drops_rule_suppresses_popped_block_loot() {
     assert!(!spawned.is_empty());
 }
 
-fn crouching_passage_fixture() -> (TickState, crate::boundary::EntityId, [f64; 3]) {
+fn crouching_passage_fixture() -> (TickState, mc_domain::EntityId, [f64; 3]) {
     let (mut state, player, mut pos) = flat_player_fixture();
     // Client-owned movement can start at fractional Y (for example mid-jump).
     // A full-block ceiling then leaves exactly 1.5 blocks above the feet.
@@ -7070,10 +7071,10 @@ fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damag
                 amount: 3.5,
                 kind,
                 source: Some(DamageSource::Projectile {
-                    owner: crate::boundary::EntityId(-1),
+                    owner: mc_domain::EntityId(-1),
                     velocity,
                     punch: 0,
-                    projectile: crate::boundary::EntityId(-2),
+                    projectile: mc_domain::EntityId(-2),
                     direct_type_id: 0,
                     flame: false,
                 }),
@@ -7232,7 +7233,7 @@ fn team_join_and_friendly_fire_block_melee_and_projectiles_without_hurt_side_eff
             owner: attacker,
             velocity: [0.0, -1.0],
             punch: 0,
-            projectile: crate::boundary::EntityId(-2),
+            projectile: mc_domain::EntityId(-2),
             direct_type_id: 0,
             flame: false,
         },
@@ -8328,9 +8329,7 @@ fn live_player_enumeration_matches_the_dense_scan() {
         .alive = false;
     state.players.get_mut(&actors[3]).unwrap().game_mode = crate::commands::GameMode::Spectator;
     let stale = state.players[&first].clone();
-    state
-        .players
-        .insert(crate::boundary::EntityId(2_000_000), stale);
+    state.players.insert(mc_domain::EntityId(2_000_000), stale);
     let live = crate::tick::live_players(&state);
     assert_eq!(live, crate::tick::live_players_by_scan(&state));
     assert_eq!(live.len(), actors.len() - 1);

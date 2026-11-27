@@ -1,5 +1,6 @@
 use super::*;
-use mc_core::boundary::{EntityAppearance, EntityId};
+use mc_core::boundary::EntityAppearance;
+use mc_domain::EntityId;
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 use std::sync::Arc;

@@ -7,9 +7,10 @@
 //! leaving a stale Ready behind.
 
 use super::{DistrictPlan, observe, plan};
-use crate::boundary::{BlockPos, ChunkPos, EntityId};
+use crate::boundary::{BlockPos, ChunkPos};
 use crate::settlements::{RecordImage, SettlementId};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_script::{
     ScriptOperation, ScriptOperationFailure as Failure, ScriptOperationPayload,
     ScriptOperationRequest, ScriptSettlementBuildingRef, ScriptSettlementDistrictSnapshot,
