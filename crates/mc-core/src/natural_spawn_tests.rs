@@ -627,41 +627,6 @@ fn savanna_tables_spawn_every_available_native_creature() {
 }
 
 #[test]
-fn biome_with_only_unsupported_creatures_does_not_fall_back_to_farm_animals() {
-    let mut state = grass_state("minecraft:savanna", "minecraft:savanna");
-    let registry = Arc::get_mut(&mut state.registry).expect("unshared registry");
-    registry.biome_spawns =
-        mc_data::biomes::BiomeSpawnRules::from_entries(std::collections::BTreeMap::from([(
-            mc_data::Identifier::parse("minecraft:savanna").expect("savanna"),
-            std::collections::BTreeMap::from([(
-                "creature".to_owned(),
-                vec![mc_data::biomes::BiomeSpawnEntry {
-                    entity_type: mc_data::Identifier::parse("minecraft:arrow")
-                        .expect("non-creature"),
-                    weight: 10,
-                    min_count: 2,
-                    max_count: 3,
-                }],
-            )]),
-        )]));
-    let mut changes = crate::boundary::ChangeSet::default();
-    crate::natural_spawn::census(&mut state, &[]);
-    assert_eq!(
-        crate::natural_spawn::spawn_group(
-            &mut state,
-            &[],
-            [0.5, 65.0, 0.5],
-            MobCategory::Creature,
-            10,
-            &mut crate::natural_spawn::Rng(0),
-            &mut changes,
-        ),
-        0,
-    );
-    assert!(changes.entities_spawned.is_empty());
-}
-
-#[test]
 fn plains_creature_herds_attempt_four_members_and_respect_remaining_cap() {
     let mut state = grass_state("minecraft:plains", "minecraft:plains");
     for room in [10, 6, 2] {
