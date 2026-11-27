@@ -516,6 +516,10 @@ pub(super) enum SendFailure {
     Encode(#[from] anyhow::Error),
 }
 
+/// A live session row from [`crate::admin::AdminState::find`]: connection,
+/// uuid, name and address.
+type LiveSession = (ConnectionId, uuid::Uuid, String, std::net::IpAddr);
+
 impl EdgeServer {
     fn send<P: mc_protocol::packets::Packet>(
         &self,
@@ -874,8 +878,8 @@ impl EdgeServer {
         if id != mc_core::command_console::CONNECTION && self.hub.session_locked(id) {
             return Ok(false);
         }
-        let mut words = command.split_whitespace();
-        let root = words.next().unwrap_or_default();
+        let words: Vec<&str> = command.split_whitespace().collect();
+        let root = words.first().copied().unwrap_or_default();
         if self
             .hub
             .plugin_commands()
@@ -884,72 +888,21 @@ impl EdgeServer {
         {
             return Ok(false);
         }
+        let rest = &words[1..];
         if matches!(root, "tps" | "mspt") {
-            if permission_level < 2 || words.next().is_some() {
-                self.feedback(id, "Unknown or incomplete command")?;
-                return Ok(true);
-            }
-            let metrics = self.dashboard.snapshot();
-            let mspt = metrics.tick.p50_us as f64 / 1_000.0;
-            let message = if root == "tps" {
-                format!(
-                    "TPS: {:.2}; MSPT: {:.2} (p95 {:.2}, p99 {:.2})",
-                    metrics.tps,
-                    mspt,
-                    metrics.tick.p95_us as f64 / 1_000.0,
-                    metrics.tick.p99_us as f64 / 1_000.0
-                )
-            } else {
-                format!(
-                    "MSPT: {:.2} median, {:.2} p95, {:.2} p99",
-                    mspt,
-                    metrics.tick.p95_us as f64 / 1_000.0,
-                    metrics.tick.p99_us as f64 / 1_000.0
-                )
-            };
-            self.feedback(id, &message)?;
+            self.tps_feedback(id, root, permission_level, rest)?;
             return Ok(true);
         }
-        if root == "settlement" && words.clone().eq(["guide"]) {
-            let guide = mc_core::settlements::guide(
-                self.connections
-                    .inner
-                    .lock()
-                    .locales
-                    .get(&id)
-                    .map(String::as_str),
-            );
-            self.feedback(id, guide)?;
+        if root == "settlement" && rest == ["guide"] {
+            self.settlement_guide(id)?;
             return Ok(true);
         }
         if root == "list" {
-            let option = words.next();
-            if option.is_some_and(|arg| arg != "uuids") || words.next().is_some() {
-                self.feedback(id, "Incorrect argument for command")?;
-            } else {
-                let names = self.admin.roster(option.is_some());
-                self.success_feedback(
-                    id,
-                    &format!(
-                        "There are {} of a max of {} players online: {}",
-                        names.len(),
-                        self.cfg.server.max_players,
-                        names.join(", ")
-                    ),
-                )?;
-            }
+            self.list_feedback(id, rest)?;
             return Ok(true);
         }
         if root == "help" {
-            let path = command.strip_prefix("help").unwrap_or_default().trim();
-            match crate::command_tree::help(
-                (!path.is_empty()).then_some(path),
-                permission_level,
-                self.hub.plugin_commands(),
-            ) {
-                Ok(usages) => self.success_feedback(id, &usages.join("\n"))?,
-                Err(error) => self.feedback(id, &error)?,
-            }
+            self.help_feedback(id, command, permission_level)?;
             return Ok(true);
         }
         if !matches!(
@@ -994,11 +947,11 @@ impl EdgeServer {
             return Ok(true);
         }
         if root == "banlist" {
-            self.banlist_command(id, &words.collect::<Vec<_>>())?;
+            self.banlist_command(id, rest)?;
             return Ok(true);
         }
         if root == "transfer" {
-            self.transfer_command(id, &words.collect::<Vec<_>>())?;
+            self.transfer_command(id, rest)?;
             return Ok(true);
         }
         let (target, arguments) = if let Some(parsed) = parsed {
@@ -1010,7 +963,10 @@ impl EdgeServer {
                     .unwrap_or_default(),
             )
         } else {
-            (words.next(), words.collect::<Vec<_>>())
+            (
+                rest.first().copied(),
+                rest.get(1..).unwrap_or_default().to_vec(),
+            )
         };
         // `/ban` and `/mute` accept an optional duration as the first argument
         // after the target; anything that does not parse as `1d`/`2h30m`/... is
@@ -1060,71 +1016,7 @@ impl EdgeServer {
             return Ok(true);
         }
         if matches!(root, "op" | "deop") {
-            let Some(profiles) = self.profile_targets(id, target).await? else {
-                return Ok(true);
-            };
-            let _guard = self.operator_updates.lock().await;
-            let updates: Vec<_> = profiles
-                .into_iter()
-                .map(|(uuid, name)| {
-                    let sessions = self.admin.sessions_for_uuid(uuid);
-                    (uuid, name, sessions)
-                })
-                .collect();
-            let slots = updates
-                .iter()
-                .map(|(_, _, sessions)| 1 + sessions.len())
-                .sum();
-            let mut permits = self
-                .hub
-                .reserve_inputs(slots)
-                .await
-                .map_err(|_| anyhow::anyhow!("authoritative operator update queue stopped"))?;
-            // Authorize the complete selected batch after both awaited steps.
-            // Deopping the source within this batch must not truncate its targets.
-            if id != mc_core::command_console::CONNECTION
-                && (self.hub.session_locked(id)
-                    || !crate::command_tree::permitted(
-                        command,
-                        self.admin.session_level(id),
-                        self.hub.plugin_commands(),
-                    ))
-            {
-                self.feedback(id, "Unknown or incomplete command")?;
-                return Ok(true);
-            }
-            for (uuid, name, sessions) in updates {
-                if let Err(error) = self.admin.set_op(uuid, &name, root == "op") {
-                    self.feedback(id, &format!("Command failed: {error}"))?;
-                    return Ok(true);
-                }
-                permits.next().expect("reserved operator snapshot").send(
-                    PlayerInput::SpawnProtectionOperators {
-                        operators: self.admin.operator_ids(),
-                    },
-                );
-                let level = self.admin.level(uuid);
-                for &other in &sessions {
-                    permits.next().expect("reserved permission update").send(
-                        PlayerInput::PermissionLevel {
-                            connection: other,
-                            level,
-                        },
-                    );
-                }
-                for other in sessions {
-                    let level = if self.hub.session_locked(other) {
-                        0
-                    } else {
-                        level
-                    };
-                    self.send(
-                        other,
-                        &crate::command_tree::tree(level, self.hub.plugin_commands()),
-                    )?;
-                }
-            }
-            self.success_feedback(id, &format!("Command {root} completed for {target}"))?;
+            self.admin_op_batch(id, command, root, target).await?;
             return Ok(true);
         }
         let source = self
@@ -1136,250 +1028,446 @@ impl EdgeServer {
             .cloned()
             .unwrap_or_else(|| "Server".into());
         if matches!(root, "kick" | "ban" | "pardon") {
-            let targets: Vec<(Option<ConnectionId>, uuid::Uuid, String)> =
-                if target.starts_with('@') {
-                    let selected = match self
-                        .hub
-                        .resolve_moderation_selector(id, target.to_owned())
-                        .await
-                    {
-                        Ok(selected) => selected,
-                        Err(error) => {
-                            self.feedback(id, &format!("Command failed: {error}"))?;
-                            return Ok(true);
-                        }
-                    };
-                    selected
-                        .into_iter()
-                        .map(|(connection, uuid, name)| (Some(connection), uuid, name))
-                        .collect()
-                } else if let Some((connection, uuid, name, _)) = live.as_ref() {
-                    vec![(Some(*connection), *uuid, name.clone())]
-                } else if root == "kick" {
-                    Vec::new()
-                } else if let Some((uuid, name)) = self.admin.profile(target).or_else(|| {
-                    (!self.cfg.auth.online_mode)
-                        .then(|| (crate::crypto::offline_uuid(target), target.into()))
-                }) {
-                    vec![(None, uuid, name)]
-                } else {
-                    self.feedback(id, "Unknown player")?;
-                    return Ok(true);
-                };
-            // Selector resolution and this fence both await. A deop admitted
-            // meanwhile must revoke moderation before any ban or disconnect.
-            let _guard = self.operator_updates.lock().await;
-            if id != mc_core::command_console::CONNECTION
-                && (self.hub.session_locked(id)
-                    || !crate::command_tree::permitted(
-                        command,
-                        self.admin.session_level(id),
-                        self.hub.plugin_commands(),
-                    ))
-            {
-                self.feedback(id, "Unknown or incomplete command")?;
-                return Ok(true);
-            }
-            let banned = if root == "kick" {
-                Vec::new()
-            } else {
-                self.admin.bans().0
-            };
-            let mut changed = 0;
-            for (connection, uuid, name) in targets {
-                if let Some(connection) = connection
-                    && self.admin.uuid_of(connection) != Some(uuid)
-                {
-                    continue;
-                }
-                if root == "kick" {
-                    if let Some(connection) = connection {
-                        self.kick(
-                            connection,
-                            if reason.is_empty() {
-                                serde_json::json!({"translate":"multiplayer.disconnect.kicked"})
-                            } else {
-                                serde_json::json!({"text":reason.as_str()})
-                            },
-                        )?;
-                        changed += 1;
-                    }
-                    continue;
-                }
-                let suffix = format!(" ({uuid})");
-                let already_banned = banned.iter().any(|entry| entry.ends_with(&suffix));
-                if already_banned == (root == "ban") {
-                    continue;
-                }
-                if let Err(error) = self.admin.ban_player_for(
-                    uuid,
-                    &name,
-                    &source,
-                    if reason.is_empty() {
-                        "Banned by an operator."
-                    } else {
-                        &reason
-                    },
-                    duration,
-                    root == "ban",
-                ) {
-                    self.feedback(id, &format!("Command failed: {error}"))?;
-                    return Ok(true);
-                }
-                if root == "ban"
-                    && let Some(connection) = connection
-                {
-                    self.kick(
-                        connection,
-                        serde_json::json!({"translate":"multiplayer.disconnect.banned"}),
-                    )?;
-                }
-                changed += 1;
-            }
-            if changed == 0 {
-                self.feedback(
-                    id,
-                    if root == "kick" {
-                        "No player was found"
-                    } else {
-                        "Command failed: no applicable player profiles"
-                    },
-                )?;
-            } else {
-                let expiry = duration.map_or_else(String::new, |value| {
-                    format!(" (expires in {}s)", value.as_secs())
-                });
-                self.success_feedback(
-                    id,
-                    &format!("Command {root} completed for {target}{expiry}"),
-                )?;
-            }
+            self.admin_kick_ban_pardon(id, command, root, target, &live, &reason, duration, &source)
+                .await?;
             return Ok(true);
         }
-        let result = if root == "ban-ip" || root == "pardon-ip" {
-            let valid_word = target.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'+' | b'.' | b'_')
-            });
-            let ip = if valid_word {
-                target
-                    .parse::<std::net::Ipv4Addr>()
-                    .ok()
-                    .map(std::net::IpAddr::V4)
-                    .or_else(|| {
-                        if root == "ban-ip" {
-                            live.as_ref().map(|session| session.3)
-                        } else {
-                            None
-                        }
-                    })
-            } else {
-                None
-            };
-            if let Some(ip) = ip {
-                let ip_text = ip.to_string();
-                let already_banned = self.admin.bans().1.iter().any(|entry| entry == &ip_text);
-                if already_banned == (root == "ban-ip") {
-                    self.feedback(id, "Command failed: no applicable IP address")?;
-                    return Ok(true);
-                }
-                let result = self.admin.ban_ip(
-                    &ip_text,
-                    &source,
-                    if reason.is_empty() {
-                        "Banned by an operator."
-                    } else {
-                        &reason
-                    },
-                    root == "ban-ip",
-                );
-                if result.is_ok() && root == "ban-ip" {
-                    for (other, _) in self.connections.snapshot() {
-                        if self.admin.has_ip(other, ip) {
-                            self.kick(
-                                other,
-                                serde_json::json!({"translate":"multiplayer.disconnect.ip_banned"}),
-                            )?;
-                        }
-                    }
-                }
-                result
-            } else {
-                self.feedback(id, "Invalid IP address")?;
-                return Ok(true);
-            }
-        } else {
-            // A locked session never reaches here: the fence above
-            // returns `Ok(false)`. Username targeting stays as-is so
-            // unlocked operators and the console can manage offline-mode
-            // and not-yet-joined names.
-            let profile = live
-                .as_ref()
-                .map(|s| (s.1, s.2.clone()))
-                .or_else(|| self.admin.profile(target))
-                .or_else(|| {
-                    (!self.cfg.auth.online_mode)
-                        .then(|| (crate::crypto::offline_uuid(target), target.into()))
-                });
-            let Some((uuid, name)) = profile else {
-                self.feedback(id, "Unknown player")?;
-                return Ok(true);
-            };
-            match root {
-                "mute" | "unmute" => {
-                    let result = self.admin.mute_player(
-                        uuid,
-                        &name,
-                        &source,
-                        if reason.is_empty() {
-                            "Muted by an operator."
-                        } else {
-                            &reason
-                        },
-                        duration,
-                        root == "mute",
-                    );
-                    if result.is_ok()
-                        && root == "mute"
-                        && let Some((other, _, _, _)) = live
-                    {
-                        self.feedback(other, "You have been muted.")?;
-                    }
-                    result
-                }
-                "warn" => {
-                    let Some((other, _, _, _)) = live else {
-                        self.feedback(id, "No player was found")?;
-                        return Ok(true);
-                    };
-                    self.feedback(
-                        other,
-                        &format!(
-                            "[Warned] {}",
-                            if reason.is_empty() {
-                                "Follow the server rules."
-                            } else {
-                                &reason
-                            }
-                        ),
-                    )
-                }
-                _ => unreachable!(),
-            }
-        };
-        match result {
-            Ok(()) => {
-                let expiry = match duration {
-                    Some(duration) => format!(" (expires in {}s)", duration.as_secs()),
-                    None => String::new(),
-                };
-                self.success_feedback(
-                    id,
-                    &format!("Command {root} completed for {target}{expiry}"),
-                )?
-            }
-            Err(error) => self.feedback(id, &format!("Command failed: {error}"))?,
+        if matches!(root, "ban-ip" | "pardon-ip") {
+            self.admin_ip_ban(id, root, target, &live, &reason, &source)?;
+            return Ok(true);
         }
+        self.admin_player_flag(id, root, target, &live, &reason, duration, &source)?;
         Ok(true)
+    }
+
+    fn tps_feedback(
+        &self,
+        id: ConnectionId,
+        root: &str,
+        permission_level: u8,
+        words: &[&str],
+    ) -> anyhow::Result<()> {
+        if permission_level < 2 || !words.is_empty() {
+            return self.feedback(id, "Unknown or incomplete command");
+        }
+        let metrics = self.dashboard.snapshot();
+        let mspt = metrics.tick.p50_us as f64 / 1_000.0;
+        let p95 = metrics.tick.p95_us as f64 / 1_000.0;
+        let p99 = metrics.tick.p99_us as f64 / 1_000.0;
+        let message = if root == "tps" {
+            format!(
+                "TPS: {:.2}; MSPT: {mspt:.2} (p95 {p95:.2}, p99 {p99:.2})",
+                metrics.tps
+            )
+        } else {
+            format!("MSPT: {mspt:.2} median, {p95:.2} p95, {p99:.2} p99")
+        };
+        self.feedback(id, &message)
+    }
+
+    fn settlement_guide(&self, id: ConnectionId) -> anyhow::Result<()> {
+        let guide = mc_core::settlements::guide(
+            self.connections
+                .inner
+                .lock()
+                .locales
+                .get(&id)
+                .map(String::as_str),
+        );
+        self.feedback(id, guide)
+    }
+
+    fn list_feedback(&self, id: ConnectionId, words: &[&str]) -> anyhow::Result<()> {
+        let option = words.first().copied();
+        if option.is_some_and(|arg| arg != "uuids") || words.len() > 1 {
+            return self.feedback(id, "Incorrect argument for command");
+        }
+        let names = self.admin.roster(option.is_some());
+        self.success_feedback(
+            id,
+            &format!(
+                "There are {} of a max of {} players online: {}",
+                names.len(),
+                self.cfg.server.max_players,
+                names.join(", ")
+            ),
+        )
+    }
+
+    fn help_feedback(
+        &self,
+        id: ConnectionId,
+        command: &str,
+        permission_level: u8,
+    ) -> anyhow::Result<()> {
+        let path = command.strip_prefix("help").unwrap_or_default().trim();
+        match crate::command_tree::help(
+            (!path.is_empty()).then_some(path),
+            permission_level,
+            self.hub.plugin_commands(),
+        ) {
+            Ok(usages) => self.success_feedback(id, &usages.join("\n")),
+            Err(error) => self.feedback(id, &error),
+        }
+    }
+
+    /// Re-check a moderation batch after an awaited selector resolution: a
+    /// deop admitted meanwhile must revoke the command.
+    fn batch_authorized(&self, id: ConnectionId, command: &str) -> bool {
+        id == mc_core::command_console::CONNECTION
+            || (!self.hub.session_locked(id)
+                && crate::command_tree::permitted(
+                    command,
+                    self.admin.session_level(id),
+                    self.hub.plugin_commands(),
+                ))
+    }
+
+    /// A command's success reply, with the ban/mute expiry when one applies.
+    fn command_success(
+        &self,
+        id: ConnectionId,
+        root: &str,
+        target: &str,
+        duration: Option<std::time::Duration>,
+    ) -> anyhow::Result<()> {
+        let expiry = duration.map_or_else(String::new, |value| {
+            format!(" (expires in {}s)", value.as_secs())
+        });
+        self.success_feedback(
+            id,
+            &format!("Command {root} completed for {target}{expiry}"),
+        )
+    }
+
+    /// Report a command's outcome: the vanilla success line, or the cause.
+    fn report_command(
+        &self,
+        id: ConnectionId,
+        root: &str,
+        target: &str,
+        duration: Option<std::time::Duration>,
+        result: anyhow::Result<()>,
+    ) -> anyhow::Result<()> {
+        match result {
+            Ok(()) => self.command_success(id, root, target, duration),
+            Err(error) => self.feedback(id, &format!("Command failed: {error}")),
+        }
+    }
+
+    /// `/op` and `/deop`: apply every selected profile, then push the operator
+    /// set and the new permission level to each of their sessions.
+    async fn admin_op_batch(
+        &self,
+        id: ConnectionId,
+        command: &str,
+        root: &str,
+        target: &str,
+    ) -> anyhow::Result<()> {
+        let Some(profiles) = self.profile_targets(id, target).await? else {
+            return Ok(());
+        };
+        let _guard = self.operator_updates.lock().await;
+        let updates: Vec<_> = profiles
+            .into_iter()
+            .map(|(uuid, name)| {
+                let sessions = self.admin.sessions_for_uuid(uuid);
+                (uuid, name, sessions)
+            })
+            .collect();
+        let slots = updates
+            .iter()
+            .map(|(_, _, sessions)| 1 + sessions.len())
+            .sum();
+        let mut permits = self
+            .hub
+            .reserve_inputs(slots)
+            .await
+            .map_err(|_| anyhow::anyhow!("authoritative operator update queue stopped"))?;
+        // Authorize the complete selected batch after both awaited steps.
+        // Deopping the source within this batch must not truncate its targets.
+        if !self.batch_authorized(id, command) {
+            self.feedback(id, "Unknown or incomplete command")?;
+            return Ok(());
+        }
+        for (uuid, name, sessions) in updates {
+            if let Err(error) = self.admin.set_op(uuid, &name, root == "op") {
+                self.feedback(id, &format!("Command failed: {error}"))?;
+                return Ok(());
+            }
+            permits.next().expect("reserved operator snapshot").send(
+                PlayerInput::SpawnProtectionOperators {
+                    operators: self.admin.operator_ids(),
+                },
+            );
+            let level = self.admin.level(uuid);
+            for &other in &sessions {
+                permits.next().expect("reserved permission update").send(
+                    PlayerInput::PermissionLevel {
+                        connection: other,
+                        level,
+                    },
+                );
+            }
+            for other in sessions {
+                let level = if self.hub.session_locked(other) {
+                    0
+                } else {
+                    level
+                };
+                self.send(
+                    other,
+                    &crate::command_tree::tree(level, self.hub.plugin_commands()),
+                )?;
+            }
+        }
+        self.command_success(id, root, target, None)
+    }
+
+    /// `/kick`, `/ban` and `/pardon`: resolve the targets, then apply the
+    /// moderation under the re-checked fence.
+    #[allow(clippy::too_many_arguments)]
+    async fn admin_kick_ban_pardon(
+        &self,
+        id: ConnectionId,
+        command: &str,
+        root: &str,
+        target: &str,
+        live: &Option<LiveSession>,
+        reason: &str,
+        duration: Option<std::time::Duration>,
+        source: &str,
+    ) -> anyhow::Result<()> {
+        let targets: Vec<(Option<ConnectionId>, uuid::Uuid, String)> = if target.starts_with('@') {
+            let selected = match self
+                .hub
+                .resolve_moderation_selector(id, target.to_owned())
+                .await
+            {
+                Ok(selected) => selected,
+                Err(error) => {
+                    return self.feedback(id, &format!("Command failed: {error}"));
+                }
+            };
+            selected
+                .into_iter()
+                .map(|(connection, uuid, name)| (Some(connection), uuid, name))
+                .collect()
+        } else if let Some((connection, uuid, name, _)) = live.as_ref() {
+            vec![(Some(*connection), *uuid, name.clone())]
+        } else if root == "kick" {
+            Vec::new()
+        } else if let Some((uuid, name)) = self.admin.profile(target).or_else(|| {
+            (!self.cfg.auth.online_mode)
+                .then(|| (crate::crypto::offline_uuid(target), target.into()))
+        }) {
+            vec![(None, uuid, name)]
+        } else {
+            return self.feedback(id, "Unknown player");
+        };
+        // Selector resolution and this fence both await. A deop admitted
+        // meanwhile must revoke moderation before any ban or disconnect.
+        let _guard = self.operator_updates.lock().await;
+        if !self.batch_authorized(id, command) {
+            self.feedback(id, "Unknown or incomplete command")?;
+            return Ok(());
+        }
+        let banned = if root == "kick" {
+            Vec::new()
+        } else {
+            self.admin.bans().0
+        };
+        let mut changed = 0;
+        for (connection, uuid, name) in targets {
+            if let Some(connection) = connection
+                && self.admin.uuid_of(connection) != Some(uuid)
+            {
+                continue;
+            }
+            if root == "kick" {
+                if let Some(connection) = connection {
+                    self.kick(
+                        connection,
+                        if reason.is_empty() {
+                            serde_json::json!({"translate":"multiplayer.disconnect.kicked"})
+                        } else {
+                            serde_json::json!({"text":reason})
+                        },
+                    )?;
+                    changed += 1;
+                }
+                continue;
+            }
+            let suffix = format!(" ({uuid})");
+            let already_banned = banned.iter().any(|entry| entry.ends_with(&suffix));
+            if already_banned == (root == "ban") {
+                continue;
+            }
+            if let Err(error) = self.admin.ban_player_for(
+                uuid,
+                &name,
+                source,
+                if reason.is_empty() {
+                    "Banned by an operator."
+                } else {
+                    reason
+                },
+                duration,
+                root == "ban",
+            ) {
+                return self.feedback(id, &format!("Command failed: {error}"));
+            }
+            if root == "ban"
+                && let Some(connection) = connection
+            {
+                self.kick(
+                    connection,
+                    serde_json::json!({"translate":"multiplayer.disconnect.banned"}),
+                )?;
+            }
+            changed += 1;
+        }
+        if changed == 0 {
+            self.feedback(
+                id,
+                if root == "kick" {
+                    "No player was found"
+                } else {
+                    "Command failed: no applicable player profiles"
+                },
+            )
+        } else {
+            self.command_success(id, root, target, duration)
+        }
+    }
+
+    /// `/ban-ip` and `/pardon-ip`: accept an address, or the target session's
+    /// address for a ban, then disconnect every session on it.
+    fn admin_ip_ban(
+        &self,
+        id: ConnectionId,
+        root: &str,
+        target: &str,
+        live: &Option<LiveSession>,
+        reason: &str,
+        source: &str,
+    ) -> anyhow::Result<()> {
+        let valid_word = target
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'+' | b'.' | b'_'));
+        let ip = if valid_word {
+            target
+                .parse::<std::net::Ipv4Addr>()
+                .ok()
+                .map(std::net::IpAddr::V4)
+                .or_else(|| {
+                    if root == "ban-ip" {
+                        live.as_ref().map(|session| session.3)
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            None
+        };
+        let Some(ip) = ip else {
+            return self.feedback(id, "Invalid IP address");
+        };
+        let ip_text = ip.to_string();
+        let already_banned = self.admin.bans().1.iter().any(|entry| entry == &ip_text);
+        if already_banned == (root == "ban-ip") {
+            return self.feedback(id, "Command failed: no applicable IP address");
+        }
+        let result = self.admin.ban_ip(
+            &ip_text,
+            source,
+            if reason.is_empty() {
+                "Banned by an operator."
+            } else {
+                reason
+            },
+            root == "ban-ip",
+        );
+        if result.is_ok() && root == "ban-ip" {
+            for (other, _) in self.connections.snapshot() {
+                if self.admin.has_ip(other, ip) {
+                    self.kick(
+                        other,
+                        serde_json::json!({"translate":"multiplayer.disconnect.ip_banned"}),
+                    )?;
+                }
+            }
+        }
+        self.report_command(id, root, target, None, result)
+    }
+
+    /// `/mute`, `/unmute` and `/warn`: resolve the profile like the ban path,
+    /// then apply the flag and report the outcome.
+    fn admin_player_flag(
+        &self,
+        id: ConnectionId,
+        root: &str,
+        target: &str,
+        live: &Option<LiveSession>,
+        reason: &str,
+        duration: Option<std::time::Duration>,
+        source: &str,
+    ) -> anyhow::Result<()> {
+        // A locked session never reaches here: the entry fence returns
+        // `Ok(false)`. Username targeting stays as-is so unlocked operators and
+        // the console can manage offline-mode and not-yet-joined names.
+        let profile = live
+            .as_ref()
+            .map(|s| (s.1, s.2.clone()))
+            .or_else(|| self.admin.profile(target))
+            .or_else(|| {
+                (!self.cfg.auth.online_mode)
+                    .then(|| (crate::crypto::offline_uuid(target), target.into()))
+            });
+        let Some((uuid, name)) = profile else {
+            return self.feedback(id, "Unknown player");
+        };
+        match root {
+            "mute" | "unmute" => {
+                let result = self.admin.mute_player(
+                    uuid,
+                    &name,
+                    source,
+                    if reason.is_empty() {
+                        "Muted by an operator."
+                    } else {
+                        reason
+                    },
+                    duration,
+                    root == "mute",
+                );
+                if result.is_ok()
+                    && root == "mute"
+                    && let Some((other, _, _, _)) = live.as_ref()
+                {
+                    self.feedback(*other, "You have been muted.")?;
+                }
+                self.report_command(id, root, target, duration, result)
+            }
+            "warn" => {
+                let Some((other, _, _, _)) = live.as_ref() else {
+                    return self.feedback(id, "No player was found");
+                };
+                let result = self.feedback(
+                    *other,
+                    &format!(
+                        "[Warned] {}",
+                        if reason.is_empty() {
+                            "Follow the server rules."
+                        } else {
+                            reason
+                        }
+                    ),
+                );
+                self.report_command(id, root, target, duration, result)
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Vanilla GameProfileArgument: selectors resolve on the native tick owner,
