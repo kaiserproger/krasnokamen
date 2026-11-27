@@ -43,9 +43,13 @@ mod cauldron_wash;
 #[cfg(test)]
 #[path = "cauldron_wash_tests.rs"]
 mod cauldron_wash_tests;
+// The double-chest custody tests stay in mc-core after the placement-state
+// module moved to `mc-placement`; the module path is part of the ledger's
+// `cargo:mc-core:chests::tests::...` regression references.
 #[cfg(test)]
-#[path = "chests_tests.rs"]
-mod chests_tests;
+mod chests {
+    mod tests;
+}
 pub mod chiseled_shelf;
 mod chorus;
 pub mod chunk_loader;
