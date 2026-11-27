@@ -9,8 +9,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::boundary::{BossBarChange, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BossBarChange, ConnectionId, PlayerChange};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 /// Vanilla `BossEvent.BossBarColor` ordinals (declaration order).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

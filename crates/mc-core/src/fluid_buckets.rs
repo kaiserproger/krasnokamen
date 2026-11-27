@@ -1,9 +1,10 @@
 //! Clicked bucket/cauldron plans share one inventory debit with block custody.
 use super::{Flow, Fluid, contained, flow_into, offset, waterlogged};
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::{TickState, held_slot_index};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 
 /// Player inventory claim for one bucket exchange, plus the give-back item the
 /// bucket intent hands to the actor when the held stack is not consumed whole.

@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use super::{TickState, apply_player_effects};
-use crate::boundary::{BlockChange, BlockPos, ChangeSet, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockChange, BlockPos, ChangeSet, ConnectionId, PlayerChange};
 use crate::inventory::MenuKind;
+use mc_domain::EntityId;
 
 pub(super) fn craft_menu_for_block(name: &str) -> Option<(MenuKind, String, usize)> {
     let (kind, title) = match name {

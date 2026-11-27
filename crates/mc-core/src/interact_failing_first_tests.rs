@@ -12,7 +12,7 @@ const POS: BlockPos = BlockPos {
     z: 0,
 };
 
-fn give(state: &mut crate::tick::TickState, actor: crate::boundary::EntityId, name: &str) {
+fn give(state: &mut crate::tick::TickState, actor: mc_domain::EntityId, name: &str) {
     let id = state
         .registry
         .items

@@ -11,7 +11,8 @@
 
 use std::sync::Arc;
 
-use mc_core::boundary::{ChangeSet, EntityId, TickOutput, WorldSnapshot};
+use mc_core::boundary::{ChangeSet, TickOutput, WorldSnapshot};
+use mc_domain::EntityId;
 use mc_protocol::packets::Packet;
 
 use super::{GameEvent, JoinBurst};

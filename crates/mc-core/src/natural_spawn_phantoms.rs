@@ -1,7 +1,8 @@
 //! Vanilla insomnia-driven phantom attempts (26.1.2 PhantomSpawner).
 use super::{Rng, observe_slot};
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 pub(super) fn run(
     state: &mut TickState,

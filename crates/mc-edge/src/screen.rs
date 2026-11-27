@@ -8,7 +8,8 @@ use std::{
 };
 
 use bytes::Bytes;
-use mc_core::boundary::{ConnectionId, EntityId};
+use mc_core::boundary::ConnectionId;
+use mc_domain::EntityId;
 use uuid::Uuid;
 
 pub(crate) const CHANNEL: &str = "krasnokamen:screen";

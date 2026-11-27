@@ -1,7 +1,8 @@
 //! Clock ordering across the real Play queues, routing and socket writer.
 
 use super::*;
-use mc_core::boundary::{ChangeSet, EntityId, TickOutput, WorldSnapshot};
+use mc_core::boundary::{ChangeSet, TickOutput, WorldSnapshot};
+use mc_domain::EntityId;
 
 fn clock_output(tick: u64, day_time: i64) -> TickOutput {
     TickOutput {

@@ -1,7 +1,8 @@
 //! Tick-owner vibration dispatch. One nearest/highest-frequency candidate per listener.
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use mc_data::item_nbt::field;
+use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
 use std::collections::HashMap;
 

@@ -8,8 +8,9 @@
 //! arrival is never invented.
 
 use super::*;
-use crate::boundary::{ChunkPos, EntityId};
+use crate::boundary::ChunkPos;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_script::{
     ScriptOperation, ScriptOperationFailure as Failure, ScriptOperationPayload,
     ScriptOperationRequest, ScriptSettlementBuildingRef, ScriptWorksiteInteractionPoint,

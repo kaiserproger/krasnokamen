@@ -405,7 +405,7 @@ pub(crate) fn observe_players(state: &mut TickState) {
 
 pub(super) fn game_mode(
     state: &TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
 ) -> Option<mc_script::ScriptGameMode> {
     match state.players.get(&entity)?.game_mode {
         crate::commands::GameMode::Survival => Some(mc_script::ScriptGameMode::Survival),
@@ -415,7 +415,7 @@ pub(super) fn game_mode(
     }
 }
 
-pub(crate) fn player_died(state: &mut TickState, entity: crate::boundary::EntityId) {
+pub(crate) fn player_died(state: &mut TickState, entity: mc_domain::EntityId) {
     if state.plugin_runtime.is_none() {
         return;
     }
@@ -444,7 +444,7 @@ pub(crate) fn player_died(state: &mut TickState, entity: crate::boundary::Entity
 /// protected-for-nobody grave behind.
 pub(crate) fn player_grave_created(
     state: &mut TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     grave: &crate::plugin_graves::Buried,
 ) {
     let Some(owner) = state
@@ -479,7 +479,7 @@ pub(crate) fn player_grave_created(
 
 pub(crate) fn block_event(
     state: &mut TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     position: crate::boundary::BlockPos,
     block_state: u32,
     placed: bool,
@@ -530,7 +530,7 @@ pub(crate) fn block_event(
 
 pub(crate) fn pickup_event(
     state: &mut TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     item_id: u32,
     count: i32,
 ) {
@@ -561,7 +561,7 @@ pub(crate) fn pickup_event(
 
 pub(crate) fn kill_event(
     state: &mut TickState,
-    attacker: crate::boundary::EntityId,
+    attacker: mc_domain::EntityId,
     victim: crate::entities::EntitySlot,
 ) {
     if state.plugin_runtime.is_none() {
@@ -595,7 +595,7 @@ pub(crate) fn kill_event(
 
 pub(crate) fn damage_attacker(
     source: Option<crate::intent::DamageSource>,
-) -> Option<crate::boundary::EntityId> {
+) -> Option<mc_domain::EntityId> {
     match source? {
         crate::intent::DamageSource::Melee { attacker, .. }
         | crate::intent::DamageSource::Mace { attacker, .. }
@@ -610,7 +610,7 @@ pub(crate) fn damage_attacker(
 
 pub(crate) fn craft_event(
     state: &mut TickState,
-    entity: crate::boundary::EntityId,
+    entity: mc_domain::EntityId,
     item: u32,
     count: i32,
     menu: crate::inventory::MenuKind,
@@ -656,8 +656,8 @@ pub(crate) fn fail_native(state: &mut TickState) {
 
 pub(crate) fn entity_interaction(
     state: &mut TickState,
-    actor: crate::boundary::EntityId,
-    target: crate::boundary::EntityId,
+    actor: mc_domain::EntityId,
+    target: mc_domain::EntityId,
     hand: crate::boundary::Hand,
     secondary: bool,
     intent: Option<&crate::intent::Intent>,

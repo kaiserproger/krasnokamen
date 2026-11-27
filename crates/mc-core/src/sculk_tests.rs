@@ -85,7 +85,7 @@ fn prop(s: &TickState, pos: BlockPos, key: &str) -> String {
     property(block(s, pos).unwrap(), key).unwrap().to_owned()
 }
 
-fn command(state: &mut TickState, actor: crate::boundary::EntityId, text: &str) {
+fn command(state: &mut TickState, actor: mc_domain::EntityId, text: &str) {
     let mut words = text.split_whitespace();
     let root = words.next().unwrap();
     let parsed = crate::command_world::parse(root, &words.collect::<Vec<_>>()).unwrap();
@@ -426,7 +426,7 @@ fn committed_mob_death_near_catalyst_suppresses_orbs_and_spreads_once() {
         .unwrap();
     let entity = s.spawn_mob(cow, [7.5, 201.0, 3.5], 10.0);
     let slot = s.entities.slot_of(entity).unwrap();
-    s.entities.row_mut(slot).last_player_hit = Some((crate::boundary::EntityId(999), 0));
+    s.entities.row_mut(slot).last_player_hit = Some((mc_domain::EntityId(999), 0));
     let mut intents = vec![crate::intent::Intent {
         actor: entity,
         seq: 0,

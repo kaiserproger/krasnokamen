@@ -1,9 +1,10 @@
 //! Vanilla operator `/swing`, emitted as a transient entity event.
-use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand, SwingKind};
+use crate::boundary::{ChangeSet, EntityEvent, Hand, SwingKind};
 use crate::command_args::CommandError;
 use crate::commands::{Target, target_of};
 use crate::entities::EntityKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 const USAGE: &str = "swing [<targets> [mainhand|offhand [<animation> [<duration>]]]]";
 

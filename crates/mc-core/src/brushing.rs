@@ -1,9 +1,10 @@
 //! Held-use archaeology. Progress is transient; revealed loot is journaled once.
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, Hand};
 use crate::tick::TickState;
 use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::loot::chest_26_1_2::ChestRng;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 use std::collections::HashMap;
 

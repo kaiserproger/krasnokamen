@@ -8,10 +8,11 @@
 //! Flow uses bounded shortest-descent selection and collision-face occlusion.
 //! Water/lava delays and horizontal drop-off follow the owning dimension.
 
-use crate::boundary::{BlockPos, EntityId};
+use crate::boundary::BlockPos;
 use crate::registry::ResolvedStates;
 use crate::tick::TickState;
 use mc_data::{Identifier, block_facts::FluidKind};
+use mc_domain::EntityId;
 use std::sync::LazyLock;
 
 #[path = "fluid_ticks.rs"]

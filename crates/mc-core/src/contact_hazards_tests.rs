@@ -1,9 +1,10 @@
 use super::flat_player_fixture;
-use crate::boundary::{ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::intent::{Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::{TickState, run_tick};
 use mc_data::Identifier;
+use mc_domain::EntityId;
 
 fn place(state: &mut TickState, pos: [f64; 3], name: &str, properties: &[(&str, &str)]) {
     let block = state

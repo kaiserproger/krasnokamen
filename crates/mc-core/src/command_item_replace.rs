@@ -1,9 +1,10 @@
 //! Inventory slot replacement for operator commands.
-use crate::boundary::{BlockPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ConnectionId, PlayerChange};
 use crate::command_args::{CommandError, Coord};
 use crate::commands::Target;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_domain::EntityId;
 use mc_nbt::Tag;
 
 #[derive(Debug, Clone, PartialEq)]

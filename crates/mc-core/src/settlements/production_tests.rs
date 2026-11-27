@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::EntityId;
+use mc_domain::EntityId;
 use mc_script::{
     ScriptOperation, ScriptOperationPayload, ScriptOperationRequest, ScriptSettlementBuildingRef,
     ScriptWorksiteInteractionPoint, ScriptWorksiteRequest, ScriptWorldBounds,

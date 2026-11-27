@@ -115,7 +115,7 @@ pub(crate) fn channel_rod(
 
 /// Accepted hits mutate retained native entity state. Transformations replace
 /// the species without a death/drop event and consume the ordinary bolt damage.
-pub(crate) fn strike_entity(state: &mut TickState, id: crate::boundary::EntityId) -> bool {
+pub(crate) fn strike_entity(state: &mut TickState, id: mc_domain::EntityId) -> bool {
     let Some(slot) = state.entities.slot_of(id) else {
         return false;
     };

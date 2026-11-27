@@ -3,6 +3,12 @@
 //! This crate must not depend on transport, persistence, runtime, or generated
 //! vanilla-data loaders. Wire codecs adapt to these values at the boundary.
 
+/// Network entity id as sent on the wire. Players and mobs share one id space.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct EntityId(pub i32);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
     Survival,

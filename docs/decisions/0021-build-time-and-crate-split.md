@@ -21,7 +21,7 @@ host's, so the count is checked on the integrated tree;
 Moving existing code into modules follows this ADR's cycle-cut plan with
 byte-exact moves; it may start before the 21 November announcement only once the
 current release tasks are closed, otherwise after (owner, 2026-11-17).
-**Related:** [0011](0011-core-crate-topology-and-threading.md) (rejected
+**Related:** retired v1 ADR 0011, in Git history (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),
 [0017](0017-tick-system-graph.md) (declared tick systems).

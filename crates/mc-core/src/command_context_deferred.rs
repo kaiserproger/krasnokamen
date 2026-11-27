@@ -1,8 +1,9 @@
 //! Suspended command continuations remain owned by the native command runtime.
 //! Workers carry only a completion identity and prepared data, never executable callbacks.
 use super::{Context, Runtime};
-use crate::boundary::{ChangeSet, ConnectionId, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::collections::VecDeque;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

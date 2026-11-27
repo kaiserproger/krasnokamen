@@ -3,7 +3,6 @@
 //! Multi-cell scans borrow a single resident column when overlays are empty;
 //! seam and overlay scans retain the exact overlay-first world reader.
 
-use crate::boundary::EntityId;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::registry::{
     HAZARD_BERRY, HAZARD_CACTUS, HAZARD_CAMPFIRE, HAZARD_FIRE, HAZARD_LAVA, HAZARD_MAGMA,
@@ -11,6 +10,7 @@ use crate::registry::{
 };
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use mc_physics::mth::floor_i32;
 use std::sync::{Arc, LazyLock};
 

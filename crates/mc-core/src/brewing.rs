@@ -8,9 +8,10 @@ use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::{Identifier, ItemStack, items::ItemRegistry};
 use mc_nbt::{ListTag, Tag};
 
-use crate::boundary::{BlockPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ConnectionId, PlayerChange};
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, spawn_item_entity};
+use mc_domain::EntityId;
 
 pub(crate) type BrewingStands = BTreeMap<(i32, i32, i32), BrewingState>;
 /// Opaque brewing-stand images of one chunk: (cell, timers, slots).

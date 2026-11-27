@@ -11,11 +11,12 @@ use mc_script::{
 };
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{BlockPos, ClickMode, ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ClickMode, ConnectionId, Hand, PlayerInput};
 use crate::commands::GameMode;
 use crate::inventory::{ItemRules, MenuKind};
 use crate::plugin_inventories as inventories;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 fn state() -> (TickState, EntityId) {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());

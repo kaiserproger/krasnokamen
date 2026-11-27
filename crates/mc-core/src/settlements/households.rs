@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use super::SettlementId;
-use crate::boundary::EntityId;
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

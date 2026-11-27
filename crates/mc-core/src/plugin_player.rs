@@ -12,8 +12,9 @@ use mc_script::{
 use mc_world::BlockPos;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{ClickMode, ConnectionId, EntityId, PlayerChange, PlayerInput};
+use crate::boundary::{ClickMode, ConnectionId, PlayerChange, PlayerInput};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 
 const ZONES: &str = "player-zones";
 const NATIVE_SETTLEMENTS_OWNER: &str = "krasnokamen-settlements";

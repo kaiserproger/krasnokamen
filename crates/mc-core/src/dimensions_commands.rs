@@ -1,9 +1,10 @@
 //! Resolve global player commands once, then mutate their native owning worlds.
 use super::Dimension;
 use super::travel::{Request, locate, world};
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::ChangeSet;
 use crate::commands::{Command, SelectorKind, SelectorSort, Target};
 use crate::tick::TickState;
+use mc_domain::EntityId;
 use std::collections::BTreeMap;
 
 pub(crate) fn target(command: &Command) -> Option<&Target> {

@@ -1,5 +1,5 @@
-use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot, EntityStore};
+use mc_domain::EntityId;
 
 use mc_melee_range::{Aabb, MeleeReach, attack_box};
 

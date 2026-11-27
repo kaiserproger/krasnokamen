@@ -77,7 +77,7 @@ fn pen_world() -> TickState {
     state
 }
 
-fn join_target(state: &mut TickState, pos: [f64; 3]) -> crate::boundary::EntityId {
+fn join_target(state: &mut TickState, pos: [f64; 3]) -> mc_domain::EntityId {
     input::session::join(
         state,
         (
