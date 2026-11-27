@@ -41,6 +41,11 @@ For `before-build`, the edge obtains a read-only native plan and requests the
 registered handler chain outside the tick. One queue-inclusive 100 ms deadline
 ends at the host answer. A timely approval may await merge, but is consumed
 only once after live source/roster, native state and plugin-KV fences validate.
+Click-time orientation and ray origin stay frozen; current reach, occupancy and
+support still validate. A native-input FIFO fence keeps a preview from
+overtaking earlier movement or hotbar changes. An idle native owner can retire
+metadata fences and answer ready read-only previews on an explicit wake,
+without creating an extra tick or renewing the deadline.
 Refusal repairs prediction without world edits. Unsupported hooks fail startup;
 no guest callback runs on a tick worker. See [PLUGINS.md](../PLUGINS.md).
 
