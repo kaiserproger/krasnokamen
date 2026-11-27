@@ -2063,19 +2063,58 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(runner.seen, [])
 
     def test_dirty_build_inputs_refuse_promotion_even_without_test_source_edits(self):
-        root = self.scratch()
-        manifest = root / 'Cargo.toml'
-        manifest.write_text('[package]\nname = "demo"\nversion = "0.1.0"\n')
-        self.git(root, 'add', str(manifest))
-        self.git(root, 'commit', '-qm', 'manifest')
-        manifest.write_text(manifest.read_text() + '\n[lib]\ntest = false\n')
-        (root / 'build.rs').write_text('fn main() {}\n')
+        root = self.scratch(ref='cargo:mc-core:tests::t')
+        (root / 'Cargo.toml').write_text('[workspace]\nmembers = ["crates/*"]\nresolver = "2"\n')
+        (root / '.gitignore').write_text('target/\n')
+        for name, source in [('mc-core', '#[cfg(test)]\nmod tests { #[test] fn t() {} }\n'),
+                             ('independent', '')]:
+            package = root / 'crates' / name
+            (package / 'src').mkdir(parents=True)
+            (package / 'Cargo.toml').write_text(f'[package]\nname = "{name}"\nversion = "0.1.0"\n')
+            (package / 'src/lib.rs').write_text(source)
+        independent = root / 'crates/independent'
+        (independent / 'tests').mkdir()
+        (independent / 'tests/auto_target.rs').write_text('#[test]\nfn discovered() {}\n')
+        ctx = profiles.ProfileContext(self.artifacts)
+        target, proving = 'independent::auto_target::discovered', 'mc-core::tests::t'
+        listing = ledger._test_listing(ctx, root, None)
+        self.assertIs(listing[target], False)
+        self.assertIs(listing[proving], False)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'workspace and separately discovered integration target')
+        manifest = independent / 'Cargo.toml'
+        manifest.write_text(manifest.read_text() + 'autotests = false\n')
+        listing = ledger._test_listing(ctx, root, None)
+        self.assertNotIn(target, listing)
+        self.assertIs(listing[proving], False)
+        (independent / 'build.rs').write_text('fn main() {}\n')
         (root / '.cargo').mkdir()
         (root / '.cargo/config.toml').write_text('[build]\nrustflags = []\n')
         runner = self.runner()
-        with self.assertRaisesRegex(ledger.Refused, r'including build inputs\): \.cargo/config\.toml, Cargo\.toml, build\.rs'):
+        with self.assertRaisesRegex(ledger.Refused, r'including build inputs\): '
+                                    r'\.cargo/config\.toml, crates/independent/Cargo\.toml, crates/independent/build\.rs'):
             self.promote(root, runner, dry_run=True)
         self.assertEqual(runner.seen, [])
+
+    def test_cfg_not_test_body_remains_eligible_for_patch_promotion(self):
+        root = self.scratch(with_fix_commit=False)
+        path = root / 'src/engine.rs'
+        before = "#[cfg(not(test))]\nfn locate_worker() -> &'static str {\n    \"buggy\"\n}\n"
+        after = before.replace('buggy', 'fixed')
+        path.write_text(before)
+        self.git(root, 'commit', '-qam', 'production-only function before the fix')
+        path.write_text(after)
+        fix_file = self.artifacts / 'fix.patch'
+        production_patch = self.git(root, 'diff', 'HEAD', '--', 'src/engine.rs') + '\n'
+        fix_file.write_text(production_patch)
+        self.record(root, 'patch:' + hashlib.sha256(production_patch.encode()).hexdigest())
+        runner = self.runner()
+        try:
+            receipt = self.promote(root, runner, fix_patch=fix_file, dry_run=True)
+        except ledger.Refused as error:
+            self.fail(str(error))
+        self.assertEqual(receipt['control_tree'], 'head')
+        self.assertEqual(runner.seen, [(before, True), (after, True)])
 
     def test_index_only_test_edits_refuse_promotion(self):
         root = self.scratch()

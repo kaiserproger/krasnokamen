@@ -1017,9 +1017,10 @@ def _skipped_doc(path):
 
 
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
+# A plain cfg(not(test)) item belongs only to production.
 _RUST_TEST_ITEM = re.compile(
     r'^[ \t]*(?:#\[[^\n]*\][ \t]*\n[ \t]*)*'
-    r'#\[\s*(?:cfg\s*\([^\]]*\btest\b[^\]]*\)|test)\s*\]\s*'
+    r'#\[\s*(?:cfg\s*\((?!\s*not\s*\(\s*test\s*\)\s*\))[^\]]*\btest\b[^\]]*\)|test)\s*\]\s*'
     r'(?:#\[[^\n]*\][ \t]*\n[ \t]*)*[^;{]*[;{]', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 _RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')

@@ -162,8 +162,9 @@ the reason (with repro or ledger row) and `rows`, the exact triples
 `[path, vanilla, krasnokamen]` copied from `difference_rows`. Match every row,
 including later rows grouped under the same mismatch id. The id is for
 diagnostics only. Any unlisted row fails, and so does a row that no longer
-occurs as pinned; remove it when the gap
-closes. Never make Krasnokamen stricter than vanilla to remove a difference.
+occurs as pinned; remove it when the gap closes. Seeded fuzz cases do not support
+waivers; the gate rejects a configured waiver instead of ignoring it. Never
+make Krasnokamen stricter than vanilla to remove a difference.
 
 ## Scenario file (`tools/harness/quirk_parity/scenarios/*.json`)
 

@@ -254,6 +254,8 @@ def verdict(scenario: dict, recordings: list[dict], krasnokamen: dict | None, *,
     if skipped:
         reasons.append(f"Krasnokamen did not checkpoint and recover before restart phase(s) {skipped}")
     if scenario.get("fuzz"):
+        if known is not None:
+            reasons.append("known-diffs.json does not support waivers for fuzz cases")
         return fuzz_verdict(scenario, recordings, krasnokamen, entry, reasons)
     rows: list[compare.Row] = []
     diff = compare.compare_recordings(scenario, recordings, krasnokamen, rows)
