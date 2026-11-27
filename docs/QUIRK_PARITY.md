@@ -11,7 +11,11 @@ Real vanilla runs **once per case, at record time**. Every gate run replays
 Krasnokamen against that recording without starting vanilla.
 
 ```sh
-# the gate: verify the corpus, run Krasnokamen only, compare (needs a built mc-core test binary)
+# the gate today: the 14 recorded cases (every family except `farm`; needs a built mc-core test binary)
+python3 -m tools.harness run quirk-parity -- --family blocks --family containers --family entities \
+  --family persistence --family quasi-connectivity --family redstone --family smelting --family tnt-duping
+# full gate (verify the corpus, run Krasnokamen only, compare); red until the 35 `farm-*`
+# variants are recorded: an unrecorded case fails with "not recorded: run `record` first"
 python3 -m tools.harness run quirk-parity [-- --scenario ID ... --family F ...]
 # record every scenario not recorded yet (real vanilla, twice per case)
 python3 -m tools.harness run quirk-parity -- record [--scenario ID ...] [--fuzz-seed N --fuzz-cells C --fuzz-style S]
