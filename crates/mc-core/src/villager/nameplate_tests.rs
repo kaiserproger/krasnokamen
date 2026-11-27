@@ -163,11 +163,9 @@ fn wandering_trader_has_plate_without_resident_subtype_metadata() {
     let projected = appearance(&mut state, id);
     assert!(projected.custom_name.is_some());
     assert!(projected.custom_name_visible);
-    assert!(
-        !projected.extra.iter().any(|(_, value)| matches!(
-            value,
-            crate::boundary::EntityDataValue::VillagerData { .. }
-        ))
-    );
+    assert!(!projected.extra.iter().any(|(_, value)| matches!(
+        value,
+        mc_data::entity_data_value::EntityDataValue::VillagerData { .. }
+    )));
     assert!(state.entities.row(slot).appearance.custom_name.is_none());
 }

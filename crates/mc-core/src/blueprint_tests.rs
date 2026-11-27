@@ -4,11 +4,12 @@
 use std::sync::Arc;
 
 use crate::blueprint::{CUSTOM_TYPE_FLAG, MobBlueprintDef, MovementClass, wire_type_id};
-use crate::boundary::{EntityDataValue, EntityId};
+use crate::boundary::EntityId;
 use crate::hostile::CREEPER_SWELL_DIR_INDEX;
 use crate::hostile_tests::setup;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
+use mc_data::entity_data_value::EntityDataValue;
 
 #[test]
 fn slime_and_magma_cube_blueprints_hop_with_the_head_on_the_body() {

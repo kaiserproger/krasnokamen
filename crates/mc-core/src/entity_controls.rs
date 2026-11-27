@@ -98,11 +98,11 @@ pub(crate) fn sync_no_gravity(appearance: &mut crate::boundary::EntityAppearance
         .iter_mut()
         .find(|(index, _)| *index == DATA_NO_GRAVITY)
     {
-        *current = crate::boundary::EntityDataValue::Boolean(value);
+        *current = mc_data::entity_data_value::EntityDataValue::Boolean(value);
     } else if value {
         appearance.extra.push((
             DATA_NO_GRAVITY,
-            crate::boundary::EntityDataValue::Boolean(true),
+            mc_data::entity_data_value::EntityDataValue::Boolean(true),
         ));
     }
 }

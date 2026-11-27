@@ -566,7 +566,7 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
             .extra
             .iter()
             .find_map(|(index, value)| match (*index, value) {
-                (8, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
+                (8, mc_data::entity_data_value::EntityDataValue::Byte(flags)) => Some(*flags),
                 _ => None,
             });
         assert_eq!(

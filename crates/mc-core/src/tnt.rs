@@ -9,12 +9,13 @@ use mc_physics::{Aabb, Vec3};
 use mc_world::BlockStateId;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{BlockPos, EntityDataValue, EntityId};
+use crate::boundary::{BlockPos, EntityId};
 use crate::config::CoreError;
 use crate::entities::EntitySlot;
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickSampler, TickState};
+use mc_data::entity_data_value::EntityDataValue;
 
 pub const DEFAULT_FUSE: u32 = 80;
 // PrimedTnt extends Entity (eight inherited entries), not LivingEntity.

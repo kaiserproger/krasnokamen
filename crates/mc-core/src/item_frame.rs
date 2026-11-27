@@ -1,8 +1,9 @@
 //! Hanging displays: native entity custody, with no idle per-tick work.
-use crate::boundary::{BlockPos, ChangeSet, EntityDataValue, EntityId, Hand};
+use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::placement::Face;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
 use std::sync::Arc;
 

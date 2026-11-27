@@ -2067,7 +2067,7 @@ pub struct EntityAppearanceImage {
     pub extra: Vec<(u8, EntityDataValueImage)>,
 }
 
-/// Journal-safe image of [`EntityDataValue`](crate::boundary::EntityDataValue).
+/// Journal-safe image of [`EntityDataValue`](mc_data::entity_data_value::EntityDataValue).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum EntityDataValueImage {
     Byte(i8),
@@ -2219,7 +2219,7 @@ impl EntityAppearanceDelta {
             }
             previous = Some(position);
         }
-        let duplicated = |entries: &[(u8, crate::boundary::EntityDataValue)]| {
+        let duplicated = |entries: &[(u8, mc_data::entity_data_value::EntityDataValue)]| {
             entries
                 .iter()
                 .enumerate()
@@ -2309,7 +2309,7 @@ impl EntityAppearanceDelta {
 fn base_has(
     base: &crate::boundary::EntityAppearance,
     index: u8,
-    live: &crate::boundary::EntityDataValue,
+    live: &mc_data::entity_data_value::EntityDataValue,
 ) -> bool {
     base.extra
         .iter()
@@ -2338,40 +2338,50 @@ impl From<&crate::boundary::EntityAppearance> for EntityAppearanceImage {
     }
 }
 
-impl From<&crate::boundary::EntityDataValue> for EntityDataValueImage {
-    fn from(value: &crate::boundary::EntityDataValue) -> Self {
+impl From<&mc_data::entity_data_value::EntityDataValue> for EntityDataValueImage {
+    fn from(value: &mc_data::entity_data_value::EntityDataValue) -> Self {
         match value {
-            crate::boundary::EntityDataValue::Byte(v) => Self::Byte(*v),
-            crate::boundary::EntityDataValue::VarInt(v) => Self::VarInt(*v),
-            crate::boundary::EntityDataValue::VarLong(v) => Self::VarLong(*v),
-            crate::boundary::EntityDataValue::Float(v) => Self::Float(*v),
-            crate::boundary::EntityDataValue::Rotations(v) => Self::Rotations(*v),
-            crate::boundary::EntityDataValue::Boolean(v) => Self::Boolean(*v),
-            crate::boundary::EntityDataValue::WeatheringCopper(v) => Self::WeatheringCopper(*v),
-            crate::boundary::EntityDataValue::CopperGolemState(v) => Self::CopperGolemState(*v),
-            crate::boundary::EntityDataValue::SnifferState(v) => Self::SnifferState(*v),
-            crate::boundary::EntityDataValue::Direction(v) => Self::Direction(*v),
-            crate::boundary::EntityDataValue::PaintingVariant(v) => Self::PaintingVariant(*v),
-            crate::boundary::EntityDataValue::ChickenVariant(v) => Self::ChickenVariant(*v),
-            crate::boundary::EntityDataValue::CowVariant(v) => Self::CowVariant(*v),
-            crate::boundary::EntityDataValue::PigVariant(v) => Self::PigVariant(*v),
-            crate::boundary::EntityDataValue::ZombieNautilusVariant(v) => {
+            mc_data::entity_data_value::EntityDataValue::Byte(v) => Self::Byte(*v),
+            mc_data::entity_data_value::EntityDataValue::VarInt(v) => Self::VarInt(*v),
+            mc_data::entity_data_value::EntityDataValue::VarLong(v) => Self::VarLong(*v),
+            mc_data::entity_data_value::EntityDataValue::Float(v) => Self::Float(*v),
+            mc_data::entity_data_value::EntityDataValue::Rotations(v) => Self::Rotations(*v),
+            mc_data::entity_data_value::EntityDataValue::Boolean(v) => Self::Boolean(*v),
+            mc_data::entity_data_value::EntityDataValue::WeatheringCopper(v) => {
+                Self::WeatheringCopper(*v)
+            }
+            mc_data::entity_data_value::EntityDataValue::CopperGolemState(v) => {
+                Self::CopperGolemState(*v)
+            }
+            mc_data::entity_data_value::EntityDataValue::SnifferState(v) => Self::SnifferState(*v),
+            mc_data::entity_data_value::EntityDataValue::Direction(v) => Self::Direction(*v),
+            mc_data::entity_data_value::EntityDataValue::PaintingVariant(v) => {
+                Self::PaintingVariant(*v)
+            }
+            mc_data::entity_data_value::EntityDataValue::ChickenVariant(v) => {
+                Self::ChickenVariant(*v)
+            }
+            mc_data::entity_data_value::EntityDataValue::CowVariant(v) => Self::CowVariant(*v),
+            mc_data::entity_data_value::EntityDataValue::PigVariant(v) => Self::PigVariant(*v),
+            mc_data::entity_data_value::EntityDataValue::ZombieNautilusVariant(v) => {
                 Self::ZombieNautilusVariant(*v)
             }
-            crate::boundary::EntityDataValue::String(v) => Self::String(v.clone()),
-            crate::boundary::EntityDataValue::BlockState(v) => Self::BlockState(*v),
-            crate::boundary::EntityDataValue::Item(v) => Self::Item(v.clone()),
-            crate::boundary::EntityDataValue::OptionalBlockPos(v) => Self::OptionalBlockPos(*v),
-            crate::boundary::EntityDataValue::EntityEffectParticle(v) => {
+            mc_data::entity_data_value::EntityDataValue::String(v) => Self::String(v.clone()),
+            mc_data::entity_data_value::EntityDataValue::BlockState(v) => Self::BlockState(*v),
+            mc_data::entity_data_value::EntityDataValue::Item(v) => Self::Item(v.clone()),
+            mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(v) => {
+                Self::OptionalBlockPos(*v)
+            }
+            mc_data::entity_data_value::EntityDataValue::EntityEffectParticle(v) => {
                 Self::EntityEffectParticle(*v)
             }
-            crate::boundary::EntityDataValue::OptionalUnsignedInt(v) => {
+            mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(v) => {
                 Self::OptionalUnsignedInt(*v)
             }
-            crate::boundary::EntityDataValue::OptionalLivingEntityReference(v) => {
+            mc_data::entity_data_value::EntityDataValue::OptionalLivingEntityReference(v) => {
                 Self::OptionalLivingEntityReference(*v)
             }
-            crate::boundary::EntityDataValue::VillagerData {
+            mc_data::entity_data_value::EntityDataValue::VillagerData {
                 kind,
                 profession,
                 level,

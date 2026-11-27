@@ -1,9 +1,9 @@
 //! Axolotl play-dead response to attacks in water.
-use crate::boundary::EntityDataValue;
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::natural_spawn::Rng;
 use crate::special_mobs::Retained;
 use crate::tick::{DamagePiece, TickState};
+use mc_data::entity_data_value::EntityDataValue;
 
 static AXOLOTL: std::sync::LazyLock<u32> = std::sync::LazyLock::new(|| {
     crate::piglin::type_id_of("minecraft:axolotl").expect("axolotl type")

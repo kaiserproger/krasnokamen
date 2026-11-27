@@ -281,10 +281,10 @@ const _: () = assert!(
 
 pub(super) fn map_extra(
     index: u8,
-    value: &mc_core::boundary::EntityDataValue,
+    value: &mc_data::entity_data_value::EntityDataValue,
 ) -> WireEntityDataValue {
     match value.clone() {
-        mc_core::boundary::EntityDataValue::Direction(value) => {
+        mc_data::entity_data_value::EntityDataValue::Direction(value) => {
             use mc_protocol::packets::play::EntityDirection;
             let value = match value {
                 0 => EntityDirection::Down,
@@ -296,31 +296,31 @@ pub(super) fn map_extra(
             };
             WireEntityDataValue::Direction { index, value }
         }
-        mc_core::boundary::EntityDataValue::PaintingVariant(value) => {
+        mc_data::entity_data_value::EntityDataValue::PaintingVariant(value) => {
             WireEntityDataValue::PaintingVariant { index, value }
         }
-        mc_core::boundary::EntityDataValue::ChickenVariant(value) => {
+        mc_data::entity_data_value::EntityDataValue::ChickenVariant(value) => {
             WireEntityDataValue::ChickenVariant { index, value }
         }
-        mc_core::boundary::EntityDataValue::CowVariant(value) => {
+        mc_data::entity_data_value::EntityDataValue::CowVariant(value) => {
             WireEntityDataValue::CowVariant { index, value }
         }
-        mc_core::boundary::EntityDataValue::PigVariant(value) => {
+        mc_data::entity_data_value::EntityDataValue::PigVariant(value) => {
             WireEntityDataValue::PigVariant { index, value }
         }
-        mc_core::boundary::EntityDataValue::ZombieNautilusVariant(value) => {
+        mc_data::entity_data_value::EntityDataValue::ZombieNautilusVariant(value) => {
             WireEntityDataValue::ZombieNautilusVariant { index, value }
         }
-        mc_core::boundary::EntityDataValue::WeatheringCopper(value) => {
+        mc_data::entity_data_value::EntityDataValue::WeatheringCopper(value) => {
             WireEntityDataValue::WeatheringCopper { index, value }
         }
-        mc_core::boundary::EntityDataValue::CopperGolemState(value) => {
+        mc_data::entity_data_value::EntityDataValue::CopperGolemState(value) => {
             WireEntityDataValue::CopperGolemState { index, value }
         }
-        mc_core::boundary::EntityDataValue::SnifferState(value) => {
+        mc_data::entity_data_value::EntityDataValue::SnifferState(value) => {
             WireEntityDataValue::SnifferState { index, value }
         }
-        mc_core::boundary::EntityDataValue::VillagerData {
+        mc_data::entity_data_value::EntityDataValue::VillagerData {
             kind,
             profession,
             level,
@@ -330,50 +330,52 @@ pub(super) fn map_extra(
             profession,
             level,
         },
-        mc_core::boundary::EntityDataValue::Byte(v) => {
+        mc_data::entity_data_value::EntityDataValue::Byte(v) => {
             WireEntityDataValue::Byte { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::VarInt(v) => {
+        mc_data::entity_data_value::EntityDataValue::VarInt(v) => {
             WireEntityDataValue::Int { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::VarLong(v) => {
+        mc_data::entity_data_value::EntityDataValue::VarLong(v) => {
             WireEntityDataValue::Long { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::Float(v) => {
+        mc_data::entity_data_value::EntityDataValue::Float(v) => {
             WireEntityDataValue::Float { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::Rotations([x, y, z]) => {
+        mc_data::entity_data_value::EntityDataValue::Rotations([x, y, z]) => {
             WireEntityDataValue::Rotations {
                 index,
                 value: EntityRotations { x, y, z },
             }
         }
-        mc_core::boundary::EntityDataValue::Boolean(v) => {
+        mc_data::entity_data_value::EntityDataValue::Boolean(v) => {
             WireEntityDataValue::Boolean { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::String(v) => {
+        mc_data::entity_data_value::EntityDataValue::String(v) => {
             WireEntityDataValue::String { index, value: v }
         }
-        mc_core::boundary::EntityDataValue::BlockState(v) => WireEntityDataValue::BlockState {
-            index,
-            value: mc_protocol::packets::play::BlockStateId::new(v).unwrap_or(
-                mc_protocol::packets::play::BlockStateId::new(0).expect("state 0 is valid"),
-            ),
-        },
-        mc_core::boundary::EntityDataValue::Item(v) => WireEntityDataValue::ItemStack {
+        mc_data::entity_data_value::EntityDataValue::BlockState(v) => {
+            WireEntityDataValue::BlockState {
+                index,
+                value: mc_protocol::packets::play::BlockStateId::new(v).unwrap_or(
+                    mc_protocol::packets::play::BlockStateId::new(0).expect("state 0 is valid"),
+                ),
+            }
+        }
+        mc_data::entity_data_value::EntityDataValue::Item(v) => WireEntityDataValue::ItemStack {
             index,
             stack: v.unwrap_or(mc_data::item_stack::ItemStack::EMPTY),
         },
-        mc_core::boundary::EntityDataValue::EntityEffectParticle(argb) => {
+        mc_data::entity_data_value::EntityDataValue::EntityEffectParticle(argb) => {
             WireEntityDataValue::EntityEffectParticle { index, argb }
         }
-        mc_core::boundary::EntityDataValue::OptionalUnsignedInt(value) => {
+        mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(value) => {
             WireEntityDataValue::OptionalUnsignedInt { index, value }
         }
-        mc_core::boundary::EntityDataValue::OptionalLivingEntityReference(value) => {
+        mc_data::entity_data_value::EntityDataValue::OptionalLivingEntityReference(value) => {
             WireEntityDataValue::OptionalLivingEntityReference { index, value }
         }
-        mc_core::boundary::EntityDataValue::OptionalBlockPos(v) => {
+        mc_data::entity_data_value::EntityDataValue::OptionalBlockPos(v) => {
             WireEntityDataValue::OptionalBlockPosition {
                 index,
                 value: v.map(|[x, y, z]| mc_protocol::packets::play::pack_block_pos(x, y, z)),

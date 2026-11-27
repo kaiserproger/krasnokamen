@@ -417,7 +417,7 @@ fn loyalty_returns_the_retained_worn_trident_once_and_projects_no_physics() {
             .row(slot)
             .appearance
             .extra
-            .contains(&(8, crate::boundary::EntityDataValue::Byte(2)),)
+            .contains(&(8, mc_data::entity_data_value::EntityDataValue::Byte(2)),)
     );
     for _ in 0..80 {
         super::flight::run(&mut state, &mut intents, std::iter::once(id));
@@ -853,7 +853,7 @@ fn attached_firework_rides_owner_and_detaches_safely_when_owner_lost() {
             .extra
             .contains(&(
                 9,
-                crate::boundary::EntityDataValue::OptionalUnsignedInt(None)
+                mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(None)
             ))
     );
 }
@@ -1514,7 +1514,7 @@ fn arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable() {
         let row = state.entities.row(state.entities.slot_of(id).unwrap());
         let in_ground = row.appearance.extra.contains(&(
             super::ARROW_IN_GROUND_INDEX,
-            crate::boundary::EntityDataValue::Boolean(true),
+            mc_data::entity_data_value::EntityDataValue::Boolean(true),
         ));
         let stuck = row.projectile.as_ref().unwrap().stuck;
         assert_eq!(

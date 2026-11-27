@@ -2861,7 +2861,7 @@ fn villager_growth_resets_baby_metadata_and_preserves_villager_data() {
                 baby,
                 extra: vec![(
                     19,
-                    mc_core::boundary::EntityDataValue::VillagerData {
+                    mc_data::entity_data_value::EntityDataValue::VillagerData {
                         kind: 2,
                         profession: 5,
                         level: 3,
@@ -3092,10 +3092,10 @@ fn armor_stand_equipment_and_stored_pose_project_to_vanilla_packets_and_clear_sl
     equipped.equipment[0] = Some(mc_data::ItemStack::new(1, 1));
     equipped.equipment[5] = Some(mc_data::ItemStack::new(2, 1));
     equipped.extra = vec![
-        (15, mc_core::boundary::EntityDataValue::Byte(4)),
+        (15, mc_data::entity_data_value::EntityDataValue::Byte(4)),
         (
             16,
-            mc_core::boundary::EntityDataValue::Rotations([10.0, 20.0, 30.0]),
+            mc_data::entity_data_value::EntityDataValue::Rotations([10.0, 20.0, 30.0]),
         ),
     ];
     let cleared = EntityAppearance {
@@ -3316,7 +3316,7 @@ fn warden_emerging_spawn_data_and_all_warden_poses_use_verified_ordinals() {
                 pose,
                 spawn_data: i32::from(pose == 13),
                 health: 500.0,
-                extra: vec![(16, mc_core::boundary::EntityDataValue::VarInt(105))],
+                extra: vec![(16, mc_data::entity_data_value::EntityDataValue::VarInt(105))],
                 ..Default::default()
             });
             let mut changes = ChangeSet::default();
@@ -3465,13 +3465,19 @@ fn no_gravity_metadata_reaches_viewer_on_spawn_and_change() {
         .protocol_id;
     for value in [true, false] {
         let appearance = EntityAppearance {
-            extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(value))],
+            extra: vec![(
+                5,
+                mc_data::entity_data_value::EntityDataValue::Boolean(value),
+            )],
             ..Default::default()
         };
         for previous in [
             None,
             Some(EntityAppearance {
-                extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(!value))],
+                extra: vec![(
+                    5,
+                    mc_data::entity_data_value::EntityDataValue::Boolean(!value),
+                )],
                 ..Default::default()
             }),
         ] {

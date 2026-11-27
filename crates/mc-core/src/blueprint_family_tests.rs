@@ -72,7 +72,7 @@ fn custom_creeper_opts_into_pet_breeding_and_loadout_without_wolf_metadata() {
     assert!(
         !row.appearance.extra.iter().any(|(_, value)| matches!(
             value,
-            crate::boundary::EntityDataValue::OptionalLivingEntityReference(_)
+            mc_data::entity_data_value::EntityDataValue::OptionalLivingEntityReference(_)
         )),
         "wolf metadata must not enter creeper layout"
     );

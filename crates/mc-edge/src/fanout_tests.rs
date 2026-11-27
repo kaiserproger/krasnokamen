@@ -205,7 +205,8 @@ fn cached_chunk_packets_follow_revisions() {
 
 #[test]
 fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_viewer() {
-    use mc_core::boundary::{EntityAppearance, EntityDataValue, EntityId, EntityView};
+    use mc_core::boundary::{EntityAppearance, EntityId, EntityView};
+    use mc_data::entity_data_value::EntityDataValue;
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::{AddEntity, ClientboundSetEntityData, RemoveEntities};
     let types = mc_data::entity_types::krasnokamen_required_entity_types();

@@ -166,7 +166,7 @@ fn dash(state: &mut TickState, actor: EntityId, slot: EntitySlot, power: i32) {
         state,
         slot,
         CAMEL_DASH_INDEX,
-        crate::boundary::EntityDataValue::Boolean(true),
+        mc_data::entity_data_value::EntityDataValue::Boolean(true),
     );
     let yaw = f64::from(state.entities.rot(slot)[0]).to_radians();
     let charge = if power >= 90 {
@@ -1078,7 +1078,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let dashing = state.entities.row(slot).appearance.extra.contains(&(
             CAMEL_DASH_INDEX,
-            crate::boundary::EntityDataValue::Boolean(true),
+            mc_data::entity_data_value::EntityDataValue::Boolean(true),
         ));
         let liquid = if dashing && cooldown < 50 && !state.entities.ground(slot) {
             let body = state.entities.body(slot);
@@ -1113,7 +1113,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 state,
                 slot,
                 CAMEL_DASH_INDEX,
-                crate::boundary::EntityDataValue::Boolean(false),
+                mc_data::entity_data_value::EntityDataValue::Boolean(false),
             );
         }
     }

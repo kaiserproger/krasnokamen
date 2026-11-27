@@ -418,13 +418,19 @@ fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     };
     assert_eq!(
         metadata(&state),
-        Some((5, crate::boundary::EntityDataValue::Boolean(true)))
+        Some((
+            5,
+            mc_data::entity_data_value::EntityDataValue::Boolean(true)
+        ))
     );
     state.appearance_changed.clear();
     crate::entity_controls::set_no_gravity(&mut state, slot, false);
     assert_eq!(
         metadata(&state),
-        Some((5, crate::boundary::EntityDataValue::Boolean(false)))
+        Some((
+            5,
+            mc_data::entity_data_value::EntityDataValue::Boolean(false)
+        ))
     );
     assert!(state.appearance_changed.contains(&id));
     crate::entity_controls::set_no_gravity(&mut state, slot, true);

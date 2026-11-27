@@ -9,9 +9,10 @@ mod cat;
 use std::sync::Arc;
 
 use crate::blueprint::MobCategory;
-use crate::boundary::{BlockPos, ConnectionId, EntityDataValue, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ConnectionId, EntityId, PlayerChange};
 use crate::commands::Weather;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 
 /// Vanilla `Pose.SLEEPING` ordinal.
 const SLEEPING_POSE: u8 = 2;

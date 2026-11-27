@@ -86,11 +86,14 @@ fn cloud_particle_attachment_and_projectile_events_use_exact_wire_serializers() 
     let mut packets = Vec::new();
     let appearance = EntityAppearance {
         extra: vec![
-            (8, mc_core::boundary::EntityDataValue::Float(2.5)),
-            (9, mc_core::boundary::EntityDataValue::Boolean(false)),
+            (8, mc_data::entity_data_value::EntityDataValue::Float(2.5)),
+            (
+                9,
+                mc_data::entity_data_value::EntityDataValue::Boolean(false),
+            ),
             (
                 10,
-                mc_core::boundary::EntityDataValue::EntityEffectParticle(-1),
+                mc_data::entity_data_value::EntityDataValue::EntityEffectParticle(-1),
             ),
         ],
         ..Default::default()
@@ -114,7 +117,7 @@ fn cloud_particle_attachment_and_projectile_events_use_exact_wire_serializers() 
     assert_eq!(
         map_extra(
             9,
-            &mc_core::boundary::EntityDataValue::OptionalUnsignedInt(None)
+            &mc_data::entity_data_value::EntityDataValue::OptionalUnsignedInt(None)
         ),
         WireEntityDataValue::OptionalUnsignedInt {
             index: 9,

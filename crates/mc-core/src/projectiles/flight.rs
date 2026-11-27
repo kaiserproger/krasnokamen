@@ -12,11 +12,12 @@ use mc_physics::BlockMaterial;
 use uuid::Uuid;
 
 use super::{ARROW_IN_GROUND_INDEX, ProjectileKind, ProjectileState};
-use crate::boundary::{EntityDataValue, EntityId};
+use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
 use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 
 #[cfg(test)]
 #[path = "flight_top100_h02_tests.rs"]

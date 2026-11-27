@@ -263,7 +263,7 @@ fn retained_swell_metadata_still_reaches_the_serial_special_pass() {
         .retain(|(index, _)| *index != crate::hostile::CREEPER_SWELL_DIR_INDEX);
     appearance.extra.push((
         crate::hostile::CREEPER_SWELL_DIR_INDEX,
-        crate::boundary::EntityDataValue::VarInt(1),
+        mc_data::entity_data_value::EntityDataValue::VarInt(1),
     ));
     assert!(!crate::hostile::swell_metadata_neutral(
         state.entities.row(slot)

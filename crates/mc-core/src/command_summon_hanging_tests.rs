@@ -1,7 +1,8 @@
 //! `/summon` must never create a hanging entity that the native store later refuses to load.
-use crate::boundary::{ChangeSet, ConnectionId, EntityDataValue, EntityId};
+use crate::boundary::{ChangeSet, ConnectionId, EntityId};
 use crate::journal::Replay;
 use crate::tick::TickState;
+use mc_data::entity_data_value::EntityDataValue;
 
 fn run(state: &mut TickState, actor: EntityId, command: &str) -> Vec<EntityId> {
     let parsed = crate::commands::parse(command, true).unwrap();
