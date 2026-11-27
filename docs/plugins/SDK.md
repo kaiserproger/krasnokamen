@@ -23,7 +23,7 @@ Use generated WIT records when no wrapper exists.
 | Timers | `schedule_timer`, `cancel_timer`, `TimerFired`; instance-local ticks, forgotten on restart |
 | Players | `list_online_players` bounded snapshot (`player_queries`); `Command::TeleportPlayer` only within current dimension (`player_teleport`) |
 | World/structures | `query_blocks`, `survey`, `prepare_structure`: bounded facts/native validated physical work |
-| Startup content | `StartupContribution::{items,crafting_recipes,block_tools,mob_blueprints}`; recipes/mobs are JSON, not arbitrary callbacks; `Command::SpawnEntity` requires an allow-listed type |
+| Startup content | `StartupContribution::{placement,trees,clay,spawning,items,work_recipes,crafting_recipes,block_tools,mob_blueprints}` ([contract](CONTRACT.md#startup-contributions)); recipes/mobs are JSON, not arbitrary callbacks; `Command::SpawnEntity` requires an allow-listed type |
 | NPCs/routes | `query_npcs`, `issue_npc_order`, `query_npc_route`: owned native NPCs |
 | Settlements | `query_settlements`, `rename_settlement`: native owner requests |
 | Owned inventory | `query_owned_inventory`, `transfer_owned_items`: ownership/revision-fenced operations |
@@ -50,18 +50,10 @@ decide; `before-damage` refuses deployment.
 
 ## Sandbox, authority and durability
 
-WIT exports lifecycle/events/precommit and imports only host/command-permissions:
-typed bounded values, no world/socket/session/scheduler handles or native ownership.
-Deployment-directory selection authorizes declared capabilities;
-`required_features` asserts consistency, not grants (feature capabilities
-must be in both lists). Loader permissions are separate.
-Host validates whole batches; native owners recheck session, revision, ownership,
-capacity and invariants. Traps/budget exhaustion/invalid batches fail closed.
-Configure/init stores are distinct; shutdown is best effort
-([contract](CONTRACT.md), [operator limits](OPERATIONS.md)).
-
-Plugin KV/native effects share native checkpoint and tick WAL, not plugin files.
-Operation callbacks/replies follow successful append, **not fsync**: unflushed
-tails can roll back consistently. Where the operation defines durable IDs,
-same-ID replay returns recorded outcome and conflicting reuse refuses
-([persistence](OPERATIONS.md#native-server)); correlation-only IDs are not receipts.
+The WIT world exports lifecycle, events and precommit and imports only host and
+command-permissions functions: typed bounded values, no world, socket, session or
+scheduler handles and no native ownership. Capabilities, batch validation and
+native rechecks are in the [contract](CONTRACT.md#events-commands-and-capability-boundaries);
+plugin state, append-not-fsync replies and operation-id receipts are in
+[operations](OPERATIONS.md#native-server). A request id that is only
+correlation is not a receipt.

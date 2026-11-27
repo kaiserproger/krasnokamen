@@ -698,14 +698,14 @@ For one move, per tick:
   and exit) + imports × enqueue cost + bytes lifted and lowered × per-byte
   cost + guest work × the Wasm-to-native factor. One thread serves every
   package, one callback at a time (`crates/mc-plugin-host/src/host.rs:1-10`,
-  [plugins](../PLUGINS.md) "Slow callbacks"). On the reference box the server
+  [callback limits](../plugins/OPERATIONS.md#callback-limits-and-backlog)). On the reference box the server
   gets four physical cores (`PROFILES.md:42-44`), shared with the parallel
   entity phase, so host CPU is not free.
 - **Native fan-out:** group members touched per request and native checks per
   hit or cell driven by package data. These, not the request count, measure
   the work.
 - **Latency:** at least one tick from event to effect; a request can be
-  refused as stale ([plugins](../PLUGINS.md) lines 12-13).
+  refused as stale ([plugins](../PLUGINS.md), introduction).
 - **Hard bounds:** 32 requests per callback, 256 queued commands, 1,024 queued
   events (`crates/mc-script/src/limits.rs:29,31,33`); 8 MiB per host call,
   50 M fuel per call, a 30 s wall guard
@@ -713,8 +713,8 @@ For one move, per tick:
   instance and 8 timer callbacks per pushed tick (`timers.rs:20,27`). 256
   queued commands is an outstanding limit, not a per-tick throughput. Past a
   quarter of the event bound the core refuses new plugin commands, and
-  unrefusable events past the bound halt the world ([plugins](../PLUGINS.md)
-  "Slow callbacks").
+  unrefusable events past the bound halt the world
+  ([callback limits](../plugins/OPERATIONS.md#callback-limits-and-backlog)).
 - **Unmeasured:** the fixed call cost, the per-import and per-byte costs and
   the Wasm factor. The host's limits are "deliberately conservative starting
   points, not measured budgets" (`crates/mc-plugin-host/src/limits.rs:9-12`);
@@ -765,7 +765,7 @@ not on average.
    queues at its own cadence, never by polling every tick.
 6. **Filtered and aggregated observations.** The engine builds only events a
    package subscribed to, sheds observations per package as now
-   ([plugins](../PLUGINS.md) "Slow callbacks"), and reports aggregates (for
+   ([callback limits](../plugins/OPERATIONS.md#callback-limits-and-backlog)), and reports aggregates (for
    example casualties per regiment per interval) instead of per-hit events.
 7. **Paged snapshot reads** (`settlement-page`, `npc-page`) instead of
    per-entity queries.
