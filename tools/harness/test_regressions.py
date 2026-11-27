@@ -2039,6 +2039,26 @@ class LedgerToolTests(unittest.TestCase):
             self.promote(root, runner, dry_run=True)
         self.assertEqual(runner.seen, [])
 
+    def test_dirty_test_files_and_inline_test_edits_refuse_promotion(self):
+        root = self.scratch()
+        inline = root / 'src/util.rs'
+        inline.write_text('#[cfg(test)]\nmod tests {\n    #[test]\n    fn kept() {}\n}\n')
+        tracked = root / 'src/other_tests.rs'
+        tracked.write_text('#[test]\nfn other() {}\n')
+        (root / 'tests/unrelated.rs').write_text('another check\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'tests unrelated to the fix')
+        inline.write_text(inline.read_text().replace('    #[test]', '    #[test]\n    #[ignore]'))
+        (root / 'tests/unrelated.rs').unlink()
+        tracked.write_text('#[test]\n#[ignore]\nfn other() {}\n')
+        self.git(root, 'add', str(tracked))
+        (root / 'tests/untracked.rs').write_text('#[test]\nfn new_test() {}\n')
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'uncommitted test changes before promotion: '
+                                    'src/other_tests.rs, src/util.rs, tests/unrelated.rs, tests/untracked.rs'):
+            self.promote(root, runner, dry_run=True)
+        self.assertEqual(runner.seen, [])
+
     def test_uncommitted_candidate_is_checked_exactly_without_a_commit(self):
         root = self.scratch()
         (root / 'src/util.rs').write_text('u2\n')
@@ -2728,12 +2748,13 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual((root / 'krasnokamen-client/facts').resolve(), (template / 'facts').resolve())
 
     def uncommitted_fix(self):
-        """HEAD re-broken, then an uncommitted fix (its patch saved to a file) with an untracked test."""
+        """Apply an uncommitted production fix over a re-broken HEAD with a committed extra test."""
         root = self.scratch(with_fix_commit=False)
         (root / 'src/engine.rs').write_text('value = buggy\n')
-        self.git(root, 'commit', '-qam', 'regress')
-        (root / 'src/engine.rs').write_text('value = fixed again\n')
         (root / 'tests/extra.rs').write_text('extra check\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'regress production and add a check')
+        (root / 'src/engine.rs').write_text('value = fixed again\n')
         patch = Path(self.artifacts) / 'fix.patch'
         patch.write_text(self.git(root, 'diff', 'HEAD', '--', 'src/engine.rs') + '\n')
         return root, patch

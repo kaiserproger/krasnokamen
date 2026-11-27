@@ -4,6 +4,9 @@ A fix must not make itself pass by deleting, disabling or ignoring tests, and mu
 change what the recorded corpus replays. `ledger promote` calls `promotion_guard` for
 every core fix (a commit or a `patch:` fix) on the exact tree it promotes (HEAD plus the
 uncommitted state), before any control runs:
+The candidate's test inputs must be clean (`ledger._dirty_test_paths`); dirty tests
+would otherwise be identical on both sides. Identities are checked separately for
+the default nextest profile and the configured CI profile.
 
 - the baseline is that same tree with the whole fix reversed, test hunks included. A fix
   that no longer reverses there as a whole is refused (re-record it as a `patch:` of the

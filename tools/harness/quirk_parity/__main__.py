@@ -8,13 +8,12 @@
     (all take [--mc-version 26.3] [--corpus DIR])
 
 `record` runs every not yet recorded case twice on real vanilla and appends it to the
-append-only corpus (`corpus.py`); a path where the two recordings differ becomes a
-wildcard that accepts only the values they showed. `replay` (the gate) checks corpus
-integrity, runs only Krasnokamen, compares observable state and groups mismatches by
-first differing path under stable ids. A
-mismatch listed in `known-diffs.json` is reported as `known-divergence`; a listed mismatch
-that no longer occurs fails the gate, as does any other mismatch, a Krasnokamen command
-rejection, an unrecorded or changed scenario, or a corpus integrity problem.
+append-only corpus (`corpus.py`). `replay` (the gate) checks corpus integrity, runs
+only Krasnokamen, and compares its observations to each complete recording.
+Mismatches from the first recording are grouped by first differing path under stable
+ids. Only exact (path, vanilla, Krasnokamen) rows in `known-diffs.json` are waived;
+unlisted or stale rows, command rejection, an unrecorded or changed scenario, and
+corpus integrity problems fail the gate.
 DIR/receipt.json holds the verdicts; the process exits non-zero unless it passes.
 """
 from __future__ import annotations
@@ -30,7 +29,7 @@ import time
 from pathlib import Path
 
 from . import compare, seeded
-from .corpus import FORMAT, LOCK, Corpus, CorpusError, committed_lock, corpus_root, scenario_sha256, trusted_lock
+from .corpus import FORMAT, LOCK, Corpus, CorpusError, canonical, committed_lock, corpus_root, scenario_sha256, trusted_lock
 from .vanilla import (MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle, java_version, resolve_jar,
                       resolve_java)
 
@@ -202,38 +201,42 @@ def krasnokamen_rejections(run: dict) -> list[str]:
 
 
 def load_known_diffs(path: Path | None = None) -> dict[str, dict]:
-    """Case -> {"reason", "mismatches": [ids]}: intended or accepted differences from vanilla."""
+    """Case -> {reason, rows: [[path, vanilla, krasnokamen], ...]}."""
     path = KNOWN_DIFFS if path is None else path
     if not path.is_file():
         return {}
     known = {key: value for key, value in json.loads(path.read_text()).items() if not key.startswith("_")}
     for case, value in known.items():
-        if not isinstance(value, dict) or not value.get("reason") or not value.get("mismatches"):
-            raise ValueError(f"{path}: {case} needs a reason and the mismatch ids it covers")
+        if (not isinstance(value, dict) or not isinstance(value.get("reason"), str) or not value["reason"].strip()
+                or not isinstance(value.get("rows"), list) or not value["rows"]
+                or "mismatches" in value
+                or any(not isinstance(row, list) or len(row) != 3 or not isinstance(row[0], str) or not row[0]
+                       for row in value["rows"])):
+            raise ValueError(f"{path}: {case} needs a reason and exact [path, vanilla, krasnokamen] rows")
     return known
 
 
-def apply_known(entry: dict, groups: list[dict], known: dict | None, reasons: list[str]) -> None:
-    """Every mismatch must be listed with a reason; a listed mismatch that is gone fails too."""
-    observed = {group["mismatch_id"] for group in groups}
-    listed = set(known["mismatches"]) if known else set()
-    for group in groups:
-        group["status"] = "known" if group["mismatch_id"] in listed else "new"
-    if groups:
-        entry["mismatches"] = groups
-    unknown, stale = observed - listed, sorted(listed - observed)
+def apply_known(entry: dict, rows: list[compare.Row], known: dict | None, reasons: list[str]) -> None:
+    """Waive only exact triples, not all differences at the same path or in the same cell."""
+    listed = {canonical(row): row[0] for row in known["rows"]} if known else {}
+    observed = {canonical(row): row[0] for row in rows}
+    unknown = {path for key, path in observed.items() if key not in listed}
+    stale = sorted(path for key, path in listed.items() if key not in observed)
+    if rows:
+        entry["difference_rows"] = rows
+        entry["mismatches"] = compare.mismatch_groups(entry["id"], rows, new_paths=unknown)
     if unknown:
         reasons.append("Krasnokamen diverges from vanilla")
     if stale:
-        reasons.append(f"known divergence no longer differs, remove it from known-diffs.json: {stale}")
+        reasons.append(f"known divergence no longer differs as pinned, remove it from known-diffs.json: {stale}")
     if observed and not unknown and not stale:
         entry["status"] = "known-divergence"
         entry["known_divergence"] = known["reason"]
 
 
-def verdict(scenario: dict, vanilla: dict, krasnokamen: dict | None, *,
-            wildcards: compare.Wildcards = compare.NO_WILDCARDS, known: dict | None = None) -> dict:
-    """Replay verdict of one exact-state case against its first vanilla recording."""
+def verdict(scenario: dict, recordings: list[dict], krasnokamen: dict | None, *,
+            known: dict | None = None) -> dict:
+    """Replay verdict of one exact-state case against its whole vanilla recordings."""
     entry: dict = {"id": scenario["id"], "family": scenario.get("family"), "status": "pass"}
     reasons: list[str] = []
     if krasnokamen is None:
@@ -250,14 +253,13 @@ def verdict(scenario: dict, vanilla: dict, krasnokamen: dict | None, *,
                and phase["name"] not in restarted]
     if skipped:
         reasons.append(f"Krasnokamen did not checkpoint and recover before restart phase(s) {skipped}")
-    rows: list = []
     if scenario.get("fuzz"):
-        fuzz_verdict(scenario, vanilla, krasnokamen, entry, reasons, wildcards, rows)
-        return entry
-    diff = compare.compare_scenario(scenario, vanilla, krasnokamen, rows, wildcards)
+        return fuzz_verdict(scenario, recordings, krasnokamen, entry, reasons)
+    rows: list[compare.Row] = []
+    diff = compare.compare_recordings(scenario, recordings, krasnokamen, rows)
     if not diff["match"]:
         entry["diff"] = diff["phases"]
-    apply_known(entry, compare.mismatch_groups(scenario["id"], rows), known, reasons)
+    apply_known(entry, rows, known, reasons)
     if reasons:
         entry["status"] = "fail"
         entry["reasons"] = reasons
@@ -292,15 +294,13 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict[str, list
             break
     if vruns and len(sruns) == len(variants) and all(v["id"] in vanilla for v in variants):
         entry["rate"] = compare.rate_verdict(scenario, vruns, sruns)
-        groups = []
+        rows = []
         if not entry["rate"]["match"]:
             path = "rate/" + "/".join(str(v) for v in entry["rate"]["metric"].values())
-            groups.append({"mismatch_id": compare.mismatch_id(group, path), "path": path,
-                           "vanilla": entry["rate"]["vanilla"]["mean"],
-                           "krasnokamen": entry["rate"]["krasnokamen"]["mean"], "rows": 1, "later_paths": []})
+            rows.append((path, entry["rate"]["vanilla"]["mean"], entry["rate"]["krasnokamen"]["mean"]))
             if entry["rate"].get("error"):
                 reasons.append(entry["rate"]["error"])
-        apply_known(entry, groups, known, reasons)
+        apply_known(entry, rows, known, reasons)
     else:
         reasons.append("rate group incomplete: every seed needs vanilla recordings and a Krasnokamen run")
     if reasons:
@@ -308,12 +308,13 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict[str, list
     return entry
 
 
-def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, reasons: list,
-                 wildcards: compare.Wildcards = compare.NO_WILDCARDS, rows: list | None = None) -> dict:
+def fuzz_verdict(scenario: dict, recordings: list[dict], krasnokamen: dict, entry: dict, reasons: list) -> dict:
     """Fuzz gate: every vanilla duplication cell must match; other cell diffs are findings."""
-    rows = [] if rows is None else rows
-    diff = compare.compare_scenario(scenario, vanilla, krasnokamen, rows, wildcards)
-    dupes = seeded.dupe_cells(scenario, vanilla)
+    rows: list[compare.Row] = []
+    diff = compare.compare_recordings(scenario, recordings, krasnokamen, rows)
+    dupes = seeded.dupe_cells(scenario, recordings[0])
+    for recording in recordings[1:]:
+        dupes.update(seeded.dupe_cells(scenario, recording))
     diverging: dict[int, list[str]] = {}
     shape: list[str] = []
     for phase, detail in diff["phases"].items():
@@ -363,12 +364,8 @@ def _is_shape(path: str) -> bool:
     return "/" not in path or path.rsplit("/", 1)[-1] in ("cells", "trace")
 
 
-def recording_problems(case: dict, recordings: list[dict]) -> tuple[list[str], dict[str, list]]:
-    """(problems that refuse the recording, {path: [value in recording 1, value in recording 2]}).
-
-    The wildcards are the element paths (a block, a container, one entity's position or field)
-    where the two recordings differ, with the values each showed: replay accepts only those.
-    """
+def recording_problems(case: dict, recordings: list[dict]) -> list[str]:
+    """Refuse recordings that reject commands, fail self-checks, or have incompatible shapes."""
     problems = []
     for index, run in enumerate(recordings, 1):
         if run["command_log"]:
@@ -377,24 +374,13 @@ def recording_problems(case: dict, recordings: list[dict]) -> tuple[list[str], d
         if failures:
             problems.append(f"recording {index}: vanilla does not show what the scenario encodes: {failures[:5]}")
     if case.get("rate"):  # seed variants compare production distributions, not paths
-        return problems, {}
+        return problems
     rows: list = []
     compare.compare_scenario(case, recordings[0], recordings[1], rows)
     shape = [path for path, _, _ in rows if _is_shape(path)]
     if shape:
         problems.append(f"the two vanilla recordings differ in shape, not values: {shape[:5]}")
-    return problems, {path: [first, second] for path, first, second in sorted(rows, key=lambda row: row[0])}
-
-
-def recorded_wildcards(doc: dict) -> dict[str, list]:
-    """A corpus case's wildcards; a legacy path list without the recorded values cannot be checked."""
-    wildcards = doc["wildcards"]
-    if isinstance(wildcards, dict):
-        return wildcards
-    if wildcards:
-        raise CorpusError(f"{doc['case']} v{doc['version']} keeps wildcard paths without the values vanilla "
-                          "showed there: re-record it")
-    return {}
+    return problems
 
 
 def _environment(args) -> dict:
@@ -413,12 +399,12 @@ def _head() -> str | None:
 def _record_case(case: dict, version: int, out: Path, env: dict, reason: str | None) -> dict:
     recordings = [run_vanilla(case, out / "vanilla" / case["id"].replace("#", "@") / f"v{version}-rec{n}",
                               Path(env["jar"]), env["java"]) for n in (1, 2)]
-    problems, wildcards = recording_problems(case, recordings)
+    problems = recording_problems(case, recordings)
     if problems:
         raise VanillaError("; ".join(problems))
     return {"format": FORMAT, "case": case["id"], "version": version, "mc_version": env["mc_version"],
             "group": case.get("group"), "scenario": case, "scenario_sha256": scenario_sha256(case),
-            "recordings": recordings, "wildcards": wildcards, "vanilla": env, "reason": reason,
+            "recordings": recordings, "vanilla": env, "reason": reason,
             "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
             "recorded_from": {"repo": str(REPO_ROOT), "head": _head()}}
 
@@ -461,7 +447,7 @@ def record(args, rerecord: bool = False) -> int:
                 doc["supersedes"] = {"version": locked["version"], "sha256": locked["sha256"]}
                 entry = corpus.append(doc, op="re-record", reason=args.reason)
                 row.update(status="re-recorded", version=entry["version"], sha256=entry["sha256"],
-                           kept_manifest=str(kept), wildcards=len(doc["wildcards"]))
+                           kept_manifest=str(kept))
                 continue
             if locked is not None:
                 if locked["scenario_sha256"] == sha:
@@ -481,7 +467,7 @@ def record(args, rerecord: bool = False) -> int:
                 row.update(status="fail", reason=str(error))
                 continue
             entry = corpus.append(doc, op="record")
-            row.update(status="recorded", version=1, sha256=entry["sha256"], wildcards=len(doc["wildcards"]))
+            row.update(status="recorded", version=1, sha256=entry["sha256"])
         receipt["status"] = "pass" if all(row["status"] != "fail" for row in receipt["cases"]) else "fail"
     except Exception as error:  # fail closed, keep the receipt
         receipt["error"] = f"{type(error).__name__}: {error}"
@@ -534,8 +520,7 @@ def replay(args) -> int:
                 groups.setdefault(doc["group"], []).append(doc)
                 continue
             receipt["scenarios"].append(verdict(
-                doc["scenario"], doc["recordings"][0], krasnokamen.get(case),
-                wildcards=recorded_wildcards(doc), known=known.get(case)))
+                doc["scenario"], doc["recordings"], krasnokamen.get(case), known=known.get(case)))
             receipt["scenarios"][-1]["recorded_version"] = doc["version"]
         for group, members in groups.items():
             receipt["scenarios"].append(rate_group_verdict(

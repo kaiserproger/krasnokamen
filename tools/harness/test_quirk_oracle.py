@@ -1,7 +1,7 @@
-"""Record/replay corpus, wildcard, known-diff and promotion-guard contracts of the vanilla oracle.
+"""Record/replay corpus, whole-recording parity, waivers and promotion-guard contracts.
 
 Each guard has a positive case and a negative control: an edited or removed recorded case
-fails replay, a fix that drops tests or assertions or adds `#[ignore]` is refused. These are
+fails replay, and a fix that drops or disables tests is refused. These are
 synthetic fixtures for the harness itself, not vanilla gameplay evidence.
 
 Run with: python3 -m unittest tools.harness.test_quirk_oracle
@@ -34,11 +34,11 @@ def run(blocks: dict, entities: list | None = None) -> dict:
             "phases": [{"name": "setup", "snapshot": snapshot}, {"name": "p", "snapshot": snapshot}]}
 
 
-def doc(case: str = "case-a", version: int = 1, scenario: dict | None = None, wildcards=()) -> dict:
+def doc(case: str = "case-a", version: int = 1, scenario: dict | None = None) -> dict:
     scenario = dict(scenario or SCENARIO, id=case)
     return {"format": 1, "case": case, "version": version, "scenario": scenario,
             "scenario_sha256": scenario_sha256(scenario), "recordings": [run({"0,0,0": "minecraft:stone"})] * 2,
-            "wildcards": list(wildcards), "recorded_at": "2026-11-27T00:00:00+00:00"}
+            "recorded_at": "2026-11-27T00:00:00+00:00"}
 
 
 class CorpusTests(unittest.TestCase):
@@ -184,6 +184,17 @@ class CorpusTests(unittest.TestCase):
         problems = self.corpus.verify(committed=committed_lock("26.3", repo, lock))["problems"]
         self.assertTrue(any("case-a v2 in the lock's Git history is gone" in p for p in problems), problems)
 
+    def test_shallow_checkout_refuses_lock_verification(self):
+        repo, lock, commit = self.repo()
+        self.corpus.append(doc(), op="record")
+        lock.write_text(self.lock.read_text())
+        commit("add", "-A")
+        commit("commit", "-qm", "lock")
+        shallow = self.tmp / "shallow"
+        subprocess.run(["git", "clone", "-q", "--depth=1", repo.as_uri(), str(shallow)], check=True)
+        with self.assertRaisesRegex(CorpusError, "cannot verify corpus lock history in a shallow checkout"):
+            committed_lock("26.3", shallow, shallow / lock.relative_to(repo))
+
 
 class ReplayTests(unittest.TestCase):
     def setUp(self):
@@ -247,11 +258,11 @@ class ReplayTests(unittest.TestCase):
     def test_restart_phase_krasnokamen_did_not_restart_fails(self):
         scenario = dict(SCENARIO, phases=[{"name": "p", "restart": True, "commands": [], "ticks": 1}])
         vanilla = run({"0,0,0": "minecraft:stone"})
-        self.assertEqual(oracle.verdict(scenario, vanilla, vanilla)["status"], "fail")
+        self.assertEqual(oracle.verdict(scenario, [vanilla], vanilla)["status"], "fail")
         restarted = dict(vanilla, phases=[vanilla["phases"][0], dict(vanilla["phases"][1], restarted=True)])
-        self.assertEqual(oracle.verdict(scenario, vanilla, restarted)["status"], "pass")
+        self.assertEqual(oracle.verdict(scenario, [vanilla], restarted)["status"], "pass")
         failed = dict(restarted, error="native store refused: missing native/state.redb")
-        self.assertEqual(oracle.verdict(scenario, vanilla, failed)["status"], "fail")
+        self.assertEqual(oracle.verdict(scenario, [vanilla], failed)["status"], "fail")
 
     def test_edited_case_fails_replay_without_running_krasnokamen(self):
         path = self.corpus.dir / self.entry["file"]
@@ -291,22 +302,19 @@ class ReplayTests(unittest.TestCase):
             "rows": 2, "status": "new"}])
 
 
-class WildcardAndKnownDiffTests(unittest.TestCase):
-    def test_wildcards_accept_only_values_a_recording_showed(self):
+class RecordingAndKnownDiffTests(unittest.TestCase):
+    def test_case_matches_either_recording_but_no_third_value(self):
         a = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:gravel"})
         b = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:flint_block"})
-        problems, wildcards = oracle.recording_problems(SCENARIO, [a, b])
-        self.assertEqual(problems, [])
-        self.assertEqual(wildcards, {path: ["minecraft:gravel", "minecraft:flint_block"]
-                                     for path in ("p/blocks/1,0,0", "setup/blocks/1,0,0")})
+        self.assertEqual(oracle.recording_problems(SCENARIO, [a, b]), [])
         for value, status in (("minecraft:gravel", "pass"), ("minecraft:flint_block", "pass"),
                               ("minecraft:sand", "fail")):
             krasnokamen = run({"0,0,0": "minecraft:stone", "1,0,0": value})
-            self.assertEqual(oracle.verdict(SCENARIO, a, krasnokamen, wildcards=wildcards)["status"], status, value)
+            self.assertEqual(oracle.verdict(SCENARIO, [a, b], krasnokamen)["status"], status, value)
         flint = run({"0,0,0": "minecraft:stone", "1,0,0": "minecraft:flint_block"})
-        self.assertEqual(oracle.verdict(SCENARIO, a, flint)["status"], "fail")
+        self.assertEqual(oracle.verdict(SCENARIO, [a], flint)["status"], "fail")
 
-    def test_entity_wildcards_mask_one_entity_and_one_field(self):
+    def test_positions_and_fields_match_the_same_recording(self):
         spec = {"blocks": "exact", "entities": "counts",
                 "entity_positions": {"types": ["minecraft:pig"], "epsilon": 0.05},
                 "entity_fields": {"types": ["minecraft:pig"], "fields": ["health", "fuse"], "epsilon": 0.01}}
@@ -316,52 +324,62 @@ class WildcardAndKnownDiffTests(unittest.TestCase):
             return run({}, [{"type": "minecraft:pig", "pos": [first_x, 1.0, 0.5], "health": first_health},
                             {"type": "minecraft:pig", "pos": [second_x, 1.0, 0.5], "health": second_health}])
 
-        problems, wildcards = oracle.recording_problems(scenario, [pigs(3.0, 6.0), pigs(4.0, 8.0)])
-        self.assertEqual(problems, [])
-        # positions sort by x (the moving pig is second), fields by health (the hurt pig is first)
-        self.assertEqual(sorted(wildcards), ["p/entity_fields/minecraft:pig/0/health", "p/entity_positions/1",
-                                             "setup/entity_fields/minecraft:pig/0/health", "setup/entity_positions/1"])
-        self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), pigs(4.0, 8.0), wildcards=wildcards)["status"], "pass")
+        recordings = [pigs(3.0, 6.0), pigs(4.0, 8.0)]
+        self.assertEqual(oracle.recording_problems(scenario, recordings), [])
+        self.assertEqual(oracle.verdict(scenario, recordings, recordings[1])["status"], "pass")
         for label, krasnokamen in (("unrecorded position", pigs(5.0, 8.0)), ("unrecorded health", pigs(4.0, 7.0)),
                                    ("other pig moved", pigs(4.0, 8.0, first_x=1.5)),
                                    ("other pig hurt", pigs(4.0, 8.0, first_health=9.0)),
                                    ("position of recording 2, health of recording 1", pigs(4.0, 6.0))):
-            self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), krasnokamen, wildcards=wildcards)["status"],
-                             "fail", label)
+            self.assertEqual(oracle.verdict(scenario, recordings, krasnokamen)["status"], "fail", label)
 
-    def test_wildcard_values_of_the_two_recordings_never_mix(self):
+    def test_block_values_of_the_two_recordings_never_mix(self):
         """Vanilla showed the block at one of two cells; a world holding it at neither loses it."""
         first, second = run({"0,0,0": "minecraft:sand"}), run({"1,0,0": "minecraft:sand"})
-        problems, wildcards = oracle.recording_problems(SCENARIO, [first, second])
-        self.assertEqual(problems, [])
-        self.assertEqual(wildcards["p/blocks/0,0,0"], ["minecraft:sand", None])
-        self.assertEqual(wildcards["p/blocks/1,0,0"], [None, "minecraft:sand"])
+        self.assertEqual(oracle.recording_problems(SCENARIO, [first, second]), [])
         for label, krasnokamen, status in (("recording 1", first, "pass"), ("recording 2", second, "pass"),
                                            ("air at both cells", run({}), "fail"),
                                            ("sand at both cells", run({"0,0,0": "minecraft:sand",
                                                                       "1,0,0": "minecraft:sand"}), "fail")):
-            self.assertEqual(oracle.verdict(SCENARIO, first, krasnokamen, wildcards=wildcards)["status"], status, label)
+            self.assertEqual(oracle.verdict(SCENARIO, [first, second], krasnokamen)["status"], status, label)
 
-    def test_legacy_wildcard_paths_without_values_need_a_rerecord(self):
-        self.assertEqual(oracle.recorded_wildcards(doc()), {})
-        with self.assertRaises(CorpusError):
-            oracle.recorded_wildcards(doc(wildcards=["p/blocks/1,0,0"]))
+    def test_tolerance_is_measured_against_the_same_recording_as_the_blocks(self):
+        spec = dict(SCENARIO["compare"], entity_positions={"types": ["minecraft:pig"], "epsilon": 0.05})
+        scenario = dict(SCENARIO, compare=spec)
+
+        def world(block, x):
+            return run({"0,0,0": block}, [{"type": "minecraft:pig", "pos": [x, 0, 0]}])
+
+        recordings = [world("minecraft:stone", 0), world("minecraft:gravel", 0.04)]
+        self.assertEqual(oracle.verdict(scenario, recordings, world("minecraft:gravel", 0.08))["status"], "pass")
+        self.assertEqual(oracle.verdict(scenario, recordings, world("minecraft:gravel", -0.04))["status"], "fail")
 
     def test_recordings_differing_in_shape_are_refused(self):
         a = run({})
         b = dict(run({}), phases=run({})["phases"][:1])
-        problems, _ = oracle.recording_problems(SCENARIO, [a, b])
+        problems = oracle.recording_problems(SCENARIO, [a, b])
         self.assertTrue(any("differ in shape" in p for p in problems), problems)
 
-    def test_known_mismatch_reports_known_divergence_and_fails_once_gone(self):
-        vanilla, krasnokamen = run({"0,0,0": "minecraft:stone"}), run({"0,0,0": "minecraft:dirt"})
-        known = {"reason": "documented", "mismatches": [compare.mismatch_id("case-a", "setup/blocks/0,0,0")]}
-        self.assertEqual(oracle.verdict(SCENARIO, vanilla, krasnokamen, known=known)["status"], "known-divergence")
-        stale = oracle.verdict(SCENARIO, vanilla, vanilla, known=known)
+    def test_known_difference_waives_only_exact_rows_including_later_rows(self):
+        def world(first, late="minecraft:stone"):
+            cells = [{"blocks": {"0,0,0": first, "1,0,0": late}, "entities": [], "containers": {}}]
+            return dict(run({}), phases=[{"name": "p", "snapshot": {"cells": cells}}])
+
+        vanilla = world("minecraft:stone")
+        path = "p/cells/0/blocks/0,0,0"
+        known = {"reason": "documented", "rows": [[path, "minecraft:stone", "minecraft:dirt"]]}
+        for observed, status in ((world("minecraft:dirt"), "known-divergence"),
+                                 (world("minecraft:bedrock"), "fail"),
+                                 (world("minecraft:dirt", "minecraft:gravel"), "fail")):
+            with self.subTest(observed=observed):
+                result = oracle.verdict(SCENARIO, [vanilla, vanilla], observed, known=known)
+                self.assertEqual(result["status"], status)
+                self.assertEqual(len(result["mismatches"]), 1)
+                self.assertEqual(result["mismatches"][0]["path"], path)
+                self.assertEqual(result["mismatches"][0]["status"], "new" if status == "fail" else "known")
+        stale = oracle.verdict(SCENARIO, [vanilla, vanilla], vanilla, known=known)
         self.assertEqual(stale["status"], "fail")
         self.assertIn("no longer differs", stale["reasons"][0])
-        other = {"reason": "documented", "mismatches": ["000000000000"]}
-        self.assertEqual(oracle.verdict(SCENARIO, vanilla, krasnokamen, known=other)["status"], "fail")
 
     def test_mismatch_groups_follow_the_first_differing_path_per_cell(self):
         rows = [("p/trace/1/cells/0/blocks/0,0,0", "a", "b"), ("p/cells/0/blocks/0,0,0", "a", "b"),
@@ -521,6 +539,13 @@ class PromotionGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*other::tests::kept -> missing"):
             guard.promotion_guard(self.root, diff, lister, patch=False)
         self.assertEqual(listed, [None, None])
+
+    def test_a_ci_only_nextest_filter_cannot_hide_a_test(self):
+        self.write({".config/nextest.toml": "[profile.ci]\nretries = 0\n"})
+        self.commit("CI profile")
+        diff = self.fix({".config/nextest.toml": '[profile.ci]\ndefault-filter = "not test(=b_tests::three)"\n'})
+        with self.assertRaisesRegex(guard.GuardRefused, r"(drops|ignores) 1 test.*ci/demo::b_tests::three"):
+            guard.promotion_guard(self.root, diff, self.real, patch=False)
 
 
 if __name__ == "__main__":

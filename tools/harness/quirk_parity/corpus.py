@@ -1,8 +1,7 @@
 """Append-only recorded vanilla corpus of the quirk/farm parity gate (owner D128).
 
-Vanilla runs only at record time, twice per case: observable paths that differ between
-the two recordings become wildcards. Every gate run replays Krasnokamen against the
-recording without starting vanilla.
+Vanilla runs only at record time, twice per case. Each gate run compares Krasnokamen
+to the complete recordings without starting vanilla.
 
 Layout under ``corpus_root()/<mc-version>/`` (outside Git: Mojang-derived observations
 never enter the repository, ADR 0022):
@@ -112,6 +111,12 @@ def trusted_lock(mc_version: str, ref: str, repo: Path, path: Path = LOCK) -> li
 
 def committed_lock(mc_version: str, repo: Path, path: Path = LOCK) -> list[dict]:
     """Every lock line any committed version of the lock held, in HEAD and all its ancestors."""
+    shallow = subprocess.run(["git", "rev-parse", "--is-shallow-repository"], cwd=repo,
+                             capture_output=True, text=True, check=False)
+    if shallow.returncode:
+        raise CorpusError(f"cannot check whether {repo} is shallow: {shallow.stderr.strip()}")
+    if shallow.stdout.strip() == "true":
+        raise CorpusError("cannot verify corpus lock history in a shallow checkout; fetch the complete Git history")
     rel = path.resolve().relative_to(repo.resolve()).as_posix()
     listed = subprocess.run(["git", "rev-list", "--full-history", "HEAD", "--", rel], cwd=repo,
                             capture_output=True, text=True, check=False)

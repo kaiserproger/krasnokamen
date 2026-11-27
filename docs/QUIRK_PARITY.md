@@ -54,15 +54,13 @@ facts of [ADR 0022](decisions/0022-content-without-java.md).
 `record` runs every selected scenario that this tree has not recorded yet on two
 fresh vanilla worlds. Both recordings must accept every command and pass the
 scenario's `vanilla_expect` self-check; recordings that differ in shape (phases,
-cells, trace lengths) are refused. Where the two recordings differ (one block,
-one container, one entity's position or one field of one entity) the path
-becomes a **wildcard**. The wildcards of a case are matched **jointly**:
-Krasnokamen's values at all of them together must be recording 1's or recording
-2's, never a mix (a block vanilla put at one of two cells, `(block, air)` or
-`(air, block)`, does not accept `(air, air)`). Every other path must match exactly
-or within the scenario's own epsilon. Seeded
-farm variants are compared as production distributions instead: both recordings
-of every seed are vanilla samples.
+cells, trace lengths) are refused. Krasnokamen must match **one complete
+recording**, with the case's tolerances applied to that recording. A block
+cannot match one recording while an entity's position matches only the other,
+even if the positions in the two vanilla recordings are within epsilon of each
+other. When neither matches, the receipt reports differences from the first
+recording. Seeded farm variants are compared as production distributions
+instead: both recordings of every seed are vanilla samples.
 
 `replay` (the default command and the profile's gate):
 
@@ -80,7 +78,8 @@ of every seed are vanilla samples.
 
 `DIR/receipt.json` lists per case `status` (`pass`, `fail`, `known-divergence`,
 `findings` for fuzz), diffs, `mismatches` (id, path, both values, rows that
-follow from it, `new`/`known`), the corpus integrity summary and every
+follow from it, `new`/`known`), exact `difference_rows` for replay waivers,
+the corpus integrity summary and every
 Krasnokamen command rejection; the top-level `mismatches` list collects them
 all. `DIR/krasnokamen/` holds the replayed scenario files, the driver's own
 receipt and `krasnokamen.log`. Through the harness the case verdicts and
@@ -95,7 +94,7 @@ Nothing sleeps: vanilla waits on its own log lines ("Sprint completed",
 <corpus>/<version>/manifest.jsonl         append-only; each line names one case version, its file's
                                           SHA-256, its scenario hash and the SHA-256 of the line before
 <corpus>/<version>/cases/<case>/vNNN.json one immutable file per recorded version: the resolved scenario,
-                                          both recordings, wildcards, jar and Java identity
+                                          both recordings, jar and Java identity
 <corpus>/<version>/manifests/             the whole manifest as it stood before each re-record
 tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version this tree replays
 ```
@@ -112,7 +111,8 @@ tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version t
   version of `corpus-lock.jsonl` ever held (HEAD and all its ancestors,
   `git rev-list --full-history`): a line that is gone here fails, so dropping a
   newer version's line cannot roll a case back, even once the rollback commit is
-  `main` itself. Every version after a case's first must have been made by
+  `main` itself. A shallow checkout refuses verification: fetch the complete
+  history first. Every version after a case's first must have been made by
   `re-record --reason` (its manifest line says so). `--trusted-ref REF` adds that
   ref's lock lines and lists, in the receipt, the cases re-recorded
   (`re_recorded_since_trusted`, with the reasons) and added (`added_since_trusted`)
@@ -125,13 +125,16 @@ tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version t
   promotes (HEAD plus uncommitted state) against the same tree with the whole fix
   reversed, test hunks included. A fix that no longer reverses there as a whole is
   refused ("fix no longer reverses on the candidate; use patch: mode"); no
-  historical commit stands in for the candidate. Tests are compared by identity,
-  `cargo nextest list` of every package the fix touches on both trees, or of the
-  whole workspace when the fix touches a `Cargo.toml` or any path outside
-  `crates/` (`.config/nextest.toml`, `Cargo.lock`, `.cargo/`, docs, data), which
-  costs two full workspace test builds. A test the tree before the fix runs that
-  the promoted tree drops, no longer compiles in (a removed `mod` line), filters
-  out (a nextest `default-filter`) or ignores refuses the promotion; a moved test
+  historical commit stands in for the candidate. Uncommitted edits to test
+  files, inline Rust test content or `.config/nextest.toml` are refused before
+  listing: otherwise they would affect both trees and hide a missing test.
+  Test identities are compared in `default` and (when configured) `ci`
+  separately with `cargo nextest list --all-targets` for each touched package
+  on both trees, or for the whole workspace when the fix touches a `Cargo.toml`
+  or any path outside `crates/` (e.g. `.config/nextest.toml`, `Cargo.lock`,
+  `.cargo/`, docs, data). A test the tree before the fix runs that the promoted
+  tree drops, no longer compiles in, filters out or ignores refuses promotion;
+  a moved test
   changes identity ("test identity changed: <old> -> missing; land the move as its
   own commit"); assertion counts are not compared. A removed `corpus-lock.jsonl`
   line, or a new line for a case the baseline already has, refuses it too; new
@@ -140,11 +143,10 @@ tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version t
   fix.
 
 The guards' unit suites, each with a negative control (edited or removed case,
-a rolled-back or reason-less newer version, a lock line a committed ancestor held,
-a wildcard value or combination no recording showed, a dropped `mod` line, a
-renamed or ignored test, a nextest filter on another package, a patch hunk the
-tree does not hold, a fix that no longer reverses, a removed or re-recorded lock
-line):
+a rolled-back or reason-less newer version, a shallow checkout, a combination
+that matches neither recording, a new or changed waiver row, a renamed or
+ignored test, dirty tests, default and CI nextest filters, a fix that no longer
+reverses, a removed or re-recorded lock line):
 `python3 -m unittest tools.harness.test_quirk_oracle tools.harness.test_quirk_compare`
 and `tools.harness.test_regressions` (the guard inside `ledger promote`).
 
@@ -153,9 +155,11 @@ and `tools.harness.test_regressions` (the guard inside `ledger promote`).
 Fix the implementation, never the recording or a tolerance. A difference that is
 intended, or known and not fixed yet, is listed in
 [`known-diffs.json`](../tools/harness/quirk_parity/known-diffs.json) per case:
-the reason (with repro or ledger row) and the exact mismatch ids it covers. Those
-mismatches report `known-divergence`; any other mismatch of the case fails, and
-so does a listed id that no longer occurs, so the entry is removed when the gap
+the reason (with repro or ledger row) and `rows`, the exact triples
+`[path, vanilla, krasnokamen]` copied from `difference_rows`. Match every row,
+including later rows grouped under the same mismatch id. The id is for
+diagnostics only. Any unlisted row fails, and so does a row that no longer
+occurs as pinned; remove it when the gap
 closes. Never make Krasnokamen stricter than vanilla to remove a difference.
 
 ## Scenario file (`tools/harness/quirk_parity/scenarios/*.json`)

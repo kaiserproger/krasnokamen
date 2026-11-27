@@ -424,21 +424,31 @@ def _python_assertion(text):
 
 
 def _test_listing(ctx, tree, packages):
-    """{"<binary-id>::<test>": not run} for every test nextest compiles for `packages` (None: the whole
-    workspace) in `tree` (D128 guard).
-
-    A test is "not run" when nextest lists it as ignored or its default filter leaves it out."""
+    """Runnable test identities per nextest profile on the tree promotion measures."""
     package_args = ['--workspace'] if packages is None else [arg for name in packages for arg in ('-p', name)]
-    argv, env = regressions.tree_build_command(tree, ['cargo', 'nextest', 'list', *package_args, '--message-format', 'json'])
-    ok, text = _exec(ctx, argv, 'guard-list', tree, env)
-    try:
-        listing = regressions._nextest_listing(text)
-    except ValueError:
-        raise oracle_guard.GuardRefused(f"cannot list the tests of {'the workspace' if packages is None else ', '.join(packages)} "
-                                        f"in {tree} ({'build error?' if not ok else 'no listing'}); see {ctx.artifact_dir}") from None
-    return {f"{suite['binary-id']}::{name}": bool(case.get('ignored', False))
-            or case.get('filter-match', {}).get('status') != 'matches'
-            for suite in listing['rust-suites'].values() for name, case in suite.get('testcases', {}).items()}
+    config = tree / '.config/nextest.toml'
+    profiles = ['default']
+    # A workspace without a CI profile has no CI test identities. Removing the profile
+    # therefore loses the baseline's CI identities, instead of silently falling back.
+    if config.is_file() and 'ci' in tomllib.loads(config.read_text()).get('profile', {}):
+        profiles.append('ci')
+    tests = {}
+    for profile in profiles:
+        argv, env = regressions.tree_build_command(
+            tree, ['cargo', 'nextest', 'list', '--profile', profile, *package_args, '--all-targets',
+                   '--message-format', 'json'])
+        ok, text = _exec(ctx, argv, 'guard-list', tree, env)
+        try:
+            listing = regressions._nextest_listing(text)
+        except ValueError:
+            target = 'the workspace' if packages is None else ', '.join(packages)
+            raise oracle_guard.GuardRefused(f"cannot list the {profile} tests of {target} in {tree} "
+                                            f"({'build error?' if not ok else 'no listing'}); see {ctx.artifact_dir}") from None
+        prefix = '' if profile == 'default' else f'{profile}/'
+        tests.update({f"{prefix}{suite['binary-id']}::{name}": bool(case.get('ignored', False))
+                      or case.get('filter-match', {}).get('status') != 'matches'
+                      for suite in listing['rust-suites'].values() for name, case in suite.get('testcases', {}).items()})
+    return tests
 
 
 def _run_cargo(ctx, tests, tree):
@@ -1007,13 +1017,17 @@ def _skipped_doc(path):
 
 
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
+_RUST_TEST_ITEM = re.compile(
+    r'^[ \t]*(?:#\[[^\n]*\][ \t]*\n[ \t]*)*'
+    r'#\[\s*(?:cfg\s*\(\s*test\s*\)|test)\s*\]\s*'
+    r'(?:#\[[^\n]*\][ \t]*\n[ \t]*)*[^;{]*[;{]', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 _RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')
 _RUST_CHAR = re.compile(r"(?:b)?'(?:\\.|[^'\\\n])'")
 
 
-def _rust_test_ranges(source):
-    """Line ranges of inline cfg(test) modules, ignoring braces in Rust literals and comments."""
+def _rust_test_ranges(source, *, all_items=False):
+    """Line ranges of cfg(test) modules (or all test items), masking Rust literals and comments."""
     masked = list(source)
     pos = 0
     while pos < len(source):
@@ -1060,8 +1074,8 @@ def _rust_test_ranges(source):
                 masked[index] = ' '
     code = ''.join(masked)
     ranges = []
-    for match in _CFG_TEST_MOD.finditer(code):
-        depth = 1
+    for match in (_RUST_TEST_ITEM if all_items else _CFG_TEST_MOD).finditer(code):
+        depth = int(code[match.end() - 1] == '{')
         pos = match.end()
         while pos < len(code) and depth:
             if code[pos] == '{':
@@ -1752,6 +1766,30 @@ def _dirty_parts(root):
     _, diff = _git(root, 'diff', 'HEAD', '--binary', '--', '.', ':!docs/bugs', ':!.analysis')
     _, others = _git(root, 'ls-files', '--others', '--exclude-standard', '--', '.', ':!docs/bugs', ':!.analysis')
     return diff, sorted(others.splitlines())
+
+
+def _dirty_test_paths(tree):
+    """Dirty test files and changes to inline test items, including deletions."""
+    _, names = _git(tree, 'diff', 'HEAD', '--name-only', '--no-renames', '-z')
+    _, untracked = _git(tree, 'ls-files', '--others', '--exclude-standard', '-z')
+
+    def test_items(text):
+        lines = text.splitlines(keepends=True)
+        return [lines[start - 1:end] for start, end in _rust_test_ranges(text, all_items=True)]
+
+    dirty = []
+    for name in sorted(set(names.split('\0') + untracked.split('\0')) - {''}):
+        if name.startswith(('docs/bugs/', '.analysis/')):
+            continue
+        if _TEST_PATH.search(name) or name == '.config/nextest.toml':
+            dirty.append(name)
+        elif name.endswith('.rs'):
+            _, before = _git(tree, 'show', f'HEAD:{name}', check=False)
+            path = tree / name
+            after = path.read_text(errors='surrogateescape') if path.is_file() else ''
+            if test_items(before) != test_items(after):
+                dirty.append(name)
+    return dirty
 
 
 def tree_fingerprint(root):
@@ -2969,6 +3007,8 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         # untracked files (verified against the fingerprint), never on fix_commit.
         candidate = stack.enter_context(_worktree(root, head, 'candidate', control_set))
         _materialize(root, candidate, tree_now)
+        if tree_now['dirty'] and (dirty_tests := _dirty_test_paths(candidate)):
+            raise Refused(f"{ident}: commit or remove uncommitted test changes before promotion: {', '.join(dirty_tests)}")
         if test_only:
             missing = _uncovered_test_files(candidate, reversed_files, refs)
             if missing:
