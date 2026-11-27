@@ -12,11 +12,10 @@
 //! per-connection queues (never skipped; overflow disconnects).
 
 use mc_physics::mth;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use mc_data::statistics::StatType;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use std::sync::Arc;
 
 use crate::boundary::{
     BlockPos, ChangeSet, ChunkPos, ConnectionId, DigAction, EntityAppearance, EntityEvent, Hand,
