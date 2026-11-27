@@ -440,7 +440,7 @@ fn can_spawn(
     };
     let light_ok = if let Some([block_range, sky_range]) = light_rules {
         let sky = if state.dimension.has_weather() {
-            sky.saturating_sub(crate::light::sky_darken(
+            sky.saturating_sub(mc_light::sky_darken(
                 state.day_time,
                 state.rain_level,
                 state.thunder_level,

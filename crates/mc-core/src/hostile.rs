@@ -109,7 +109,7 @@ pub(crate) fn retains_target(blueprint: &MobBlueprint) -> bool {
 /// leave creative, disconnected or dimension-transferred players attackable.
 pub(crate) fn refresh_targets(state: &mut TickState) {
     let sky_darken = if state.dimension.has_weather() {
-        crate::light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
+        mc_light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
     } else {
         15
     };

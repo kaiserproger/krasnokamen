@@ -1798,6 +1798,7 @@ dependencies = [
  "im",
  "mc-data",
  "mc-domain",
+ "mc-light",
  "mc-loader",
  "mc-melee-range",
  "mc-nbt",
@@ -1891,6 +1892,15 @@ dependencies = [
  "workspace-features",
  "zip",
  "zstd",
+]
+
+[[package]]
+name = "mc-light"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-data",
+ "mc-world",
+ "rustc-hash 2.1.3",
 ]
 
 [[package]]
