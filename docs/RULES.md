@@ -66,6 +66,8 @@ Design choices are in [DECISIONS.md](../DECISIONS.md), mistakes already made in
 ## Agents and the owner host
 
 - Stay in your write set, respect shared limits (disk, memory, audio, desktop, live server) and end with one honest result that carries its receipts.
+- Briefs and results follow the [templates](development/agent-fleet.md#briefs): implementers return `status: done|partial|blocked`, reviewers and breakers `verdict: pass|changes|blocked`; at most three messages to Main per task, only blockers or decisions; `partial` and gaps name only blockers outside the agent's reach. (2026-11-07)
+- Reviewers and breakers are read-only and neither edit nor delegate; workers spawn subagents only when the brief allows; exploit, fuzz, dupe or attack work goes to a worker role without a provider filter.
 - Executors run on DeepSeek V4.1 Flash; Opus only with a stated reason; Main is Opus with a Sol advisor. Verify the model a session actually ran, never its alias. (D13, D15, D47, D126)
 - No fixed fleet cap for now; size the fleet so agents work rather than wait on the machine, and keep Main under 32 GiB. (D24, D26, D130)
 - No build tokens and no per-agent heavy-command cap; mem-run memory scopes, the OOM watchdog and scene-slot isolation stay, and a heavy run refuses only below 20 GiB free. (D127)
