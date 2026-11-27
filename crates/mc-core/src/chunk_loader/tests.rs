@@ -1,8 +1,13 @@
-use super::*;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use mc_chunk_loader::ChunkSource;
+use mc_nbt::Tag;
+use mc_world::native::NativeStore;
+use mc_world::{Chunk, ChunkGenerator, ChunkPos};
+
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
-use mc_nbt::Tag;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct CountingEmpty {
     air: u32,
@@ -29,22 +34,18 @@ fn source(
     registry: &CoreRegistry,
     generated: &Arc<AtomicUsize>,
 ) -> Arc<ChunkSource> {
-    Arc::new(ChunkSource {
-        native: Some(store),
+    crate::world::worker_source(
+        42,
+        Some(store),
         dimension,
-        generator: Arc::new(CountingEmpty {
+        Arc::new(CountingEmpty {
             air: registry.states.air,
             geometry,
             generated: Arc::clone(generated),
         }),
-        registry: Arc::clone(&registry.blocks),
-        items: Arc::clone(&registry.items),
-        chest_loot: Arc::clone(&registry.chest_loot),
-        light: Arc::clone(&registry.light),
-        population: (dimension == 0).then(|| Population::new(42, registry)),
+        registry,
         geometry,
-        structure_catalog: registry.structure_catalog.clone(),
-    })
+    )
 }
 
 #[test]

@@ -17,7 +17,7 @@ use mc_physics::{BlockMaterial, BlockMaterialIds};
 use mc_world::{BlockStateId, Chunk, ChunkPos};
 
 use crate::CoreError;
-use crate::chunk_loader::ChunkSource;
+use mc_chunk_loader::ChunkSource;
 
 /// Samples per tile edge.
 pub const TILE_EDGE: usize = 16;
@@ -80,7 +80,7 @@ impl std::fmt::Debug for LodSource {
 impl LodSource {
     pub(crate) fn new(source: Arc<ChunkSource>, materials: &BlockMaterialIds) -> Self {
         let mut surface = Vec::new();
-        for state in source.registry.states() {
+        for state in source.blocks.states() {
             let index = state.id.0 as usize;
             if surface.len() <= index {
                 surface.resize(index + 1, false);
@@ -304,18 +304,14 @@ mod tests {
         store
             .fill_generated(0, &[chunk], &registry.blocks, &registry.items)
             .expect("stored chunk");
-        let chunks = Arc::new(ChunkSource {
-            native: Some(store),
-            dimension: 0,
-            generator: generator.clone(),
-            registry: Arc::clone(&registry.blocks),
-            items: Arc::clone(&registry.items),
-            chest_loot: Arc::clone(&registry.chest_loot),
-            light: Arc::clone(&registry.light),
-            population: Some(crate::chunk_loader::Population::new(42, &registry)),
-            geometry: crate::dimensions::Dimension::Overworld.geometry(),
-            structure_catalog: registry.structure_catalog.clone(),
-        });
+        let chunks = crate::world::worker_source(
+            42,
+            Some(store),
+            0,
+            generator.clone(),
+            &registry,
+            crate::dimensions::Dimension::Overworld.geometry(),
+        );
         let source = LodSource::new(Arc::clone(&chunks), &registry.materials);
         assert!(source.stored_tile(10, 10, 4).unwrap().is_none());
         assert_eq!(source.reads.load(std::sync::atomic::Ordering::Relaxed), 1);

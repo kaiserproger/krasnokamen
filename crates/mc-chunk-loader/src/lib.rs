@@ -16,9 +16,10 @@ use std::thread::JoinHandle;
 use mc_world::native::{NativeError, NativeStore};
 use mc_world::{BlockRegistry, Chunk, ChunkGenerator, ChunkPos};
 
-#[path = "chunk_loader_population.rs"]
 mod population;
-pub(crate) use population::Population;
+mod structure;
+pub use population::Population;
+pub use structure::StructureCatalog;
 
 /// A stored chunk that cannot be loaded. It must never be replaced by worldgen.
 #[derive(Debug, Clone)]
@@ -42,45 +43,22 @@ impl std::error::Error for ChunkLoadError {}
 
 /// Immutable inputs a worker needs: native coverage wins over worldgen.
 pub struct ChunkSource {
-    pub(crate) native: Option<Arc<NativeStore>>,
-    pub(crate) dimension: u32,
-    pub(crate) generator: Arc<dyn ChunkGenerator>,
-    pub(crate) registry: Arc<BlockRegistry>,
-    pub(crate) items: Arc<mc_data::items::ItemRegistry>,
-    pub(crate) chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
-    pub(crate) light: Arc<mc_data::block_light::BlockLightTable>,
-    pub(crate) geometry: mc_world::ChunkGeometry,
-    pub(crate) population: Option<Population>,
-    pub(crate) structure_catalog: Option<Arc<crate::datapacks::worldgen::StructureCatalog>>,
+    pub native: Option<Arc<NativeStore>>,
+    pub dimension: u32,
+    pub generator: Arc<dyn ChunkGenerator>,
+    pub blocks: Arc<BlockRegistry>,
+    pub items: Arc<mc_data::items::ItemRegistry>,
+    pub chest_loot: Arc<mc_data::loot::chest_26_1_2::ChestLootCatalog>,
+    pub light: Arc<mc_data::block_light::BlockLightTable>,
+    pub geometry: mc_world::ChunkGeometry,
+    pub population: Option<Population>,
+    pub structure_catalog: Option<Arc<StructureCatalog>>,
 }
 
 impl ChunkSource {
-    /// Immutable native-store inputs shared by live and offline chunk workers.
-    pub fn new_native(
-        seed: i64,
-        store: Arc<NativeStore>,
-        dimension: u32,
-        generator: Arc<dyn ChunkGenerator>,
-        registry: &crate::registry::CoreRegistry,
-        geometry: mc_world::ChunkGeometry,
-    ) -> Self {
-        Self {
-            native: Some(store),
-            dimension,
-            generator,
-            registry: Arc::clone(&registry.blocks),
-            items: Arc::clone(&registry.items),
-            chest_loot: Arc::clone(&registry.chest_loot),
-            light: Arc::clone(&registry.light),
-            population: (dimension == 0).then(|| Population::new(seed, registry)),
-            geometry,
-            structure_catalog: registry.structure_catalog.clone(),
-        }
-    }
-
     /// Generate only when the native store reports no coverage. Failed reads
     /// remain failed, including imported all-air and malformed stored chunks.
-    pub(crate) fn load_or_generate(&self, pos: ChunkPos) -> Result<Produced, ChunkLoadError> {
+    pub fn load_or_generate(&self, pos: ChunkPos) -> Result<Produced, ChunkLoadError> {
         let (mut chunk, generated) = match self.load_native(pos)? {
             Some(chunk) => (chunk, false),
             None => (self.generate(pos), true),
@@ -103,7 +81,7 @@ impl ChunkSource {
         chunk
     }
 
-    pub(crate) fn load_native(&self, pos: ChunkPos) -> Result<Option<Chunk>, ChunkLoadError> {
+    pub fn load_native(&self, pos: ChunkPos) -> Result<Option<Chunk>, ChunkLoadError> {
         let Some(store) = &self.native else {
             return Ok(None);
         };
@@ -111,7 +89,7 @@ impl ChunkSource {
             .read_chunk(
                 self.dimension,
                 pos,
-                &self.registry,
+                &self.blocks,
                 &self.items,
                 &self.chest_loot,
             )
@@ -128,7 +106,7 @@ impl ChunkSource {
 
     /// Resolve the immutable baseline, never the composed gameplay image.
     /// Checkpoints persist new bases, so later captures do not regenerate them.
-    pub(crate) fn resolve_base(&self, pos: ChunkPos) -> Result<Chunk, ChunkLoadError> {
+    pub fn resolve_base(&self, pos: ChunkPos) -> Result<Chunk, ChunkLoadError> {
         let Some(store) = &self.native else {
             return Ok(self.generate(pos));
         };
@@ -136,7 +114,7 @@ impl ChunkSource {
             .resolve_base(
                 self.dimension,
                 pos,
-                &self.registry,
+                &self.blocks,
                 &self.items,
                 &self.chest_loot,
                 || Ok(Some(self.generate(pos))),
@@ -160,7 +138,7 @@ const JOBS_PER_WORKER: usize = 1;
 /// Bound all produced-but-unadmitted chunks plus queued/running jobs. Admission
 /// passes its ready count back to dispatch, so draining the channel cannot
 /// accidentally remove backpressure.
-pub(crate) const READY_LOADS_MAX: usize = 32;
+pub const READY_LOADS_MAX: usize = 32;
 
 /// One produced chunk and whether it was generated (not read from disk).
 pub type Produced = (Chunk, bool);
@@ -239,7 +217,7 @@ impl ChunkLoader {
     }
 
     /// Finished loads since the last call; never blocks.
-    pub(crate) fn drain(&mut self) -> Vec<Ready> {
+    pub fn drain(&mut self) -> Vec<Ready> {
         let mut out = Vec::new();
         while let Ok(loaded) = self.done.try_recv() {
             self.pending -= 1;
@@ -282,7 +260,3 @@ impl Drop for ChunkLoader {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "chunk_loader_tests.rs"]
-mod tests;

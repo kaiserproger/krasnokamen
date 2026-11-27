@@ -83,7 +83,7 @@ pub struct CoreRegistry {
     pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
     /// Selected, startup-validated datapack structure IDs; no tick filesystem scan.
     pub(crate) datapack_structures: Arc<[Identifier]>,
-    pub(crate) structure_catalog: Option<Arc<crate::datapacks::worldgen::StructureCatalog>>,
+    pub(crate) structure_catalog: Option<Arc<mc_chunk_loader::StructureCatalog>>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
     /// Reloadable container loot, including selected datapack namespaces.

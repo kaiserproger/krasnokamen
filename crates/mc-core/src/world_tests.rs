@@ -253,7 +253,7 @@ fn inhabited_time_checkpoint_preserves_imported_value_and_fences_stale_ack() {
         .native
         .as_ref()
         .unwrap()
-        .import_chunk(0, chunk, &world.source.registry, &world.source.items)
+        .import_chunk(0, chunk, &world.source.blocks, &world.source.items)
         .unwrap();
     let held = Arc::clone(&world.chunks[&pos]);
     let wire = world.chunk_revision(pos.x, pos.z);
@@ -915,7 +915,7 @@ fn deferred_checkpoint_ack_keeps_coverage_for_old_worker_and_recent_images() {
             .native
             .as_ref()
             .unwrap()
-            .import_chunk(0, &stored, &world.source.registry, &world.source.items)
+            .import_chunk(0, &stored, &world.source.blocks, &world.source.items)
             .unwrap();
         let want = wants(&[pos]);
         world.ensure_blocking(&want);
@@ -1146,7 +1146,7 @@ fn tick_admission_spends_actual_slack_and_stops_after_an_overrun() {
         assert_eq!(world.admission_elapsed(), Duration::from_millis(last_ms));
         world.begin_admission_tick(start + Duration::from_millis(40), &reservations);
         assert_eq!(world.admission_elapsed(), Duration::ZERO);
-        assert!(world.ready.len() + world.loader.pending() <= crate::chunk_loader::READY_LOADS_MAX);
+        assert!(world.ready.len() + world.loader.pending() <= mc_chunk_loader::READY_LOADS_MAX);
         let mut workspace = mc_world::light::LightWorkspace::new();
         for pos in loaded {
             let neighbours = std::array::from_fn(|z| {
@@ -1176,7 +1176,7 @@ fn tick_admission_slack_keeps_the_whole_chunk_queue_bound() {
     let mut world = test_world(None);
     let reservations = Arc::new(AtomicU64::new(0));
     let mut want = HashMap::default();
-    for x in 0..=crate::chunk_loader::READY_LOADS_MAX as i32 {
+    for x in 0..=mc_chunk_loader::READY_LOADS_MAX as i32 {
         let pos = mc_world::ChunkPos { x, z: 0 };
         let (chunk, _) = world.source.load_or_generate(pos).unwrap();
         world.recent.insert(pos, Arc::new(chunk));
@@ -1186,7 +1186,7 @@ fn tick_admission_slack_keeps_the_whole_chunk_queue_bound() {
     world.begin_admission_tick(start + std::time::Duration::from_secs(1), &reservations);
     assert_eq!(
         world.ensure_with_clock(&want, || start).len(),
-        crate::chunk_loader::READY_LOADS_MAX,
+        mc_chunk_loader::READY_LOADS_MAX,
         "spare time must not turn one tick into an unbounded admission loop",
     );
     assert_eq!(world.recent.chunks.len(), 1);
@@ -1217,7 +1217,7 @@ fn tick_admission_drops_unwanted_superseded_and_duplicate_ready_entries() {
 fn admission_backpressure_bounds_ready_and_worker_loads_together() {
     let mut world = test_world(None);
     let mut want = HashMap::default();
-    for x in 0..crate::chunk_loader::READY_LOADS_MAX as i32 {
+    for x in 0..mc_chunk_loader::READY_LOADS_MAX as i32 {
         let pos = mc_world::ChunkPos { x, z: 0 };
         let result = world.source.load_or_generate(pos).unwrap();
         world.in_flight.insert(pos, x as u64 + 1);
@@ -1233,7 +1233,7 @@ fn admission_backpressure_bounds_ready_and_worker_loads_together() {
         1,
         "the initial cost estimate admits one chunk"
     );
-    assert!(world.ready.len() + world.loader.pending() <= crate::chunk_loader::READY_LOADS_MAX);
+    assert!(world.ready.len() + world.loader.pending() <= mc_chunk_loader::READY_LOADS_MAX);
     assert!(world.chunk(extra).is_none());
     assert!(
         world.in_flight.contains_key(&extra),
@@ -1300,10 +1300,7 @@ fn admission_budget_uses_measured_per_chunk_ewma_with_progress_and_queue_bounds(
         "empty ticks do not train cost"
     );
     world.admission_us_per_chunk = 1;
-    assert_eq!(
-        world.admission_limit(),
-        crate::chunk_loader::READY_LOADS_MAX
-    );
+    assert_eq!(world.admission_limit(), mc_chunk_loader::READY_LOADS_MAX);
     world.record_admission_cost(0, 1);
     assert_eq!(
         world.admission_us_per_chunk, 1,

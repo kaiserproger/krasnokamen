@@ -53,7 +53,7 @@ impl ChunkWorld {
             // slack one whole light fence at a time. An underestimated chunk
             // may overrun, but it cannot authorize another extra chunk.
             if admitted == 0
-                || loaded.len() >= crate::chunk_loader::READY_LOADS_MAX
+                || loaded.len() >= mc_chunk_loader::READY_LOADS_MAX
                 || !self.admission_deadline.is_some_and(|deadline| {
                     deadline
                         .saturating_duration_since(batch_end)
@@ -120,7 +120,7 @@ impl ChunkWorld {
 
     pub(super) fn admission_limit(&self) -> usize {
         (ADMISSION_BUDGET_US / self.admission_us_per_chunk)
-            .clamp(1, crate::chunk_loader::READY_LOADS_MAX as u128) as usize
+            .clamp(1, mc_chunk_loader::READY_LOADS_MAX as u128) as usize
     }
 
     pub(super) fn record_admission_cost(&mut self, elapsed_us: u128, loaded: usize) {
@@ -256,7 +256,7 @@ impl ChunkWorld {
         &mut self,
         pos: ChunkPos,
         ticket: u64,
-        result: Result<crate::chunk_loader::Produced, ChunkLoadError>,
+        result: Result<mc_chunk_loader::Produced, ChunkLoadError>,
         want: &HashMap<ChunkPos, i32>,
     ) -> bool {
         if self.in_flight.get(&pos) != Some(&ticket) {

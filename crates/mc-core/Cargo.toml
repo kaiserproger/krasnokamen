@@ -25,6 +25,7 @@ mc-plugin-host = { path = "../mc-plugin-host" }
 mc-melee-range = { path = "../mc-melee-range" }
 mc-placement = { path = "../mc-placement" }
 mc-light = { path = "../mc-light" }
+mc-chunk-loader = { path = "../mc-chunk-loader" }
 uuid = { workspace = true, features = ["v4"] }
 tokio.workspace = true
 serde = { workspace = true, features = ["rc"] }

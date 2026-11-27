@@ -45,7 +45,7 @@ fn checkpoint_encodes_only_edited_sections_and_reopens_identically() {
     world.ensure_blocking(&wants(&positions));
     let glass = world
         .source
-        .registry
+        .blocks
         .block(&mc_data::Identifier::parse("minecraft:glass").unwrap())
         .unwrap()
         .default

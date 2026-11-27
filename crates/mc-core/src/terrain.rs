@@ -5,7 +5,7 @@
 //! layer can apply the same visible-material policy as vanilla packets without
 //! a second store lookup. Live committed resident chunks outrank the durable
 //! native store; missing chunks resolve through the normal load-or-generate
-//! path with light baked on workers ([`crate::chunk_loader::ChunkSource`]).
+//! path with light baked on workers ([`mc_chunk_loader::ChunkSource`]).
 //! Corrupt stored coverage fails closed: it is never replaced with generated
 //! terrain. No simulation residency, no native writes, no networking/DTO types.
 //!
@@ -98,7 +98,7 @@ impl DirtySupplement {
 /// publication fence. Shares the native store read-only access with the tick
 /// workers; the returned chunks are owned `Arc`s, never borrowed tick state.
 pub(crate) struct TerrainSource {
-    source: std::sync::Weak<crate::chunk_loader::ChunkSource>,
+    source: std::sync::Weak<mc_chunk_loader::ChunkSource>,
     /// Coherent published bundle: the committed resident snapshot and the
     /// committed-but-unflushed supplement published under the fence value
     /// mirrored in `publication`. Both swap atomically under one write
@@ -192,7 +192,7 @@ impl std::fmt::Debug for TerrainSource {
 }
 
 impl TerrainSource {
-    pub(crate) fn new(source: Arc<crate::chunk_loader::ChunkSource>, epoch: String) -> Self {
+    pub(crate) fn new(source: Arc<mc_chunk_loader::ChunkSource>, epoch: String) -> Self {
         Self {
             source: Arc::downgrade(&source),
             bundle: parking_lot::RwLock::new(PublishedTerrain::default()),

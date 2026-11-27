@@ -431,7 +431,7 @@ impl ChunkWorld {
                     pos,
                     records,
                     block_entities,
-                    &self.source.registry,
+                    &self.source.blocks,
                     #[cfg(all(test, debug_assertions))]
                     &mut capture.container_work,
                 );

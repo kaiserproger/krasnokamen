@@ -1,5 +1,6 @@
 //! Selected binary resources and their bounded, private generator input image.
 use super::{BTreeMap, BTreeSet, Filter, PackSet, Path, PathBuf, Selection};
+use mc_chunk_loader::StructureCatalog;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
@@ -144,33 +145,6 @@ impl Adoption {
                         "missing immutable baseline in {dimension:?} at {x},{z}; original worldgen inputs are unknown or changed: {sources:?}; restore the baseline or original inputs"
                     )));
                 }
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Saved starts remain opaque durable data when their pack is absent.
-#[derive(Debug)]
-pub(crate) struct StructureCatalog {
-    active: BTreeSet<mc_data::Identifier>,
-    owners: BTreeMap<String, String>,
-    warned: parking_lot::Mutex<BTreeSet<mc_data::Identifier>>,
-}
-
-impl StructureCatalog {
-    pub(crate) fn observe(&self, chunk: &mc_world::Chunk) -> Result<(), String> {
-        for site in mc_world::structure_starts::read(&chunk.extras, chunk.pos, false)? {
-            if !self.active.contains(&site.structure)
-                && self.warned.lock().insert(site.structure.clone())
-            {
-                let pack = self
-                    .owners
-                    .get(site.structure.as_str())
-                    .map(String::as_str)
-                    .unwrap_or("unknown source pack; restore the structure's namespace");
-                tracing::warn!(structure = %site.structure, likely_missing_pack = pack,
-                    "saved structure start is inactive; retained unchanged until its pack returns");
             }
         }
         Ok(())
@@ -758,11 +732,7 @@ impl Inputs {
         Ok(Adoption {
             changed,
             unproven_baseline_sources,
-            catalog: Arc::new(StructureCatalog {
-                active: self.catalog.clone(),
-                owners,
-                warned: parking_lot::Mutex::new(BTreeSet::new()),
-            }),
+            catalog: Arc::new(StructureCatalog::new(self.catalog.clone(), owners)),
         })
     }
 }
