@@ -159,7 +159,9 @@ world, `tick freeze`, `forceload` of every box, exactly N ticks per phase, then
 (`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items). From a
 frozen world `tick sprint N` runs N + 1 ticks (the sprint check reads the frozen
 tick's stale state and does not count the first unfrozen tick), so the driver
-sends `tick sprint N-1`, or `tick step 1` for one tick, and fails unless
+sends `tick sprint N-1`, or `tick step 1` for one tick (an auto command block at
+the bottom of the first box's column says when that tick ran, since console
+commands run between ticks and the step logs nothing), and fails unless
 `time query gametime` advanced by exactly N. A restart phase stops vanilla with
 `stop` (every loaded chunk saved) and reopens the same world; vanilla does not
 persist `tick freeze`, so restart scenarios must have settled before the restart.

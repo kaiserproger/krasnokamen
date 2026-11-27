@@ -123,6 +123,7 @@ def _prepare(oracle: VanillaOracle, boxes: list, *, restarted: bool) -> None:
             raise VanillaError("forceloaded box never became resident")
     if restarted:
         oracle.run_checked(["tick freeze"])
+    oracle.step_marker = (boxes[0][0], boxes[0][2])
 
 
 def run_vanilla(scenario: dict, workdir: Path, jar: Path, java: str) -> dict:

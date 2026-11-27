@@ -69,6 +69,9 @@ def java_version(java: str) -> str:
     return (out.stderr or out.stdout).splitlines()[0].strip()
 
 
+# Overworld bottom; scenario boxes stay far above it.
+MIN_Y = -64
+
 _ERROR_MARKERS = (
     "Unknown or incomplete command",
     "Could not ",
@@ -100,6 +103,8 @@ class VanillaOracle:
         self.log_path = workdir / "vanilla.log"
         self._sync = 0
         self.game_ticks = 0
+        # (x, z) of a resident column whose bottom block carries the one-tick step marker.
+        self.step_marker: tuple[int, int] | None = None
 
     # -- lifecycle ---------------------------------------------------------
     def start(self, fresh: bool = True) -> None:
@@ -251,15 +256,27 @@ class VanillaOracle:
 
         From a frozen world `tick sprint N` runs N + 1 ticks: the sprint check reads the frozen
         tick's stale `runGameElements`, so the first unfrozen tick is not counted
-        (ServerTickRateManager.checkShouldSprintThisTick, 26.3). One tick is `tick step 1`,
-        whose tick runs before the next console command. The game time proves the count.
+        (ServerTickRateManager.checkShouldSprintThisTick, 26.3). One tick is `tick step 1`, which
+        logs nothing once its tick ran, and console commands run between ticks, so an auto impulse
+        command block at the bottom of `step_marker` says when it did: its scheduled tick runs
+        only in that stepped tick. The game time proves the count.
         """
         if ticks <= 0:
             return
         before = self.game_time()
         if ticks == 1:
+            if self.step_marker is None:
+                raise VanillaError("a one-tick step needs `step_marker`, a resident column")
+            x, z = self.step_marker
+            self._sync += 1
+            marker = f"QP_STEP_{self._sync}"
+            problems = self.run_checked(
+                [f'setblock {x} {MIN_Y} {z} minecraft:command_block{{auto:1b,Command:"say {marker}"}}'])
             self.send("tick step 1")
-            self.expect("Stepping 1 tick")
+            self.expect(f"[@] {marker}")
+            problems += self.run_checked([f"setblock {x} {MIN_Y} {z} minecraft:air"])
+            if problems:
+                raise VanillaError(f"one-tick step marker refused: {problems}; see {self.log_path}")
         else:
             self.send(f"tick sprint {ticks - 1}")
             self.expect("Sprint completed")
