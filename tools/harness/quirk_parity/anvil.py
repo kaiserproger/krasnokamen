@@ -6,11 +6,47 @@ dimension under `dimensions/minecraft/<dimension>/`).
 """
 from __future__ import annotations
 
+import json
 import struct
 import zlib
 from pathlib import Path
 
 _END, _BYTE, _SHORT, _INT, _LONG, _FLOAT, _DOUBLE, _BYTES, _STRING, _LIST, _COMPOUND, _INTS, _LONGS = range(13)
+
+# Local `content import` cache (ignored, never in Git): `version.json` plus `reports/blocks.json`
+# per Minecraft release, the current one at the root and older ones in subdirectories.
+VANILLA_DATA = Path(__file__).resolve().parents[3] / "data" / "vanilla"
+_DEFAULTS: dict[int, dict[str, str]] = {}
+
+
+def default_states(data_version: int) -> dict[str, str]:
+    """Block id -> its full default state string, from the local blocks report of that DataVersion.
+
+    26.3 chunks store a block in its default state as the bare id with no properties, while
+    Krasnokamen and older chunks name every property; both sides compare as full states.
+    """
+    if data_version not in _DEFAULTS:
+        report = None
+        for version_file in [VANILLA_DATA / "version.json", *sorted(VANILLA_DATA.glob("*/version.json"))]:
+            try:
+                world_version = json.loads(version_file.read_text())["world_version"]
+            except (OSError, ValueError, KeyError):
+                continue
+            if world_version == data_version and (version_file.parent / "reports" / "blocks.json").is_file():
+                report = version_file.parent / "reports" / "blocks.json"
+                break
+        if report is None:
+            raise ValueError(f"no local blocks report for DataVersion {data_version} under {VANILLA_DATA} "
+                             "(run `krasnokamen content import` for that release)")
+        defaults = {}
+        for name, block in json.loads(report.read_text()).items():
+            for state in block["states"]:
+                if state.get("default"):
+                    props = state.get("properties") or {}
+                    defaults[name] = name + ("[" + ",".join(f"{k}={props[k]}" for k in sorted(props)) + "]"
+                                             if props else "")
+        _DEFAULTS[data_version] = defaults
+    return _DEFAULTS[data_version]
 
 
 class _Reader:
@@ -94,10 +130,14 @@ def _palette_codec(version: int) -> tuple[str, str]:
     raise ValueError(f"unsupported chunk DataVersion {version!r}")
 
 
-def _block_string(entry: dict | str, codec: tuple[str, str]) -> str:
+def _block_string(entry: dict | str, codec: tuple[str, str], data_version: int | None = None) -> str:
     name_key, props_key = codec
+    # A list mixing bare identifiers and compounds (26.3 palettes) stores every
+    # non-compound element wrapped as a compound with one empty-named entry.
+    if isinstance(entry, dict) and len(entry) == 1 and "" in entry:
+        entry = entry[""]
     if isinstance(entry, str) and name_key == "id":
-        return entry
+        entry = {"id": entry}
     if not isinstance(entry, dict):
         raise ValueError(f"palette entry does not match {name_key}/{props_key} codec: {entry!r}")
     other_name, other_props = ("id", "properties") if name_key == "Name" else ("Name", "Properties")
@@ -105,13 +145,19 @@ def _block_string(entry: dict | str, codec: tuple[str, str]) -> str:
         raise ValueError(f"palette entry does not match {name_key}/{props_key} codec: {entry!r}")
     props = entry.get(props_key)
     if not props:
-        return entry[name_key]
+        if name_key != "id":
+            return entry[name_key]
+        # The 26.3 codec omits the properties of a default state.
+        full = default_states(data_version).get(entry[name_key])
+        if full is None:
+            raise ValueError(f"palette block {entry[name_key]!r} is not in the DataVersion {data_version} blocks report")
+        return full
     return entry[name_key] + "[" + ",".join(f"{k}={props[k]}" for k in sorted(props)) + "]"
 
 
-def _section_blocks(section: dict, codec: tuple[str, str]):
+def _section_blocks(section: dict, codec: tuple[str, str], data_version: int | None = None):
     states = section.get("block_states") or {}
-    palette = [_block_string(entry, codec) for entry in states.get("palette", [])]
+    palette = [_block_string(entry, codec, data_version) for entry in states.get("palette", [])]
     if not palette:
         return
     if len(palette) == 1:
@@ -186,7 +232,7 @@ def read_world(dimension_dir: Path, boxes, *, palette_audit: dict | None = None)
             if not relevant:
                 continue
             try:
-                for index, name in _section_blocks(section, codec):
+                for index, name in _section_blocks(section, codec, version):
                     if name in ("minecraft:air", "minecraft:cave_air", "minecraft:void_air"):
                         continue
                     x = chunk_x * 16 + (index & 15)

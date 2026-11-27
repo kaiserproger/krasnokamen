@@ -3,8 +3,11 @@
 //! Replays the scenario JSON files named by `KRASNOKAMEN_QUIRK_SCENARIOS`
 //! (colon-separated paths) against the real native tick in-process, using the
 //! same console command strings the vanilla oracle receives, and writes the
-//! observed snapshots to `KRASNOKAMEN_QUIRK_RECEIPT`. The test is `#[ignore]`d:
-//! the harness profile owns when it runs and compares it with vanilla.
+//! observed snapshots to `KRASNOKAMEN_QUIRK_RECEIPT`. A scenario with restart
+//! phases runs on a native store under `KRASNOKAMEN_QUIRK_WORLDS` and is
+//! stopped and recovered from disk before each of them
+//! (`crate::core::quirk_parity_restart`). The test is `#[ignore]`d: the harness
+//! profile owns when it runs and compares it with the recorded vanilla corpus.
 
 use std::sync::Arc;
 
@@ -12,6 +15,8 @@ use serde_json::{Value, json};
 
 use crate::boundary::{ChangeSet, ChunkPos, PlayerChange};
 use crate::command_console::{CONNECTION, execute};
+use crate::config::{CoreConfig, CoreError};
+use crate::core::quirk_parity_restart::OracleWorld;
 use crate::entities::EntityKind;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
@@ -52,8 +57,13 @@ fn fixture(boxes: &[[i32; 6]], seed: i64) -> TickState {
         mc_world::OVERWORLD_GEOMETRY,
     );
     let mut state = TickState::new(registry, world, 2, 4096);
-    // One forced ticket per observed box covering all its chunks, like the
-    // vanilla driver's `forceload add` over the same rectangles.
+    load_boxes(&mut state, boxes);
+    state
+}
+
+/// One forced ticket per observed box covering all its chunks, like the
+/// vanilla driver's `forceload add` over the same rectangles.
+fn load_boxes(state: &mut TickState, boxes: &[[i32; 6]]) {
     for (index, box_) in boxes.iter().enumerate() {
         let (min_x, max_x) = (box_[0].div_euclid(16), box_[3].div_euclid(16));
         let (min_z, max_z) = (box_[2].div_euclid(16), box_[5].div_euclid(16));
@@ -69,7 +79,39 @@ fn fixture(boxes: &[[i32; 6]], seed: i64) -> TickState {
     state.refresh_active_chunks(state.tick);
     state.world.ensure_blocking(&state.desired_chunks());
     state.world.fold_overlay();
-    state
+}
+
+/// A scenario with restart phases runs on a native store in `world_dir`,
+/// created and reopened through the server's startup recovery.
+fn native_fixture(
+    world_dir: &std::path::Path,
+    boxes: &[[i32; 6]],
+    seed: i64,
+) -> Result<(OracleWorld, TickState), CoreError> {
+    let mut config = CoreConfig::new(world_dir.to_path_buf(), seed);
+    config.view_distance = 2;
+    config.simulation_distance = 2;
+    let (world, mut state) = OracleWorld::create(config)?;
+    load_boxes(&mut state, boxes);
+    Ok((world, state))
+}
+
+/// Damage applied between the stop and the reopen: the negative control of a
+/// restart (`KRASNOKAMEN_QUIRK_RESTART_FAULT`); recovery must refuse, not pass.
+fn apply_fault(fault: Option<&str>, world_dir: &std::path::Path) {
+    let store = world_dir.join("native/state.redb");
+    match fault {
+        None => {}
+        Some("delete-store") => std::fs::remove_file(&store).expect("delete native store"),
+        Some("garble-store") => {
+            let mut bytes = std::fs::read(&store).expect("read native store");
+            for byte in bytes.iter_mut().take(4096) {
+                *byte ^= 0x5a;
+            }
+            std::fs::write(&store, bytes).expect("garble native store");
+        }
+        Some(other) => panic!("unknown KRASNOKAMEN_QUIRK_RESTART_FAULT {other:?}"),
+    }
 }
 
 fn block_string(state: &TickState, id: u32) -> String {
@@ -99,21 +141,31 @@ fn entity_snapshot(state: &TickState, box_: [i32; 6]) -> Vec<Value> {
             continue;
         }
         let row = state.entities.row(slot);
-        let type_name = match body.kind {
-            EntityKind::Player { .. } => "minecraft:player".to_owned(),
+        // Vanilla saves `Health` only for living entities; the snapshot does the same.
+        let (type_name, living) = match body.kind {
+            EntityKind::Player { .. } => ("minecraft:player".to_owned(), true),
             EntityKind::Mob { type_id }
             | EntityKind::Item { type_id }
             | EntityKind::ExperienceOrb { type_id } => {
                 mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-                    .map_or_else(|| format!("unknown:{type_id}"), |c| c.name.to_owned())
+                    .map_or_else(
+                        || (format!("unknown:{type_id}"), false),
+                        |c| {
+                            let living = c.behavior.archetype
+                                == mc_data::entity_types::EntityArchetype::Living;
+                            (c.name.to_owned(), living)
+                        },
+                    )
             }
         };
         let mut entry = json!({
             "type": type_name,
             "pos": pos,
             "motion": state.entities.vel(slot),
-            "health": row.health,
         });
+        if living {
+            entry["health"] = json!(row.health);
+        }
         if let Some(item) = &row.item {
             let name = state
                 .registry
@@ -125,9 +177,6 @@ fn entity_snapshot(state: &TickState, box_: [i32; 6]) -> Vec<Value> {
         }
         if let Some(tnt) = &row.tnt {
             entry["fuse"] = json!(tnt.fuse);
-        }
-        if let Some(falling) = &row.falling {
-            let _ = falling;
         }
         entry["age"] = json!(row.age);
         out.push(entry);
@@ -226,7 +275,7 @@ fn commands(state: &mut TickState, lines: &[Value], log: &mut Vec<String>) {
     }
 }
 
-fn run_scenario(scenario: &Value) -> Value {
+fn run_scenario(scenario: &Value, worlds: &std::path::Path, fault: Option<&str>) -> Value {
     let id = scenario["id"].as_str().expect("scenario id");
     let boxes: Vec<[i32; 6]> = if let Some(list) = scenario["boxes"].as_array() {
         list.iter().map(|b| int_array(b, "boxes")).collect()
@@ -234,7 +283,35 @@ fn run_scenario(scenario: &Value) -> Value {
         vec![int_array(&scenario["box"], "box")]
     };
     let started = std::time::Instant::now();
-    let mut state = fixture(&boxes, scenario["seed"].as_i64().unwrap_or(1));
+    let seed = scenario["seed"].as_i64().unwrap_or(1);
+    let empty = Vec::new();
+    let scenario_phases = scenario["phases"].as_array().unwrap_or(&empty);
+    let mut log = Vec::new();
+    let mut phases = Vec::new();
+    let result = |phases: Vec<Value>, log: Vec<String>, error: Option<String>| {
+        let mut out = json!({
+            "id": id,
+            "server": "krasnokamen",
+            "phases": phases,
+            "command_log": log,
+            "wall_ms": started.elapsed().as_millis() as u64,
+        });
+        if let Some(error) = error {
+            out["error"] = json!(error);
+        }
+        out
+    };
+    let (mut native, mut state) = if scenario_phases
+        .iter()
+        .any(|phase| phase["restart"].as_bool() == Some(true))
+    {
+        match native_fixture(&worlds.join(id.replace('#', "@")), &boxes, seed) {
+            Ok((world, state)) => (Some(world), state),
+            Err(error) => return result(phases, log, Some(format!("native world: {error}"))),
+        }
+    } else {
+        (None, fixture(&boxes, seed))
+    };
     // Krasnokamen draws are a pure function of (entity id, tick, position), not of the world
     // seed: without this every `seeds` variant would replay the identical sample, so a
     // rate scenario would compare vanilla's distribution against a single draw. Burning a
@@ -242,8 +319,6 @@ fn run_scenario(scenario: &Value) -> Value {
     for _ in 0..scenario["seed"].as_i64().unwrap_or(0).rem_euclid(9973) * 11 {
         let _ = state.entities.alloc_id();
     }
-    let mut log = Vec::new();
-    let empty = Vec::new();
     commands(
         &mut state,
         scenario["setup"].as_array().unwrap_or(&empty),
@@ -256,11 +331,23 @@ fn run_scenario(scenario: &Value) -> Value {
         let _ = run_tick(&mut state, &[]);
         state.outbox.clear();
     }
-    let mut phases = vec![json!({
+    phases.push(json!({
         "name": "setup", "tick": state.tick, "snapshot": snapshot(&state, &boxes),
-    })];
+    }));
     let trace = scenario["trace"].as_bool().unwrap_or(false);
-    for phase in scenario["phases"].as_array().unwrap_or(&empty) {
+    for phase in scenario_phases {
+        let restart = phase["restart"].as_bool() == Some(true);
+        if restart {
+            let world = native.as_mut().expect("restart scenarios run on a native world");
+            match world.restart(state, |dir| apply_fault(fault, dir)) {
+                Ok(recovered) => state = recovered,
+                Err(error) => {
+                    let error = format!("restart before {}: {error}", phase["name"]);
+                    return result(phases, log, Some(error));
+                }
+            }
+            load_boxes(&mut state, &boxes);
+        }
         commands(
             &mut state,
             phase["commands"].as_array().unwrap_or(&empty),
@@ -281,15 +368,12 @@ fn run_scenario(scenario: &Value) -> Value {
         if trace {
             entry["trace"] = json!(trace_rows);
         }
+        if restart {
+            entry["restarted"] = json!(true);
+        }
         phases.push(entry);
     }
-    json!({
-        "id": id,
-        "server": "krasnokamen",
-        "phases": phases,
-        "command_log": log,
-        "wall_ms": started.elapsed().as_millis() as u64,
-    })
+    result(phases, log, None)
 }
 
 #[test]
@@ -298,12 +382,48 @@ fn quirk_parity_krasnokamen_replay() {
     let scenarios =
         std::env::var("KRASNOKAMEN_QUIRK_SCENARIOS").expect("KRASNOKAMEN_QUIRK_SCENARIOS");
     let receipt = std::env::var("KRASNOKAMEN_QUIRK_RECEIPT").expect("KRASNOKAMEN_QUIRK_RECEIPT");
+    let worlds = std::env::var("KRASNOKAMEN_QUIRK_WORLDS").expect("KRASNOKAMEN_QUIRK_WORLDS");
+    let fault = std::env::var("KRASNOKAMEN_QUIRK_RESTART_FAULT").ok();
     let mut results = Vec::new();
     for path in scenarios.split(':').filter(|p| !p.is_empty()) {
         let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let scenario: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{path}: {e}"));
-        results.push(run_scenario(&scenario));
+        results.push(run_scenario(
+            &scenario,
+            std::path::Path::new(&worlds),
+            fault.as_deref(),
+        ));
     }
     std::fs::write(&receipt, serde_json::to_vec_pretty(&results).unwrap()).unwrap();
     println!("KRASNOKAMEN_QUIRK_REPLAY_OK {receipt}");
+}
+
+/// The restart path reads the world back from disk and refuses a missing or
+/// damaged store instead of replaying stale memory (negative control).
+#[test]
+fn restart_phase_recovers_from_disk_and_refuses_a_damaged_store() {
+    let scenario = json!({
+        "id": "restart-control", "box": [0, 149, 0, 15, 151, 15],
+        "setup": ["setblock 1 150 1 minecraft:red_wool"],
+        "phases": [{"name": "restarted", "restart": true, "commands": [], "ticks": 1}],
+    });
+    let worlds = tempfile::tempdir().unwrap();
+    let clean = run_scenario(&scenario, worlds.path(), None);
+    assert!(clean.get("error").is_none(), "{clean}");
+    assert_eq!(clean["phases"][1]["restarted"], json!(true));
+    assert_eq!(
+        clean["phases"][1]["snapshot"]["blocks"]["1,150,1"],
+        json!("minecraft:red_wool")
+    );
+    for fault in ["delete-store", "garble-store"] {
+        let worlds = tempfile::tempdir().unwrap();
+        let damaged = run_scenario(&scenario, worlds.path(), Some(fault));
+        assert!(
+            damaged["error"]
+                .as_str()
+                .is_some_and(|error| error.starts_with("restart before \"restarted\"")),
+            "{fault}: {damaged}"
+        );
+        assert_eq!(damaged["phases"].as_array().map(Vec::len), Some(1));
+    }
 }

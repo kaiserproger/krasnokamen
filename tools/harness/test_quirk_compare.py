@@ -13,6 +13,7 @@ import json
 import unittest
 from pathlib import Path
 
+from .quirk_parity import __main__ as qmain
 from .quirk_parity import compare
 from .quirk_parity.__main__ import rate_group_verdict
 
@@ -414,14 +415,16 @@ class FarmOracleTests(unittest.TestCase):
                 {"name": "run4", "snapshot": observation(20)},
             ]}
 
-        good = {variant["id"]: run(16) for variant in variants}
-        bad = dict(good, **{variants[1]["id"]: run(1)})
-        for server in (good, {}):
-            with self.subTest(vanilla_only=not server):
-                self.assertEqual(rate_group_verdict("farm-chicken-eggs", variants, good, server)["status"], "pass")
-                result = rate_group_verdict("farm-chicken-eggs", variants, bad, server)
-                self.assertEqual(result["status"], "fail")
-                self.assertIn("minecraft:chicken", result["vanilla_selfcheck_failures"][variants[1]["id"]][0])
+        good = {variant["id"]: [run(16), run(16)] for variant in variants}
+        bad = dict(good, **{variants[1]["id"]: [run(16), run(1)]})
+        server = {variant["id"]: run(16) for variant in variants}
+        self.assertEqual(rate_group_verdict("farm-chicken-eggs", variants, good, server)["status"], "pass")
+        result = rate_group_verdict("farm-chicken-eggs", variants, bad, server)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("minecraft:chicken", result["vanilla_selfcheck_failures"][variants[1]["id"]][0])
+        # The same population check refuses the recording itself.
+        problems, _ = qmain.recording_problems(variants[1], bad[variants[1]["id"]])
+        self.assertTrue(any("recording 2" in problem and "minecraft:chicken" in problem for problem in problems))
 
 
 if __name__ == "__main__":

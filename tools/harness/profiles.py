@@ -1079,15 +1079,30 @@ def run_server_load_profile(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_quirk_parity(ctx: ProfileContext) -> dict[str, Any]:
-    """Vanilla-26.1.2-oracle parity of player-relied quirks and farm rates."""
+    """Vanilla differential oracle: Krasnokamen replayed against the recorded vanilla corpus.
+
+    A first extra argument `record`, `re-record` or `verify` selects that oracle command instead
+    of the replay gate (docs/QUIRK_PARITY.md)."""
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
+    command, extra = (extra[0], extra[1:]) if extra[:1] and extra[0] in ("record", "re-record", "verify") \
+        else ("replay", extra[1:] if extra[:1] == ["replay"] else extra)
     out = ctx.artifact_dir / "quirk-parity"
-    details = _run_command(
-        [sys.executable, "-m", "tools.harness.quirk_parity", "--out", str(out)] + extra,
-        ctx, "quirk-parity.log", env=_backend_env(ctx),
-    )
-    details["receipt"] = str(out / "receipt.json")
-    return details
+    argv = [sys.executable, "-m", "tools.harness.quirk_parity", command]
+    if command != "verify":
+        argv += ["--out", str(out)]
+    try:
+        return _run_command(argv + extra, ctx, "quirk-parity.log", env=_backend_env(ctx))
+    finally:  # the verdicts and mismatch ids reach result.json on failure as well
+        if command != "verify" and (out / "receipt.json").is_file():
+            receipt = json.loads((out / "receipt.json").read_text())
+            rows = receipt.get("scenarios", receipt.get("cases", []))
+            ctx.client_evidence["quirk_parity"] = {
+                "command": command, "receipt": str(out / "receipt.json"), "status": receipt["status"],
+                "error": receipt.get("error"), "cases": {row["id"]: row["status"] for row in rows},
+                "mismatches": [{key: row[key] for key in ("mismatch_id", "case", "path", "status")}
+                               for row in receipt.get("mismatches", [])],
+            }
+
 
 def run_constantinople(ctx: ProfileContext) -> dict[str, Any]:
     """Functional imported-city fixture; no throughput or performance verdict."""
@@ -1570,7 +1585,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "quirk-parity": {
         "scope": "oracle",
-        "description": "Real 26.1.2 vanilla oracle vs Krasnokamen: player-relied quirks (QC, TNT duping, update order) and farm rates; receipts under the run artifact dir",
+        "description": "Vanilla differential oracle: Krasnokamen replayed against the recorded real-vanilla corpus (quirks, farm rates, ordinary gameplay); `record`/`re-record`/`verify` subcommands; receipts under the run artifact dir",
         "run": run_quirk_parity,
     },
     "catalog-load": {

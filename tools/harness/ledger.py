@@ -30,6 +30,7 @@ import time
 import tomllib
 
 from . import regressions
+from .quirk_parity import guard as oracle_guard
 from .runtime import REPO_ROOT, main_checkout, sibling_root
 
 GREEN, RED, UNRUNNABLE, NEEDS_CLIENT = 'green', 'red', 'unrunnable', 'needs-real-client'
@@ -2905,6 +2906,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         fix_patch_text = Path(fix_patch).read_text(errors='surrogateescape')
     elif fix_patch:
         raise Refused(f'{ident}: --fix-patch is only for a fix_commit of the form patch:<sha256>')
+    try:  # D128: a fix may not pass by deleting or ignoring tests, or by editing the recorded corpus
+        test_guard = oracle_guard.promotion_guard(root, full, fix_patch_text)
+    except oracle_guard.GuardRefused as error:
+        raise Refused(f'{ident}: {error}')
     if not patch_mode:
         if test_only:
             _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
@@ -3089,7 +3094,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         'fix_patch_sha256': fix[len('patch:'):] if patch_mode else None,
         'reversed_files': reversed_files, 'kept_test_files': test_files,
         'negative_control': control, 'restored': restored, 'client_receipt': receipt_info,
-        'artifact_dir': str(ctx.artifact_dir),
+        'test_guard': test_guard, 'artifact_dir': str(ctx.artifact_dir),
     }
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
     if dry_run:
