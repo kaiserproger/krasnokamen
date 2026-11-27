@@ -67,7 +67,7 @@ pub struct PlayerInfoUpdate {
 
 impl Packet for PlayerInfoUpdate {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_INFO_UPDATE
-    // sits at game-CB index 70 = wire id 0x46. `javap` shows an 8-bit fixed
+    // sits at game-CB index 71 = wire id 0x47. `javap` shows an 8-bit fixed
     // EnumSet, then a VarInt-counted entry list keyed by profile UUID.
     const ID: i32 = 0x47;
 
@@ -199,7 +199,7 @@ pub struct PlayerInfoRemove {
 
 impl Packet for PlayerInfoRemove {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_PLAYER_INFO_REMOVE
-    // sits at game-CB index 69 = wire id 0x45. Body is a VarInt-counted UUID list.
+    // sits at game-CB index 70 = wire id 0x46. Body is a VarInt-counted UUID list.
     const ID: i32 = 0x46;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -464,13 +464,6 @@ pub struct MoveEntityPos {
     pub on_ground: bool,
 }
 
-impl MoveEntityPos {
-    #[must_use]
-    pub fn delta_to_short(delta: f64) -> i16 {
-        move_entity_delta_to_short(delta)
-    }
-}
-
 impl Packet for MoveEntityPos {
     // 26.3 `ClientboundMoveEntityPacket$Pos`: VarInt id, VarInt properties
     // (`onGround | stepCount << 1`), then the linear `VecDelta` (three i16).
@@ -507,18 +500,6 @@ pub struct MoveEntityPosRot {
     pub yaw: u8,
     pub pitch: u8,
     pub on_ground: bool,
-}
-
-impl MoveEntityPosRot {
-    #[must_use]
-    pub fn delta_to_short(delta: f64) -> i16 {
-        move_entity_delta_to_short(delta)
-    }
-
-    #[must_use]
-    pub fn pack_degrees(degrees: f32) -> u8 {
-        pack_degrees(degrees)
-    }
 }
 
 impl Packet for MoveEntityPosRot {
@@ -636,7 +617,7 @@ pub struct SetEntityMotion {
 
 impl Packet for SetEntityMotion {
     // Verified via inner `.analysis/server.jar` 26.1.2 server jar:
-    // CLIENTBOUND_SET_ENTITY_MOTION is game-CB index 101 = wire id 0x65.
+    // CLIENTBOUND_SET_ENTITY_MOTION is game-CB index 103 = wire id 0x67.
     // `javap -p -c ClientboundSetEntityMotionPacket` shows VarInt id plus
     // `Vec3.LP_STREAM_CODEC` movement.
     const ID: i32 = 0x67;
@@ -1495,7 +1476,7 @@ pub struct ClientboundSetEntityData {
 
 impl Packet for ClientboundSetEntityData {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_ENTITY_DATA is
-    // game-CB index 99 = wire id 0x63. `javap -p -c` shows VarInt entity id,
+    // game-CB index 101 = wire id 0x65. `javap -p -c` shows VarInt entity id,
     // repeated DataValue entries, then EOF marker byte 255. DataValue writes one
     // unsigned-byte metadata index, VarInt serializer id, then serializer payload.
     const ID: i32 = 0x65;
@@ -1572,7 +1553,7 @@ pub struct ClientboundTakeItemEntity {
 
 impl Packet for ClientboundTakeItemEntity {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_TAKE_ITEM_ENTITY is
-    // game-CB index 124 = wire id 0x7C. `javap -p -c` shows three VarInts:
+    // game-CB index 127 = wire id 0x7F. `javap -p -c` shows three VarInts:
     // item entity id, player entity id, and picked-up amount.
     const ID: i32 = 0x7F;
 
@@ -1599,7 +1580,7 @@ pub struct RemoveEntities {
 
 impl Packet for RemoveEntities {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_REMOVE_ENTITIES
-    // is game-CB index 77 = wire id 0x4D. Body is FriendlyByteBuf.writeIntIdList.
+    // is game-CB index 78 = wire id 0x4E. Body is FriendlyByteBuf.writeIntIdList.
     const ID: i32 = 0x4E;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
@@ -1626,7 +1607,7 @@ pub struct ClientboundSetPassengers {
 
 impl Packet for ClientboundSetPassengers {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_SET_PASSENGERS
-    // is game-CB index 107 = wire id 0x6B. Body is a vehicle VarInt followed
+    // is game-CB index 109 = wire id 0x6D. Body is a vehicle VarInt followed
     // by a VarInt-length-prefixed array of passenger entity VarInts.
     const ID: i32 = 0x6D;
 
@@ -1657,7 +1638,7 @@ pub struct RotateHead {
 
 impl Packet for RotateHead {
     // Verified via `.analysis/protocol-dump.txt`: CLIENTBOUND_ROTATE_HEAD is
-    // game-CB index 83 = wire id 0x53. Body is VarInt entity id and packed yaw.
+    // game-CB index 85 = wire id 0x55. Body is VarInt entity id and packed yaw.
     const ID: i32 = 0x55;
 
     fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
