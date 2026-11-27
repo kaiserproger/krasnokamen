@@ -30,7 +30,9 @@ fn street_grid_reserves_roads_verges_lots_and_an_open_plaza() {
     for x in 35..=37 {
         assert_eq!(cell(ANCHOR, x, 20), Cell::Road, "{x}");
     }
-    assert_eq!(cell(ANCHOR, 8 + RING, 20), Cell::Wall);
+    // The wall line sits 30 columns out, i.e. 38 blocks from the bell:
+    // docs/settlements/construction.md states the settlement wall distance.
+    assert_eq!(cell(ANCHOR, 38, 20), Cell::Wall);
     assert_eq!(cell(ANCHOR, 39, 20), Cell::Lot);
 }
 
