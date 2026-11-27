@@ -10,8 +10,10 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::blueprint::MovementClass;
-use crate::boundary::{ChunkPos, EntityAppearance, EntityView};
+use crate::{
+    blueprint::MovementClass,
+    boundary::{ChunkPos, EntityAppearance, EntityView},
+};
 pub(crate) use hot::HotRow;
 #[cfg(test)]
 pub(crate) use hot::take_cold_row_reads;
