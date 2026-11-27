@@ -38,8 +38,10 @@ Where that stands at RC5:
   and no server jar, but Mojang bytes and payloads derived from them are served
   from the Krasnokamen static server, every release republishes the cache, and a
   dedicated server cannot use it.
-- **26.1.2 clients.** The importer accepts only `--version 26.3`, so nothing
-  can create the legacy cache ADR 0015 needs; operators must keep an old one.
+- **Older clients.** Since then `content import` also installs the 26.1.2 and
+  26.2 endpoint caches and the adjacent step snapshots ADR 0015 needs, through
+  the same Java steps, and a dedicated server started without any cache runs
+  that import (with downloads) before it opens a world (decision C1).
 
 ## What the cache holds
 
@@ -61,7 +63,7 @@ The last is not a file in any jar: the oracle runs vanilla's overworld biome
 builder, and decision C2 forbids porting that code, so it can only be a fact table.
 The 775 path reads only the 26.1.2 registry dirs, tags, `registry_network_nbt`,
 `packets.json`, `registries.json` and `blocks.json`
-(`mc-edge/src/translation/mod.rs`, profile loading).
+(`mc-edge/src/translation/snapshots.rs`).
 
 ## Decision (proposed)
 
@@ -96,7 +98,7 @@ serves no Mojang bytes. Each kind of content has one source:
    (ignored maintainer tests, run at every version bump and bundle rebuild).
 
 One producer then builds every cache: the 26.3 cache for dedicated servers and
-singleplayer, and the 26.1.2 legacy cache from the 26.1.2 jar. The content
+singleplayer, and the 26.1.2 and 26.2 endpoint caches from their jars. The content
 bundle and its per-release republishing go away.
 
 ## Proof: native RegistryData, byte for byte
@@ -173,7 +175,7 @@ does.
 | Mojang bytes on the Krasnokamen static server | none | none | data pack subset, lang, derived payloads |
 | Maintenance per release | four encoder tables and the packet tables, each checked by an ignored test against the Java oracle; facts bundle rebuilt and re-pinned in client and server | a runtime installer (manifest, LZMA, exec bits, macOS bundle layout) in launcher and server; import, capture and extractors as today | full cache republished and re-pinned in client and server; the Java import stays for the maintainer who builds it |
 | Failure modes | facts bundle unreachable (one VPS, plain HTTP; the pin keeps integrity, not availability); a release needing a new table row fails the maintainer check, never a user | JVM fails to start (memory, antivirus, macOS quarantine); the temporary vanilla server binds a local port (Windows firewall prompt); 180 s readiness timeout on slow machines; datagen or bootstrap changes break the extractors | the same VPS dependency, for all content; a bundle the new server rejects breaks every fresh install (RC2) |
-| 26.1.2 legacy cache | built by the same producer from the 26.1.2 jar | still no producer | needs a second content bundle |
+| Older endpoint caches | built by the same producer from each release's jar | built by today's import | needs one content bundle per endpoint |
 
 ## Consequences and migration, if accepted
 
@@ -181,9 +183,10 @@ does.
 2. `tools/publish_facts.sh` gains the new fact files; a new bundle revision;
    launcher and `krasnokamen` pin it.
 3. `content import` builds the 26.3 cache from the Mojang jars, the facts
-   bundle and the encoder, and builds the 26.1.2 legacy cache the same way.
-4. Packet-name tables for 777 and 775 in `mc-protocol`; `legacy/tables.rs`
-   stops reading `packets.json`.
+   bundle and the encoder, and builds the other endpoint caches the same way.
+4. Packet-name tables for every release of the support window in `mc-protocol`;
+   `mc-edge/src/translation/{adjacent/tables.rs,snapshots.rs}` stop reading
+   `packets.json`.
 5. The launcher's singleplayer runtime runs that import against the jars it
    has instead of installing the content bundle; `tools/publish_content.sh` and
    the content pin are deleted.
@@ -215,12 +218,14 @@ under `facts/`), and the 26.1.2 `blocks.json` and `registries.json` for the
 legacy cache? *Recommendation: yes.* They are pure non-asset tables of the kind
 already allowlisted; the bundle grows by under 0.5 MB.
 
-**(b)** Should first start fetch content automatically (Mojang jars and the
-facts bundle) when no cache exists, or stay an explicit `content import` that
-now needs no JDK? *Recommendation: automatic for singleplayer (the launcher
-already fetches on first Play) and for a dedicated server started without a
-cache, printing each download with its source; `content import` stays as the
-offline command (`--from` local jars and a local facts archive).*
+**(b)** A dedicated server started without a cache already imports on first
+start, with downloads (decision C1). Should the native import keep that, and
+should singleplayer fetch the same way (Mojang jars and the facts bundle)
+instead of installing the content bundle? *Recommendation: automatic for
+singleplayer (the launcher already fetches on first Play) and for a dedicated
+server started without a cache, printing each download with its source;
+`content import` stays as the offline command (`--from` local jars and a local
+facts archive).*
 
 **(c)** Does the Java import stay as an operator path? *Recommendation: no.*
 The native path becomes the one way for users and operators; the Java steps

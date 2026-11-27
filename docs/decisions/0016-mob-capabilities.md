@@ -70,57 +70,25 @@ The type lists moved, unedited, into one function, `blueprint::vanilla_capabilit
 Vanilla blaze, snow golem and strider are also water-sensitive, but they did not
 take water damage before this change. Turning on `hurt_by_water` for them is a
 separate parity change.
-Frog tongue hunting selects visible, size-one members of the `frog_food`
-entity tag, publishes the target and tongue pose, pulls the prey and submits
-ordinary melee damage after the catch animation. The target and pose clear
-when the attack ends or its target becomes invalid.
 
-Happy ghast harnesses occupy the body-equipment slot. Passenger custody keeps
-the controlling rider first and up to three further UUIDs; only the first can
-steer, and dismount removes only the departing passenger. The additional
-passengers are retained in `krasnokamen:Passengers` in the animal NBT.
+Wall-climbing contact is an ephemeral movement result, not a persistent entity
+flag: `entity_motion::step` reports a real loaded horizontal obstacle and
+`mob_fall::after_move` resets the accumulated fall distance, so separate
+downward segments while climbing never add up to a damaging fall. It grants no
+fall immunity: a detached free fall still damages a spider on landing.
 
-Saddled camels admit two players; the controlling rider's charged jump
-starts a dash with a 55-tick cooldown and a vanilla dash-state metadata bit.
-Sniffers search diggable block tags, publish their sniffing/digging/rising
-states using serializer 35, roll the data-loaded `sniffer_digging` loot
-table and retain cooldown and explored sites. Tamed standing cats can relax
-by sleeping owners and roll `cat_morning_gift` on an eligible wake.
-Parrots occasionally imitate sounds of nearby mapped mobs; their jukebox
-dance remains client-local and is driven by vanilla level events.
+Slime and magma-cube locomotion is the `hops` capability family (`hops`,
+`hop_delay_scale`, `hop_lift_per_size`). Its cadence is a deterministic phase on
+the absolute tick clock rather than vanilla's delay counted only while grounded,
+so a hop tick that lands mid-flight is not a launch; there is no jump in water
+or lava.
 
-
-Wall-climbing contact is an ephemeral movement result, not a new persistent
-entity flag. `entity_motion::step` reports a real loaded horizontal obstacle
-(also when a ceiling clips the rise); serial movement writeback passes that
-result to `mob_fall::after_move`, which resets accumulated fall distance before
-its ascent/no-op shortcut. Separate downward segments while climbing must not
-add up to a damaging fall. This does not grant fall immunity: a detached free
-fall still accumulates distance and damages spiders on landing.
-
-Slime and magma-cube locomotion is the `hops` capability family
-(`hops`, `hop_delay_scale`, `hop_lift_per_size`):
-`Slime$SlimeMoveControl` has no ground traction, jumps every
-`getJumpDelay()` (`random(20)+10`, divided by three while the move control is
-aggressive: `SlimeAttackGoal` sets it only with a retained target and
-`isDealsDamage` — any magma cube size, a slime of size > 1 (`Slime.isDealsDamage`,
-`MagmaCube.canDealDamage`); an idle hopper keeps 40..116 ticks),
-`MagmaCube.getJumpDelay` multiplies that by four and `jumpFromGround` adds
-`size*0.1` blocks/tick. Both keep the head on the body. The native cadence is a
-deterministic phase on an absolute tick clock, not vanilla's delay counted only
-while grounded, so a hop tick that lands mid-flight is not a launch. No jump is
-modelled in water or lava (`MagmaCube.jumpInLiquid` is a backlog item).
-
-Food temptation and juvenile following are native shared capabilities added for
-VC-06. They run on the existing AI decision cadence, below panic, leash and active
-courtship, using immutable player inventory and entity positions. Player searches
-share one target grid; juvenile searches visit only the chunks intersecting an
-eight-block radius and allocate nothing. Sitting, riding and NoAI keep their
-existing suppression. Rest proofs wake on decision ticks when held items or a
-juvenile could create a new target, including within-chunk changes.
-These goals use the existing collision-aware direct steering, not a promise of
-full obstacle navigation. `temptable` needs resolved `breed_food`; it does not
-implicitly inherit food from a custom mob's presentation type.
+Food temptation (`temptable`) and juvenile following (`follows_adults`) run on
+the existing AI decision cadence, below panic, leash and active courtship, over
+immutable player inventories and entity positions, with the existing
+collision-aware direct steering (not full obstacle navigation). `temptable`
+needs resolved `breed_food`; a custom mob does not inherit food from its
+presentation type.
 
 Crossbreeding is a reciprocal data relation, not a horse type check in the tick.
 Both parents must name each other's blueprint key and the same registered child;
@@ -158,12 +126,9 @@ Limits that follow from presenting as a vanilla type:
   the mob presents as a creeper; any other presentation keeps the fuse on the
   server. Writing a creeper field into another type's layout would break client
   decoding.
-  The same rule applies to crossbow charging: Pillager owns BOOLEAN17 and Piglin
-  owns BOOLEAN18 (17 is its baby state), in both protocol777 and legacy775.
-  Skeleton/zombie carriers can execute the crossbow capability and publish
-  charged equipment without inventing a Pillager accessor. In particular Stray
-  ends at inherited Mob15, while Zombie17 is INT special-type data. Native
-  charging transitions and replay restoration use the same carrier-owned writer.
+  Crossbow charging follows the same rule: only a carrier whose layout owns the
+  charging accessor (Pillager, Piglin) receives it, and skeleton or zombie
+  carriers publish charged equipment without inventing one.
 - Vanilla kill/riding statistics stay vanilla-typed: a custom key does not
   impersonate its presentation type. Plugin entity events report the custom
   namespaced id.
@@ -217,10 +182,6 @@ Data-defined blueprints get `spawn_weight = 0`: no natural spawning.
   interchange format, not the native custom-behavior restart path.
 - **Operator data directory:** proposed separately, not part of plugin loading.
   It would use the same validator and deterministic startup ordering.
-- The Rust SDK example `sdk/rust/examples/sky-creeper` contributes a flying,
-  exploding, water-sensitive creeper. `/sky-creeper` returns the typed guest
-  `spawn-entity` command. Its manifest declares `spawn_entity_types`, and the
-  owner returns an `entity-spawn-answered` result after native admission.
 
 ### Cost accounting
 
@@ -326,9 +287,7 @@ than first building a target index. There are no persistent wake subscriptions.
     retention replaces those searches with 1000 one-target validations. Quiet
     empty-table scenes have no broad phases to save. The ignored
     `sensor_bench_tests::sensors_release_entity_phase_dense_and_quiet` fixture
-    measures the whole in-process entity phase on both revisions, with 120 warmup
-    ticks and three samples of 600 ticks under an exclusive approved window.
-    Debug-only query counters are absent from release timing.
+    measures the whole entity phase on both revisions.
 
 Removal boundary: omit `TargetGrid::batch` to restore unbatched acquisition
 without changing choices. Retention is a separate intentional gameplay change,
