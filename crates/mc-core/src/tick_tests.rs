@@ -5967,7 +5967,7 @@ fn vanilla_pickup_box_collects_items_above_the_players_feet() {
 }
 
 #[test]
-fn bottom_slab_accepts_player_step_and_supports_mob_at_half_height() {
+fn sign_placement_opens_owned_editor_and_text_is_journaled() {
     use crate::boundary::{BlockPos, Hand, PlayerChange};
     let (mut state, player, pos) = flat_player_fixture();
     let sign = state
