@@ -177,14 +177,15 @@ quality labels apply to their recorded trees only):
 - 2026-10-11 W1 projectile/respawn failure roots: pre-gate failure analysis
   feeding the kept Parity Wave 1 gate section.
 
-## docs/agents/PRO_CORE_AUDIT_PROMPT.md + PRO_CORE_AUDIT_RUNBOOK.md (one-off audit tooling)
+## docs/agents/PRO_CORE_AUDIT_PROMPT.md + PRO_CORE_AUDIT_RUNBOOK.md (2026-08, one-off audit)
 
-Kept in place (referenced by `tools/prepare-pro-core-audit.sh`, `Justfile`
-`pro-audit-context`, `docs/README.md`). Note: audit prompt names
-`mc-simulation` (deleted crate) in dimension 2 and model names
-(`Pi GPT-5.6 Sol/Luna`, `spawn_pi_detached`) that postdate the current
-harness vocabulary; treat the prompt as a frozen one-off instrument, not a
-current crate/topology reference. If the audit is rerun, refresh it first.
+Said: a planning-only "Pro" whole-core audit prompt and runbook, bundled by
+`tools/prepare-pro-core-audit.sh` (CodexPro `pro-bundle`, titled for
+v0.0.3-alpha.1) and applied by `tools/apply-pro-first-handoff.py`; last used
+2026-08-29. The prompt named the deleted `mc-simulation` crate and retired model
+names. Deleted with both scripts and the `Justfile` `pro-audit-context` target on
+2026-11-27 (owner D125); audits now go through the
+[review committee](../development/review-committee-and-breaker.md).
 
 ## docs/settlements/OWNER_DECISIONS.md (CP-058/059/068 ruleset, 2026-10)
 

@@ -48,8 +48,6 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
   [real-client regression manifests](real-client-regression/README.md),
   [worldgen evidence](evidence/worldgen-diff/README.md).
 
-Retained because a tool still reads them, not as current acceptance:
-the [core audit runbook](agents/PRO_CORE_AUDIT_RUNBOOK.md)
-(`tools/prepare-pro-core-audit.sh`). Superseded designs are summarized in the
+Superseded designs are summarized in the
 [archive](archive/ARCHIVE.md); their full text and all older documentation
 remain in Git history. Local agent state lives in ignored `.analysis/`.

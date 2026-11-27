@@ -64,7 +64,3 @@ run:
 
 run-debug:
     RUST_LOG=debug RUST_BACKTRACE=1 cargo run -p mc-edge --bin krasnokamen -- --config example.toml
-
-# Rebuild a fresh high-context bundle for the planning-only Pro whole-core audit.
-pro-audit-context:
-    bash tools/prepare-pro-core-audit.sh
