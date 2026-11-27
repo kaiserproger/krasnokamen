@@ -78,6 +78,10 @@ fn wait_for<T>(
     // `halt_reason() == None` alone cannot tell a quiet owner from a lost change.
     let mut observed = 0u64;
     let mut last_tick = None;
+    // Chat the fixture drained while waiting: a refused command names itself
+    // here (`tick/auth.rs` answers a fenced input with one line), so a stall
+    // report can separate a lost block change from a refused command.
+    let mut chats: Vec<String> = Vec::new();
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         assert!(
@@ -96,21 +100,29 @@ fn wait_for<T>(
                 // as the edge does (`core_stop_tests.rs` does the same for its player),
                 // so the fixture measures the drop/lease join and not a pump that does
                 // not exist here. No assertion or threshold changes.
-                let _ = core.try_drain_outbox();
+                for (_, batch) in core.try_drain_outbox() {
+                    for change in batch {
+                        if let crate::boundary::PlayerChange::Chat { message } = change {
+                            chats.push(message);
+                        }
+                    }
+                }
                 if let Some(value) = found(&output) {
                     return value;
                 }
             }
             Ok(Event::TickStreamClosed) => panic!(
                 "tick stream closed while waiting for {what} after {observed} ticks (last tick \
-                 {last_tick:?}): the tick owner halted with {:?} (None means it ended without a \
-                 fail-closed reason)",
+                 {last_tick:?}), recent chat {}: the tick owner halted with {:?} (None means it \
+                 ended without a fail-closed reason)",
+                chat_tail(&chats),
                 core.halt_reason()
             ),
             Ok(Event::DropReturned) => panic!("drop returned while waiting for {what}"),
             Err(RecvTimeoutError::Timeout) => panic!(
-                "timed out waiting for {what} after {observed} ticks (last tick {last_tick:?}): \
-                 the tick owner's halt reason is {:?}",
+                "timed out waiting for {what} after {observed} ticks (last tick {last_tick:?}), \
+                 recent chat {}: the tick owner's halt reason is {:?}",
+                chat_tail(&chats),
                 core.halt_reason()
             ),
             Err(RecvTimeoutError::Disconnected) => {
@@ -118,6 +130,12 @@ fn wait_for<T>(
             }
         }
     }
+}
+
+/// The last four chat lines the fixture drained; a refused input answers here.
+fn chat_tail(chats: &[String]) -> String {
+    let start = chats.len().saturating_sub(4);
+    format!("{:?}", &chats[start..])
 }
 
 /// Join a permission-4 player and write a known air→stone block at the world
