@@ -128,11 +128,10 @@ or harness gates.
 - **Owner host:** wrap heavy Cargo, harness and Gradle commands in Main's absolute
   `<work>/solaris/tools/dev/mem-run.sh -m 6G <command>` (`12G` for full
   test/correctness, at most 12G each), never a worktree's or sibling repo's copy.
-  One heavy command per agent; no memory slots; three shared build tokens,
-  nested compiles reuse theirs. Priority slice/battle-video work uses normal lane;
-  others `env KRASNOKAMEN_BUILD_LANE=background`. The one-token-per-agent rule
-  and priority gate are laptop proposals (2026-11-18), pending owner confirmation;
-  battle-video resource priority is owner-authorized. Runner owns sccache:
+  No memory slots, build tokens, priority lanes or per-agent caps (owner D127):
+  every command starts at once; the shared jobserver splits CPUs, per-scope
+  MemoryMax plus the watchdog prevent OOM, the runner reclaims idle slots below
+  300 GiB free and refuses only below 20 GiB. Runner owns sccache:
   never override `RUSTC_WRAPPER`. Release gates use `tools/dev/pin-release`,
   one binary per matching tree/build inputs; controls need their own reverted pin.
   Performance pins are nonincremental. `-p` is serialized profiling, never builds;
@@ -175,7 +174,7 @@ or harness gates.
   Main may end a turn with its own background job; subagents must not end while
   theirs runs (disposal kills jobs): use `wait` when otherwise blocked.
 - Main spawns within [current mode](docs/development/agent-fleet.md#announcement-stabilization-mode).
-  Outside it: ≤15 active +2 reviewers, three builders (owner 2026-11-14);
+  Outside it: ≤15 active +2 reviewers (owner 2026-11-14), no builder cap (D127);
   larger fleets need permission. Workers spawn only when brief allows.
 - Small generalist roster, disjoint lanes, write sets and queues, not an agent
   per task (owner 2026-11-16). Start replacements only for new lanes or exhausted context;
