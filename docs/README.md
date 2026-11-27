@@ -22,7 +22,7 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
 - [Architecture overview](ARCHITECTURE.md), [runtime map](architecture/runtime.md),
   [state ownership](architecture/state-ownership.md), [mutation paths](architecture/mutations.md),
   [persistence](architecture/persistence.md), [residency](architecture/residency.md),
-  [settlements](architecture/settlements.md).
+  [settlements](architecture/settlements.md), [battles](architecture/battles.md).
 - [Decisions](../DECISIONS.md): one row per choice with its reason; long records in [decisions/](decisions/README.md).
 - Source-derived navigation: [crate graph](generated/crate-graph.md),
   [contract index](generated/contract-index.md), [scenario index](generated/scenario-index.md).
