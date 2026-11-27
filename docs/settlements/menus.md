@@ -101,9 +101,11 @@ The phase is the live preparation/build phase, not a constant; progress is the
 structure ledger's completed/total cells. Each pending order has one line:
 `Pending #<index>: <display name> L<level> · <reason>`, with indices 1..count.
 Material icons remain below the project and order lists. Queued orders retain their item/count shortage details in the review and status dialogs, with client-translated item components. English command diagnostics retain their existing spelling; the management UI localizes the waiting categories.
-The map gives each active site a hover naming its blueprint, level and corner;
-overlapping map cells retain all site descriptions. Its legend also lists each
-site as `Active site: <display name> L<level> · <x> <y> <z>`.
+The map gives each active site a hover naming its phase, blueprint, level and
+corners; overlapping map cells retain all site descriptions. The map body holds
+only the grid, so navigation stays reachable at 720p; **Legend** lists every
+site as its phase, `Construction: <display name> L<level>` and
+`<x> <y> <z> .. <x> <y> <z>`.
 Clicking an active site opens only that project's native facts, identified by its
 stable structure handle. An overlapping cell first offers each site separately.
 Back restores the exact map viewport or chooser that opened the selected facts;
@@ -115,19 +117,7 @@ and clock controls still open the complete settlement-wide status; a separate ma
 icon opens the map. Material icons remain paged below the lists. A visitor can
 inspect but cannot cancel.
 
-The `village-owner-order-qa` gate observes two waiting orders, a funded later
-order lifting over an unfunded head, the head fencing autonomous admission, two
-simultaneously advancing sites, all sites on the map, the same set after restart,
-the named queue limit and indexed cancellation. Its D8 negative control runs
-the **unchanged gate** against a separate tree with the parallel cap reverted
-to one and its own `pin-release` binary. No environment switch skips commands
-or manufactures a failing observation.
-The gate follows exactly one Farm and one Storage from their accepted requests
-to new active-site identities. Any additional site, including another Farm,
-fails the autonomous-admission fence; each checked sample must retain a free
-slot under the eight-project contract. Count parsing accepts the displayed
-capacity so the cap-one control reaches `two_projects_advance`, rather than
-failing to parse its status screen.
+The [`village-owner-order-qa` gate](acceptance-gates.md#owner-order) observes this contract in a real client.
 
 ## Settings
 
