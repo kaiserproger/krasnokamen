@@ -602,6 +602,11 @@ regression = ["{ref}"]
 {extra}'''
 
 
+def no_tests(tree, packages):
+    """The D128 guard's test lister for scratch repositories, which have no Cargo workspace to list."""
+    return {}
+
+
 class TestOnlyFixTests(unittest.TestCase):
     """A fix whose every hunk is a corrected test oracle (docs/bugs/README.md, `test_only_fix`).
 
@@ -736,7 +741,7 @@ control_b_patch = "{defect_path}"
 
     def promote(self, root, runner, **options):
         return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts),
-                              runner=runner, **options)
+                              runner=runner, **{'test_lister': no_tests, **options})
 
     def test_promotion_runs_the_old_oracle_control_and_the_defect_injection(self):
         root = self.scratch()
@@ -1566,7 +1571,8 @@ class LedgerToolTests(unittest.TestCase):
         return run
 
     def promote(self, root, runner, **kwargs):
-        return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts), runner=runner, **kwargs)
+        return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts), runner=runner,
+                              **{'test_lister': no_tests, **kwargs})
 
     def hold_sets(self, root, *indexes):
         """Hold the given promotion sets from this process (a separate open file description, so the
@@ -1642,7 +1648,6 @@ class LedgerToolTests(unittest.TestCase):
                 self.assertEqual(ran, [])
             else:
                 receipt = self.promote(root, runner, test_lister=lister, dry_run=True)
-                self.assertEqual(receipt['test_guard']['measured_on'], 'candidate')
                 self.assertEqual(receipt['test_guard']['tests']['added'], ['demo::added'])
             self.assertEqual(seen, [('value = fixed\n', True, True, ['demo']), ('value = buggy\n', False, True, ['demo'])])
 
@@ -2018,20 +2023,21 @@ class LedgerToolTests(unittest.TestCase):
         root = self.scratch()
         (root / 'src/engine.rs').write_text('value = buggy again\n')
         self.git(root, 'commit', '-qam', 'regress')
-        # The fix hunk no longer applies at HEAD, so the control falls back to the fix commit...
-        with self.assertRaisesRegex(ledger.Refused, r'not green on the tree being promoted'):
+        # The regression rewrites the fix's own line, so the fix no longer reverses on the tree being
+        # promoted: refused before any control (no historical fix_commit stands in, D131 P1-1).
+        with self.assertRaisesRegex(ledger.Refused, 'fix no longer reverses on the candidate'):
             self.promote(root, self.runner())
-        # ...but the restore is always on HEAD, where the check is red.
         self.assertEqual(self.git(root, 'worktree', 'list').count('\n'), 0)
 
-    def test_control_falls_back_to_the_fix_commit_when_hunks_do_not_apply_at_head(self):
+    def test_a_fix_whose_hunks_do_not_apply_at_head_is_refused(self):
+        """D131 P1-1: no control or guard at the historical fix_commit; re-record the fix as a patch."""
         root = self.scratch()
         (root / 'src/engine.rs').write_text('value = fixed and refactored\n')
         self.git(root, 'commit', '-qam', 'refactor')
         runner = self.runner()
-        receipt = self.promote(root, runner, dry_run=True)
-        self.assertEqual(receipt['control_tree'], 'fix_commit')
-        self.assertEqual(runner.seen, [('value = buggy\n', True), ('value = fixed and refactored\n', True)])
+        with self.assertRaisesRegex(ledger.Refused, 'fix no longer reverses on the candidate; use patch: mode'):
+            self.promote(root, runner, dry_run=True)
+        self.assertEqual(runner.seen, [])
 
     def test_uncommitted_candidate_is_checked_exactly_without_a_commit(self):
         root = self.scratch()
@@ -2054,7 +2060,7 @@ class LedgerToolTests(unittest.TestCase):
     def test_uncommitted_regression_in_the_candidate_refuses_promotion(self):
         root = self.scratch()
         (root / 'src/engine.rs').write_text('value = buggy locally\n')
-        with self.assertRaisesRegex(ledger.Refused, 'not green on the tree being promoted'):
+        with self.assertRaisesRegex(ledger.Refused, 'fix no longer reverses on the candidate'):
             self.promote(root, self.runner())
 
     def test_negative_control_that_stays_green_is_refused(self):

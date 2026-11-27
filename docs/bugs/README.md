@@ -218,9 +218,10 @@ worker, runs the negative control.
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
 
-   Patch mode also covers a committed fix whose hunks no longer reverse-apply
-   on the candidate and whose `fix_commit` tree cannot build a control (its
-   tests need the fix's new API, or the registered refs came later). The patch
+   Patch mode is also the only route for a committed fix whose hunks no longer
+   reverse-apply on the candidate: such a commit is refused ("fix no longer
+   reverses on the candidate; use patch: mode"), never controlled at its own
+   historical tree (D131). The patch
    is then the fix's non-test hunks forward-ported to the candidate: the HEAD
    equivalent of each original hunk, nothing else. It is committed beside the
    promotion receipt as `promotions/<ID>.patch` (a re-audit passes it as
@@ -320,9 +321,9 @@ worker, runs the negative control.
    (decided by Main under D123, owner may veto).
 4. Automatic negative control: the fix commit's non-test hunks (test files,
    `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
-   reverse-applied onto the candidate in a temporary worktree; only if
-   they no longer apply there, onto a worktree at `fix_commit`
-   (`control_tree: head|fix_commit` in `promote.json`). Then every ref runs
+   reverse-applied onto the candidate in a temporary worktree
+   (`control_tree: head` in `promote.json`); a fix whose hunks no longer apply
+   there is refused and re-recorded as a `patch:` (above). Then every ref runs
    and at least one must be **red** at its assertion. A control that stays
    green is refused. A ref that cannot build or run in the reversed tree is
    recorded `unrunnable`, not red — reversing a hunk that removes the API the
@@ -439,7 +440,7 @@ the row lacks `repro_check`. Stricter still:
   file (python by module path, cargo by `crates/<crate>/` plus module path). Coverage is by that exact
   mapping, never by a bare function name.
 - **Control A always runs on current code** (`control_tree: head`): a test-only fix whose test hunks do
-  not reverse onto the candidate refuses instead of falling back to a `fix_commit` worktree. A
+  not reverse onto the candidate refuses. A
   `client:<sha>` or `client-test:<sha>` fix can never be `test_only_fix`.
 - **A row may narrow control A to its own file.** One commit often corrects several oracles; a row
   names them in `control_a_files` and control A reverses only those hunks, with every listed file

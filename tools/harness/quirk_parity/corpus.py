@@ -18,10 +18,12 @@ a manifest line or the chain was altered, or when a lock line was dropped. Recor
 appends to both files; a case only changes through ``re-record`` (new version with a
 stated reason; the old version, its lock line and the old manifest stay).
 
-The lock is also checked against the trusted Git baseline (``main``): every lock line
-there must still be here, so dropping a newer version's line cannot roll a case back,
-and a case whose replayed version differs from the baseline's must have reached it by
-``re-record`` with a reason. Cases the baseline does not have yet are listed as added.
+The lock is also checked against its own Git history: every line any committed version
+of it ever held (HEAD and all its ancestors) must still be here, so dropping a newer
+version's line cannot roll a case back, and every version after a case's first must have
+been made by ``re-record`` with a reason. ``--trusted-ref`` optionally names a further
+baseline whose lock lines must be present; the receipt then lists the cases re-recorded
+and added since it.
 """
 from __future__ import annotations
 
@@ -108,6 +110,26 @@ def trusted_lock(mc_version: str, ref: str, repo: Path, path: Path = LOCK) -> li
     raise CorpusError(f"cannot read {ref}:{rel}: {shown.stderr.strip()}")
 
 
+def committed_lock(mc_version: str, repo: Path, path: Path = LOCK) -> list[dict]:
+    """Every lock line any committed version of the lock held, in HEAD and all its ancestors."""
+    rel = path.resolve().relative_to(repo.resolve()).as_posix()
+    listed = subprocess.run(["git", "rev-list", "--full-history", "HEAD", "--", rel], cwd=repo,
+                            capture_output=True, text=True, check=False)
+    if listed.returncode:
+        raise CorpusError(f"cannot list the Git history of {rel} in {repo}: {listed.stderr.strip()}")
+    rows: dict[bytes, dict] = {}
+    for commit in listed.stdout.split():
+        shown = subprocess.run(["git", "show", f"{commit}:{rel}"], cwd=repo, capture_output=True, text=True,
+                               check=False)
+        if shown.returncode:  # the commit deleted the lock: nothing to read, its parent's lines still count
+            if "does not exist" in shown.stderr or "exists on disk, but not in" in shown.stderr:
+                continue
+            raise CorpusError(f"cannot read {commit}:{rel}: {shown.stderr.strip()}")
+        for row in parse_lock(shown.stdout, mc_version, f"{commit}:{rel}"):
+            rows[canonical(row)] = row
+    return list(rows.values())
+
+
 class Corpus:
     def __init__(self, root: Path, mc_version: str, lock: Path | None = None):
         self.mc_version = mc_version
@@ -120,14 +142,15 @@ class Corpus:
             return []
         return self.manifest.read_text().splitlines()
 
-    def verify(self, trusted: list[dict] | None = None) -> dict[str, Any]:
+    def verify(self, committed: list[dict] | None = None, trusted: list[dict] | None = None) -> dict[str, Any]:
         """Integrity of the manifest chain, every case file and the Git lock.
 
         Returns `latest` (case -> newest locked manifest entry), `problems` (any one fails
         the gate), `unanchored` (recorded by another tree, not in this tree's lock) and the
-        manifest head hash and length. With `trusted` (the lock of the trusted Git baseline)
-        it also returns `re_recorded` (cases replaying another version than the baseline, each
-        reached by re-record with a reason) and `added` (cases the baseline does not have).
+        manifest head hash and length. `committed` (`committed_lock`) and `trusted` (the lock
+        of an optional Git baseline) are lines that must all still be in the lock; with
+        `trusted` it also returns `re_recorded` (cases replaying another version than the
+        baseline, with the re-record reasons) and `added` (cases the baseline does not have).
         """
         problems: list[str] = []
         entries: list[dict] = []
@@ -170,37 +193,41 @@ class Corpus:
             if versions != list(range(1, len(versions) + 1)):
                 problems.append(f"locked case {case} has versions {versions}: an older version's lock line "
                                 "was removed")
+            for version in versions[1:]:
+                step = by_key.get((case, version))
+                if step is not None and (step.get("op") != "re-record" or not step.get("reason")):
+                    problems.append(f"locked case {case} v{version} was not made by `re-record --reason`: a "
+                                    "newer version of a recorded case needs a stated reason")
             entry = by_key.get((case, versions[-1]))
             if entry is not None:
                 latest[case] = entry
         anchored = {(row["case"], row["version"]) for rows in locked.values() for row in rows}
+        here = {canonical(row) for rows in locked.values() for row in rows}
+        for source, rows in (("in the lock's Git history", committed or []), ("on the trusted baseline", trusted or [])):
+            for row in rows:
+                if canonical(row) not in here:
+                    problems.append(f"lock line of {row['case']} v{row['version']} {source} is gone: a recorded "
+                                    "case only gains versions, it never rolls back")
         state = {"latest": latest, "problems": problems, "manifest_head": prev, "entries": len(entries),
                  "unanchored": [entry for key, entry in by_key.items() if key not in anchored]}
         if trusted is not None:
-            state.update(self._against_trusted(trusted, locked, by_key, problems))
+            state.update(self._since_trusted(trusted, locked, by_key))
         return state
 
-    def _against_trusted(self, trusted: list[dict], locked: dict[str, list[dict]],
-                         by_key: dict[tuple[str, int], dict], problems: list[str]) -> dict[str, Any]:
-        """Lines of the trusted lock still present; version changes since it made by re-record."""
-        here = {canonical(row) for rows in locked.values() for row in rows}
+    @staticmethod
+    def _since_trusted(trusted: list[dict], locked: dict[str, list[dict]],
+                       by_key: dict[tuple[str, int], dict]) -> dict[str, Any]:
+        """Cases replaying a newer version than the trusted baseline (with reasons) and cases it lacks."""
         baseline: dict[str, int] = {}
         for row in trusted:
             baseline[row["case"]] = max(baseline.get(row["case"], 0), row["version"])
-            if canonical(row) not in here:
-                problems.append(f"lock line of {row['case']} v{row['version']} on the trusted baseline is gone: "
-                                "a recorded case only gains versions, it never rolls back")
         re_recorded = []
         for case, rows in sorted(locked.items()):
             newest = max(row["version"] for row in rows)
-            if case not in baseline or newest == baseline[case]:
-                continue
-            steps = [by_key.get((case, version)) or {} for version in range(baseline[case] + 1, newest + 1)]
-            if any(step.get("op") != "re-record" or not step.get("reason") for step in steps):
-                problems.append(f"{case} replays v{newest} but the trusted baseline has v{baseline[case]}: "
-                                "a newer version of a recorded case needs `re-record --reason`")
-            re_recorded.append({"case": case, "from": baseline[case], "to": newest,
-                                "reasons": [step.get("reason") for step in steps]})
+            if case in baseline and newest != baseline[case]:
+                re_recorded.append({"case": case, "from": baseline[case], "to": newest,
+                                    "reasons": [(by_key.get((case, version)) or {}).get("reason")
+                                                for version in range(baseline[case] + 1, newest + 1)]})
         return {"re_recorded": re_recorded, "added": sorted(set(locked) - set(baseline))}
 
     def load(self, entry: dict) -> dict:

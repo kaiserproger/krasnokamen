@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 from . import compare, seeded
-from .corpus import FORMAT, LOCK, Corpus, CorpusError, corpus_root, scenario_sha256, trusted_lock
+from .corpus import FORMAT, LOCK, Corpus, CorpusError, committed_lock, corpus_root, scenario_sha256, trusted_lock
 from .vanilla import (MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle, java_version, resolve_jar,
                       resolve_java)
 
@@ -430,7 +430,7 @@ def record(args, rerecord: bool = False) -> int:
     receipt: dict = {"command": "re-record" if rerecord else "record", "mc_version": args.mc_version,
                      "corpus": str(corpus.dir), "lock": str(LOCK), "cases": [], "status": "fail"}
     try:
-        state = verify_against_trusted(corpus, args)
+        state = verify_lock(corpus, args)
         if state["problems"]:
             raise CorpusError("corpus fails verification: " + "; ".join(state["problems"][:5]))
         scenarios = [resolved(s) for s in load_scenarios(args.scenario, args.family)] if (
@@ -499,7 +499,7 @@ def replay(args) -> int:
                      "corpus": str(corpus.dir), "lock": str(LOCK), "scenarios": [], "mismatches": [],
                      "restart_fault": args.restart_fault, "status": "fail"}
     try:
-        state = verify_against_trusted(corpus, args)
+        state = verify_lock(corpus, args)
         receipt["integrity"] = integrity_summary(state, args)
         if state["problems"]:
             raise CorpusError("corpus integrity: " + "; ".join(state["problems"][:5]))
@@ -560,21 +560,25 @@ def replay(args) -> int:
     return 0 if receipt["status"] == "pass" else 1
 
 
-def verify_against_trusted(corpus: Corpus, args) -> dict:
-    return corpus.verify(trusted=trusted_lock(args.mc_version, args.trusted_ref, REPO_ROOT))
+def verify_lock(corpus: Corpus, args) -> dict:
+    """The corpus against this tree's lock, every line of the lock's Git history and the optional --trusted-ref."""
+    trusted = trusted_lock(args.mc_version, args.trusted_ref, REPO_ROOT, corpus.lock) if args.trusted_ref else None
+    return corpus.verify(committed=committed_lock(args.mc_version, REPO_ROOT, corpus.lock), trusted=trusted)
 
 
 def integrity_summary(state: dict, args) -> dict:
-    return {"locked_cases": len(state["latest"]), "manifest_entries": state["entries"],
-            "manifest_head": state["manifest_head"], "problems": state["problems"],
-            "unanchored": sorted({e["case"] for e in state["unanchored"]}), "trusted_ref": args.trusted_ref,
-            "re_recorded_since_trusted": state["re_recorded"], "added_since_trusted": state["added"]}
+    summary = {"locked_cases": len(state["latest"]), "manifest_entries": state["entries"],
+               "manifest_head": state["manifest_head"], "problems": state["problems"],
+               "unanchored": sorted({e["case"] for e in state["unanchored"]}), "trusted_ref": args.trusted_ref}
+    if args.trusted_ref:
+        summary.update(re_recorded_since_trusted=state["re_recorded"], added_since_trusted=state["added"])
+    return summary
 
 
 def verify(args) -> int:
     corpus = Corpus(corpus_root(args.corpus), args.mc_version)
     try:
-        state = verify_against_trusted(corpus, args)
+        state = verify_lock(corpus, args)
     except CorpusError as error:
         print(f"quirk-parity verify: {error}")
         return 1
@@ -590,8 +594,9 @@ def parse_args(argv: list[str] | None = None) -> tuple[str, argparse.Namespace]:
     parser.add_argument("--mc-version", default=DEFAULT_MC)
     parser.add_argument("--corpus", default=None, help="corpus root (default KRASNOKAMEN_ORACLE_CORPUS "
                                                        "or <work>/oracle-corpus)")
-    parser.add_argument("--trusted-ref", default="main",
-                        help="Git ref whose corpus lock this tree may only extend (default main)")
+    parser.add_argument("--trusted-ref", default=None,
+                        help="optional Git ref whose corpus lock this tree may only extend (the lock's own Git "
+                             "history is always checked)")
     if command != "verify":
         parser.add_argument("--out", type=Path, required=True)
         parser.add_argument("--scenario", action="append", default=[])

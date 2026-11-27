@@ -21,7 +21,7 @@ from unittest import mock
 from . import ledger, profiles
 from .quirk_parity import __main__ as oracle
 from .quirk_parity import compare, guard
-from .quirk_parity.corpus import Corpus, CorpusError, read_lock, scenario_sha256, trusted_lock
+from .quirk_parity.corpus import Corpus, CorpusError, committed_lock, read_lock, scenario_sha256, trusted_lock
 
 SCENARIO = {"id": "case-a", "family": "blocks", "box": [0, 0, 0, 1, 1, 1], "setup": ["setblock 0 0 0 stone"],
             "phases": [{"name": "p", "commands": [], "ticks": 1}],
@@ -114,7 +114,7 @@ class CorpusTests(unittest.TestCase):
             self.corpus.append(doc("case-b"), op="record")
 
     def rerecorded(self) -> list[dict]:
-        """case-a v1 and a re-recorded v2; returns the lock rows (the trusted baseline in these tests)."""
+        """case-a v1 and a re-recorded v2; returns the lock rows."""
         self.corpus.append(doc(), op="record")
         self.corpus.append(dict(doc(version=2), supersedes={"version": 1}), op="re-record", reason="setup fixed")
         return read_lock("26.3", self.lock)
@@ -128,13 +128,11 @@ class CorpusTests(unittest.TestCase):
         self.assertTrue(any("case-a v2 on the trusted baseline is gone" in p for p in state["problems"]),
                         state["problems"])
 
-    def test_a_newer_version_than_the_trusted_baseline_needs_a_rerecord_reason(self):
+    def test_a_newer_version_needs_a_rerecord_reason_without_any_baseline(self):
         self.corpus.append(doc(), op="record")
-        trusted = read_lock("26.3", self.lock)
         self.corpus.append(doc(version=2), op="record")  # a fix appending v2 of an existing case
-        state = self.corpus.verify(trusted=trusted)
-        self.assertTrue(any("replays v2 but the trusted baseline has v1" in p for p in state["problems"]),
-                        state["problems"])
+        problems = self.corpus.verify()["problems"]
+        self.assertTrue(any("case-a v2 was not made by `re-record --reason`" in p for p in problems), problems)
 
     def test_rerecords_and_added_cases_since_the_trusted_baseline_are_listed(self):
         self.corpus.append(doc(), op="record")
@@ -146,7 +144,8 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(state["re_recorded"], [{"case": "case-a", "from": 1, "to": 2, "reasons": ["setup fixed"]}])
         self.assertEqual(state["added"], ["case-b"])
 
-    def test_trusted_lock_reads_the_ref_and_fails_closed_on_an_unknown_ref(self):
+    def repo(self):
+        """A Git repository holding no lock yet: (repo, lock path, git)."""
         repo = self.tmp / "repo"
         lock = repo / "tools" / "corpus-lock.jsonl"
         lock.parent.mkdir(parents=True)
@@ -156,6 +155,10 @@ class CorpusTests(unittest.TestCase):
         (repo / "README").write_text("x\n")
         git("add", "README")
         git("commit", "-q", "-m", "no lock yet")
+        return repo, lock, git
+
+    def test_trusted_lock_reads_the_ref_and_fails_closed_on_an_unknown_ref(self):
+        repo, lock, git = self.repo()
         self.assertEqual(trusted_lock("26.3", "main", repo, lock), [])
         self.corpus.append(doc(), op="record")
         lock.write_text(self.lock.read_text())
@@ -164,6 +167,22 @@ class CorpusTests(unittest.TestCase):
         self.assertEqual(trusted_lock("26.3", "main", repo, lock), read_lock("26.3", self.lock))
         with self.assertRaises(CorpusError):
             trusted_lock("26.3", "no-such-ref", repo, lock)
+
+    def test_a_lock_line_any_ancestor_committed_must_stay_even_after_a_commit_drops_it(self):
+        """D131 P1-3: no trusted ref needed, and a committed rollback is still caught once it is main."""
+        repo, lock, git = self.repo()
+        self.assertEqual(committed_lock("26.3", repo, lock), [])
+        rows = self.rerecorded()
+        lock.write_text(self.lock.read_text())
+        git("add", "-A")
+        git("commit", "-q", "-m", "v1 and v2")
+        lock.write_text(self.lock.read_text().splitlines()[0] + "\n")  # roll case-a back to v1
+        git("commit", "-q", "-am", "drop v2")  # HEAD is main: comparing with main sees nothing
+        self.lock.write_text(lock.read_text())
+        self.assertEqual(self.corpus.verify(trusted=trusted_lock("26.3", "main", repo, lock))["problems"], [])
+        self.assertEqual(sorted(map(json.dumps, committed_lock("26.3", repo, lock))), sorted(map(json.dumps, rows)))
+        problems = self.corpus.verify(committed=committed_lock("26.3", repo, lock))["problems"]
+        self.assertTrue(any("case-a v2 in the lock's Git history is gone" in p for p in problems), problems)
 
 
 class ReplayTests(unittest.TestCase):
@@ -177,7 +196,8 @@ class ReplayTests(unittest.TestCase):
                         mock.patch.object(oracle, "LOCK", self.lock),
                         mock.patch.object(oracle, "SCENARIO_DIR", self.scenarios),
                         mock.patch.object(oracle, "KNOWN_DIFFS", self.tmp / "known-diffs.json"),
-                        mock.patch.object(oracle, "trusted_lock", return_value=[])]
+                        mock.patch.object(oracle, "trusted_lock", return_value=[]),
+                        mock.patch.object(oracle, "committed_lock", return_value=[])]
         for patch in self.patches:
             patch.start()
         self.addCleanup(lambda: [patch.stop() for patch in self.patches])
@@ -381,7 +401,6 @@ class PromotionGuardTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root.parent / f"{self.root.name}-artifacts", True)
-        self.addCleanup(shutil.rmtree, self.root.parent / f"{self.root.name}-fix", True)
         self.addCleanup(shutil.rmtree, self.root, True)
         git(self.root, "init", "-q")
         git(self.root, "config", "user.email", "t@example.invalid")
@@ -422,7 +441,8 @@ class PromotionGuardTests(unittest.TestCase):
 
     def test_a_deleted_test_replaced_by_another_is_refused(self):
         diff = self.fix({"crates/demo/src/a_tests.rs": A_TESTS.replace("fn two()", "fn four()")})
-        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::a_tests::two"):
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*test identity changed: demo::a_tests::two -> "
+                                                        "missing; land the move as its own commit"):
             guard.promotion_guard(self.root, diff, self.real, patch=False)
 
     def test_a_new_ignore_is_refused(self):
@@ -434,7 +454,7 @@ class PromotionGuardTests(unittest.TestCase):
         merged = A_TESTS.replace("    assert_eq!(1, 1);\n    assert_eq!(2, 2);\n", "    assert_eq!((1, 2), (1, 2));\n")
         diff = self.fix({"crates/demo/src/a_tests.rs": merged + "\n#[test]\nfn five() {}\n"})
         record = guard.promotion_guard(self.root, diff, self.real, patch=False)
-        self.assertEqual((record["verdict"], record["measured_on"], record["packages"]), ("pass", "candidate", ["demo"]))
+        self.assertEqual((record["verdict"], record["packages"]), ("pass", ["demo"]))
         self.assertEqual((record["tests"]["baseline"], record["tests"]["after"], record["tests"]["added"]),
                          (3, 4, ["demo::a_tests::five"]))
 
@@ -475,17 +495,32 @@ class PromotionGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::b_tests::three"):
             guard.promotion_guard(self.root, patch, self.fake, patch=True)
 
-    def test_a_fix_that_no_longer_reverses_on_the_tree_is_measured_at_its_commit(self):
+    def test_a_fix_that_no_longer_reverses_on_the_candidate_is_refused(self):
+        """No historical tree stands in for the candidate: a later commit editing the fix's lines refuses."""
         diff = self.fix({"crates/demo/src/b_tests.rs": ""})
-        fix = git(self.root, "rev-parse", "HEAD")
         self.write({"crates/demo/src/b_tests.rs": "fn later() {}\n"})
         self.commit("later")
-        tree = self.root.parent / f"{self.root.name}-fix"
-        git(self.root, "worktree", "add", "-q", "--detach", str(tree), fix)
-        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*demo::b_tests::three"):
-            guard.promotion_guard(self.root, diff, self.fake, patch=False, fix_tree=lambda: tree)
-        with self.assertRaisesRegex(guard.GuardRefused, "does not reverse as a whole"):
+        with self.assertRaisesRegex(guard.GuardRefused, "fix no longer reverses on the candidate; use patch: mode"):
             guard.promotion_guard(self.root, diff, self.fake, patch=False)
+
+    def test_a_nextest_filter_outside_crates_lists_the_whole_workspace(self):
+        """A fix in `demo` that also filters out package `other`'s test through .config/nextest.toml
+        (nextest 0.9.143 leaves a default-filtered test out of `list` altogether)."""
+        self.write({"Cargo.toml": '[workspace]\nmembers = ["crates/demo", "crates/other"]\nresolver = "2"\n',
+                    "crates/other/Cargo.toml": '[package]\nname = "other"\nversion = "0.1.0"\nedition = "2021"\n',
+                    "crates/other/src/lib.rs": "#[cfg(test)]\nmod tests {\n    #[test]\n    fn kept() {}\n}\n"})
+        self.commit("second package")
+        diff = self.fix({".config/nextest.toml": '[profile.default]\ndefault-filter = "not package(other)"\n',
+                         "crates/demo/src/a_tests.rs": A_TESTS + "\n#[test]\nfn five() {}\n"})
+        listed = []
+
+        def lister(tree: Path, packages: list[str] | None) -> dict[str, bool]:
+            listed.append(packages)
+            return self.real(tree, packages)
+
+        with self.assertRaisesRegex(guard.GuardRefused, r"drops 1 test.*other::tests::kept -> missing"):
+            guard.promotion_guard(self.root, diff, lister, patch=False)
+        self.assertEqual(listed, [None, None])
 
 
 if __name__ == "__main__":

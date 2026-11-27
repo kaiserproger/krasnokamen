@@ -27,8 +27,8 @@ python3 -m tools.harness run quirk-parity -- verify
 
 The module runs the same way directly: `python3 -m tools.harness.quirk_parity
 [replay|record|re-record|verify] --out DIR ...`; every command takes
-`--mc-version` (default `26.3`, the canonical release), `--corpus DIR` and
-`--trusted-ref REF` (default `main`, the lock this tree may only extend).
+`--mc-version` (default `26.3`, the canonical release), `--corpus DIR` and the
+optional `--trusted-ref REF` (a further lock this tree may only extend).
 
 ## Toolchain and inputs
 
@@ -56,8 +56,11 @@ fresh vanilla worlds. Both recordings must accept every command and pass the
 scenario's `vanilla_expect` self-check; recordings that differ in shape (phases,
 cells, trace lengths) are refused. Where the two recordings differ (one block,
 one container, one entity's position or one field of one entity) the path
-becomes a **wildcard** that accepts only the values the recordings showed there;
-every other path must match exactly or within the scenario's own epsilon. Seeded
+becomes a **wildcard**. The wildcards of a case are matched **jointly**:
+Krasnokamen's values at all of them together must be recording 1's or recording
+2's, never a mix (a block vanilla put at one of two cells, `(block, air)` or
+`(air, block)`, does not accept `(air, air)`). Every other path must match exactly
+or within the scenario's own epsilon. Seeded
 farm variants are compared as production distributions instead: both recordings
 of every seed are vanilla samples.
 
@@ -105,33 +108,43 @@ tools/harness/quirk_parity/corpus-lock.jsonl   (Git) one line per case version t
   and copies the old manifest to `manifests/`. Cases recorded from another tree
   are anchored (lock line appended) without re-running vanilla when their
   scenario hash matches.
-- **Trusted baseline.** `record`, `replay` and `verify` also read the lock at
-  `--trusted-ref` (default `main`): a line there that is gone here fails, so
-  dropping a newer version's line cannot roll a case back. A case replaying a
-  newer version than the baseline must have reached it by `re-record --reason`;
-  the receipt lists those (`re_recorded_since_trusted`, with the reasons) apart
-  from the cases the baseline does not have yet (`added_since_trusted`).
+- **Lock history.** `record`, `replay` and `verify` read every line any committed
+  version of `corpus-lock.jsonl` ever held (HEAD and all its ancestors,
+  `git rev-list --full-history`): a line that is gone here fails, so dropping a
+  newer version's line cannot roll a case back, even once the rollback commit is
+  `main` itself. Every version after a case's first must have been made by
+  `re-record --reason` (its manifest line says so). `--trusted-ref REF` adds that
+  ref's lock lines and lists, in the receipt, the cases re-recorded
+  (`re_recorded_since_trusted`, with the reasons) and added (`added_since_trusted`)
+  since it.
 - **Scenario hash.** Everything both servers execute and the gate compares is in
   it: setup, phases, boxes, seeds, compare rules, tolerances, self-checks. Changing
   any of them, a tolerance included, needs a re-record with a stated reason.
 - **Fix and promotion commits** (`ledger promote`, `tools/harness/quirk_parity/guard.py`):
   for every core fix (commit or `patch:`) the promotion measures the tree it
   promotes (HEAD plus uncommitted state) against the same tree with the whole fix
-  reversed, test hunks included; a patch must reverse there as a whole, and a
-  committed fix that no longer does is measured at its own commit
-  (`measured_on: fix_commit`). Tests are compared by identity, `cargo nextest
-  list` of every package the fix touches on both trees: a test the tree before the
-  fix runs that the promoted tree drops, no longer compiles in (a removed `mod`
-  line) or ignores refuses the promotion; assertion counts are not compared. A
-  removed `corpus-lock.jsonl` line, or a new line for a case the baseline already
-  has, refuses it too; new cases may be added. The record is `test_guard` in
-  `promote.json`. Test-prune commits are separate, listed and reviewed commits,
-  never a row's fix.
+  reversed, test hunks included. A fix that no longer reverses there as a whole is
+  refused ("fix no longer reverses on the candidate; use patch: mode"); no
+  historical commit stands in for the candidate. Tests are compared by identity,
+  `cargo nextest list` of every package the fix touches on both trees, or of the
+  whole workspace when the fix touches a `Cargo.toml` or any path outside
+  `crates/` (`.config/nextest.toml`, `Cargo.lock`, `.cargo/`, docs, data), which
+  costs two full workspace test builds. A test the tree before the fix runs that
+  the promoted tree drops, no longer compiles in (a removed `mod` line), filters
+  out (a nextest `default-filter`) or ignores refuses the promotion; a moved test
+  changes identity ("test identity changed: <old> -> missing; land the move as its
+  own commit"); assertion counts are not compared. A removed `corpus-lock.jsonl`
+  line, or a new line for a case the baseline already has, refuses it too; new
+  cases may be added. The record is `test_guard` in `promote.json`. Test-prune
+  commits and test moves are separate, listed and reviewed commits, never a row's
+  fix.
 
 The guards' unit suites, each with a negative control (edited or removed case,
-a rolled-back or reason-less newer version, a wildcard value no recording showed,
-a dropped `mod` line, a renamed or ignored test, a patch hunk the tree does not
-hold, a removed or re-recorded lock line):
+a rolled-back or reason-less newer version, a lock line a committed ancestor held,
+a wildcard value or combination no recording showed, a dropped `mod` line, a
+renamed or ignored test, a nextest filter on another package, a patch hunk the
+tree does not hold, a fix that no longer reverses, a removed or re-recorded lock
+line):
 `python3 -m unittest tools.harness.test_quirk_oracle tools.harness.test_quirk_compare`
 and `tools.harness.test_regressions` (the guard inside `ledger promote`).
 
