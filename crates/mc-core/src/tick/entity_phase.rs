@@ -580,7 +580,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         unchanged_since,
         difficulty: state.difficulty,
         sky_darken: if state.dimension.has_weather() {
-            crate::light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
+            mc_light::sky_darken(state.day_time, state.rain_level, state.thunder_level)
         } else {
             15
         },

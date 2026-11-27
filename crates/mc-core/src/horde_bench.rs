@@ -53,7 +53,7 @@ pub(crate) fn flat_world(registry: &CoreRegistry) -> ChunkWorld {
         }
     }
     template.status = "minecraft:full".into();
-    crate::light::bake_missing(&mut template, &registry.light);
+    mc_light::bake_missing(&mut template, &registry.light);
     ChunkWorld::new(
         42,
         Arc::new(FlatTerrain(template)),

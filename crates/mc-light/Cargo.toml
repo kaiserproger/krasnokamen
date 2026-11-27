@@ -1,0 +1,22 @@
+[package]
+name = "mc-light"
+description = "Tick-owned chunk lighting: admission solver, incremental edits, worker bake (Krasnokamen)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Gated full-recompute counter read by mc-core's ChunkWorld light tests. Off by
+# default: every increment compiles out, so production admission pays nothing.
+light-counters = []
+
+[dependencies]
+mc-data = { path = "../mc-data" }
+mc-world = { path = "../mc-world" }
+rustc-hash = { workspace = true }

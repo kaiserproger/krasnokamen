@@ -589,7 +589,7 @@ fn deferred_native_metadata_rebakes_untrusted_imported_light_without_admission()
         .import_chunk(0, &imported, &registry.blocks, &registry.items)
         .unwrap();
     let mut oracle = imported.clone();
-    crate::light::bake_missing(&mut oracle, &registry.light);
+    mc_light::bake_missing(&mut oracle, &registry.light);
     generated.store(0, Ordering::Relaxed);
     let mut world = ChunkWorld::new_native(
         42,

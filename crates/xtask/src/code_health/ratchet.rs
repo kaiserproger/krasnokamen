@@ -42,7 +42,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // being a false top-level cycle node: 186 modules.
     // D124 `EntityId` in mc-domain, 2026-11-27: `target_grid` named only that
     // id from the cycle and leaves it: 185 modules.
-    cycle_modules: 185,
+    // D128 cut 3 (mc-light), 2026-11-27: the light module left mc-core; its only
+    // out-edge was the `TickState::{brightness, raw_brightness}` impl, which now
+    // lives in `world.rs` (already in the cycle): 184 modules.
+    cycle_modules: 184,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
