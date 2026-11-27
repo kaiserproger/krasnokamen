@@ -1562,52 +1562,76 @@ def _open_set_lock(parent, index):
     return os.open(str(parent / f'ledger-control-pool-{index}.lock'), os.O_CREAT | os.O_RDWR, 0o644)
 
 
-def _free_set(parent):
-    """The first set whose lock is free right now, as (index, fd), or (None, None). Non-blocking, in
-    index order: a lone promote always lands on set 1 and keeps its fixed paths, so its cargo slot
-    stays warm across runs."""
+def _free_set(parent, hold):
+    """Take the first set whose lock is free right now, appending `(index, fd)` to `hold` and
+    returning True, or returning False when every set is busy or unopenable. Non-blocking, in index
+    order: a lone promote always lands on set 1 and keeps its fixed paths, so its cargo slot stays
+    warm across runs. The fd goes into `hold` before the flock, so an interruption anywhere in here
+    leaves the caller's `finally` able to release it."""
     for index in range(1, CONTROL_POOL + 1):
-        fd = _open_set_lock(parent, index)
+        try:
+            fd = _open_set_lock(parent, index)
+        except OSError:  # an unusable lock file is an unavailable set; _waiting_set reports it
+            continue
+        hold.append((index, fd))
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as error:
+            hold.pop()
             os.close(fd)
             if error.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
                 raise
             continue
-        return index, fd
-    return None, None
+        return True
+    return False
 
 
-def _waiting_set(parent):
-    """Block until any set frees, then return it as (index, fd).
+def _waiting_set(parent, hold):
+    """Block until any set frees, then append its `(index, fd)` to `hold`.
 
     A waiter must take whichever set frees first, and the only primitive that wakes exactly when a
     given lock is released is a blocking `flock` on that lock. One blocking call cannot watch three
     files, and a queue lock around the choice would leave a set idle while the waiter sleeps behind
     the one set it queued on. So the waiter starts one helper thread per set, each blocking in its own
-    `flock(LOCK_EX)`; the first to acquire records the winner and signals an `Event`, and the others
-    stay blocked until their set frees, find the winner already chosen, release at once and exit.
-    No polling and no sleep; at most `CONTROL_POOL - 1` idle daemon threads per waiting promote.
-    Each thread's `flock` sits on its own open file description, so the holds really exclude each
-    other inside one process as well (the tests rely on that)."""
-    winner, failures = [], []
+    `flock(LOCK_EX)`; the first to acquire appends the set to `hold` and signals an `Event`, and the
+    others stay blocked until their set frees, find a set already taken (or the wait abandoned),
+    release at once and exit. No polling and no sleep; at most `CONTROL_POOL - 1` idle daemon threads
+    per waiting promote. Each thread's `flock` sits on its own open file description, so the holds
+    really exclude each other inside one process as well (the tests rely on that).
+
+    Ownership of the winning fd is always the caller's `hold`, so the caller's `finally` releases it
+    even when the wait is interrupted or abandoned: this function sets `abandoned` (which stops any
+    helper from becoming a second owner) and re-raises. A helper that fails to open or lock its set
+    closes its fd and is recorded; an error aborts the wait only when all `CONTROL_POOL` helpers
+    failed, because one broken set must not cost the waiter the other two."""
+    failures = []
     ready = threading.Event()
     guard = threading.Lock()
+    state = {'abandoned': False}
+
+    def failed(index, error):
+        with guard:
+            failures.append((index, error))
+            all_failed = len(failures) == CONTROL_POOL
+        if all_failed:
+            ready.set()
 
     def take(index):
         try:
             fd = _open_set_lock(parent, index)
+        except OSError as error:
+            failed(index, error)
+            return
+        try:
             fcntl.flock(fd, fcntl.LOCK_EX)
         except OSError as error:
-            with guard:
-                failures.append((index, error))
-            ready.set()
+            os.close(fd)
+            failed(index, error)
             return
         with guard:
-            first = not winner
+            first = not hold and not state['abandoned']
             if first:
-                winner.append((index, fd))
+                hold.append((index, fd))
         if first:
             ready.set()
             return
@@ -1617,11 +1641,16 @@ def _waiting_set(parent):
     for index in range(1, CONTROL_POOL + 1):
         threading.Thread(target=take, args=(index,), daemon=True,
                          name=f'ledger-control-pool-{index}').start()
-    ready.wait()
-    if not winner:
-        index, error = failures[0]
-        raise Refused(f'cannot reserve a control set in {parent}: ledger-control-pool-{index}.lock: {error}')
-    return winner[0]
+    try:
+        ready.wait()
+        if not hold:
+            index, error = failures[0]
+            raise Refused(f'cannot reserve a control set in {parent}: '
+                          f'ledger-control-pool-{index}.lock: {error}')
+    except BaseException:
+        with guard:
+            state['abandoned'] = True
+        raise
 
 
 @contextlib.contextmanager
@@ -1636,7 +1665,9 @@ def _control_lock(root):
     for no queue gain. The promote still runs under mem-run (the owner host's memory cap and the
     boss's one-scope policy); mem-run exports KRASNOKAMEN_HARNESS_CPU_SCOPE=1 for every command, and
     each build stage's own mem-run reuses that scope. Build tokens were removed by owner D127
-    (2026-11-27), so no token orders this lock; the sets only keep promotions off each other's trees."""
+    (2026-11-27), so no token orders this lock; the sets only keep promotions off each other's trees.
+    The winning fd lives in `hold` from the moment it is taken, so this function's `finally` releases
+    it even when the wait for a set is interrupted."""
     parent = _worktree_parent(root)
     if parent is None:
         yield 1
@@ -1646,14 +1677,15 @@ def _control_lock(root):
                       'it takes one of wt/ledger-control-pool-<k>.lock and its build stages reuse that '
                       'scope; run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness '
                       'ledger promote ...')
-    index, fd = _free_set(parent)
-    if index is None:
-        index, fd = _waiting_set(parent)
+    hold = []
     try:
-        yield index
+        if not _free_set(parent, hold):
+            _waiting_set(parent, hold)
+        yield hold[0][0]
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
+        for _, fd in hold:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 
 
 @contextlib.contextmanager
@@ -2245,11 +2277,13 @@ _LOADER_COPY_IGNORE = shutil.ignore_patterns('.git', 'build', 'node_modules', '*
                                              'logs', '.idea', '.kotlin')
 
 
-def _client_control_copy(repo, root, slot='ledger-client-control', ignore=None):
+def _client_control_copy(repo, root, slot, ignore=None):
     """A disposable copy of a sibling checkout the fix's production hunks are reversed in.
 
     The checkout itself is never edited: a promotion reverses the real pre-image in a copy that
-    carries the same source (every file except build output, `.git` and logs)."""
+    carries the same source (every file except build output, `.git` and logs). `slot` is required and
+    carries the promotion set (`...-p<k>`): two concurrent promotes sharing a copy path would delete
+    each other's tree."""
     ignore = ignore or _CLIENT_COPY_IGNORE
     parent = _worktree_parent(root) or Path(tempfile.mkdtemp(prefix='ledger-client-control-'))
     tree = parent / slot

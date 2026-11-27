@@ -380,7 +380,12 @@ worker, runs the negative control.
    target dir; the release server build checks the slot marker against the tree
    actually built. No incremental cache.
    Each has its own copy of `data/vanilla` (never links into the source tree)
-   and is removed afterwards. A real-client run in such a tree first copies its
+   and is removed afterwards. Old-version leftovers from before the pool
+   (`wt/ledger-control.lock` and the `ledger-control-{candidate,fix}`,
+   `ledger-client-control`, `ledger-loader-control` trees) and a set 2/3 tree
+   left by a killed promotion are not removed by the pool (a lone promote
+   always takes set 1): delete them by hand once no old-version lane runs.
+   A real-client run in such a tree first copies its
    evidence (reports, logs, `result.json`, screenshots; no worlds or binaries)
    to `client-artifacts/<run>/` in the promote artifact dir, and the per-ref
    `receipt` in `promote.json` points there, for red and unrunnable runs too.
