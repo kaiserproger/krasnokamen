@@ -21,7 +21,7 @@ installs ([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
   and generation-contract upgrades. Both are above `mc-core`; the edge routes
   operator commands to them. Neither is a core dependency, even for tests.
   Native codecs and recovery stay with the core's `native_checkpoint` owner.
-  Live and offline generation share `chunk_loader`'s immutable source and worker
+  Live and offline generation share `mc-chunk-loader`'s immutable source and worker
   pool, not a callback into a shared tick state.
 - `crates/mc-protocol`, `mc-data`, `mc-world`, `mc-physics` and `mc-worldgen`:
   protocol, content and shared world/physics implementation. `mc-nbt` is the
