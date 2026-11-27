@@ -12,16 +12,20 @@ fn perched(phase: Phase) -> bool {
         Phase::PerchingScanning | Phase::PerchingAttacking | Phase::PerchingFlaming
     )
 }
+
+/// Whether a player is a live, present target of the fight: not creative,
+/// not a spectator, alive and not in a locked session.
+fn targetable(state: &TickState, player: &crate::player::PlayerState) -> bool {
+    !player.creative()
+        && !player.spectator()
+        && !player.vitals.is_dead()
+        && !state.session_locked(player.connection)
+}
 fn nearest(state: &TickState, from: [f64; 3]) -> Option<(Uuid, [f64; 3])> {
     state
         .players
         .iter()
-        .filter(|(_, p)| {
-            !p.creative()
-                && !p.spectator()
-                && !p.vitals.is_dead()
-                && !state.session_locked(p.connection)
-        })
+        .filter(|(_, p)| targetable(state, p))
         .filter_map(|(id, _)| state.entities.slot_of(*id))
         .map(|s| (state.entities.row(s).uuid, state.entities.pos(s)))
         .filter(|(_, at)| distance(from, *at) < 150.0 * 150.0)
@@ -34,11 +38,7 @@ fn nearest(state: &TickState, from: [f64; 3]) -> Option<(Uuid, [f64; 3])> {
 fn target(state: &TickState) -> Option<[f64; 3]> {
     let slot = state.entities.slot_of_uuid(state.end_fight.target?)?;
     let player = state.players.get(&state.entities.body(slot).id)?;
-    (!player.creative()
-        && !player.spectator()
-        && !player.vitals.is_dead()
-        && !state.session_locked(player.connection))
-    .then(|| state.entities.pos(slot))
+    targetable(state, player).then(|| state.entities.pos(slot))
 }
 fn orbit(cycle: u32) -> [f64; 3] {
     let angle = f64::from(cycle % 12) * std::f64::consts::TAU / 12.0;
@@ -346,12 +346,7 @@ fn contact(state: &mut TickState, intents: &mut Vec<Intent>, dragon: EntityId) {
     let victims: Vec<_> = state
         .players
         .iter()
-        .filter(|(_, p)| {
-            !p.creative()
-                && !p.spectator()
-                && !p.vitals.is_dead()
-                && !state.session_locked(p.connection)
-        })
+        .filter(|(_, p)| targetable(state, p))
         .filter_map(|(id, _)| {
             state.entities.slot_of(*id).map(|s| {
                 (
