@@ -191,6 +191,17 @@ def project_named(labels: set[str]) -> bool:
     return bool(labels & set(LAYOUT_INFRASTRUCTURE)) and "Unknown blueprint" not in labels
 
 
+def _check_project_names(probe: ProbeSteps, sub: dict[str, Any], labels: set[str]) -> None:
+    named = project_named(labels)
+    sub["project_labels"] = sorted(labels)
+    # The probe raises on a failed check. Persist a negative verdict only when
+    # the client actually displayed the fallback label; missing evidence is not red.
+    if named or "Unknown blueprint" in labels:
+        _verdict(sub, "project_named", "PASS" if named else "FAIL",
+                 f"active project labels {sub['project_labels']}")
+    probe.check(f"{NAME}_project_named", named)
+
+
 def project_labels_from(names: list[str]) -> set[str]:
     """Active project labels on the Construction status page, whose slots read `<label> L<n> …`."""
     labels = set()
@@ -367,7 +378,6 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     # kinds must have been observed, or this run never reached the question. The page is opened the
     # way the D63 client offers it (hub -> Management -> Construction -> Status), never by the
     # retired `settlement menu projects` command route.
-    from .village_autonomy_qa import PROJECT_LABELS
     if not labels & set(LAYOUT_INFRASTRUCTURE):
         try:
             names = _status_names(probe)
@@ -377,13 +387,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
             sub["status_error"] = str(error)[:300]
     sub["status_reads"] = status_reads
     sub["status_slots"] = status_reads[-1] if status_reads else []
-    layout = labels & set(LAYOUT_INFRASTRUCTURE)
-    named = project_named(labels)
-    sub["project_labels"] = sorted(labels)
-    probe.check(f"{NAME}_project_named", named)
-    _verdict(sub, "project_named", "PASS" if named else "FAIL",
-             f"active project labels {sorted(labels)} (known kinds: {len(PROJECT_LABELS)}; "
-             f"layout infrastructure seen: {sorted(layout)})")
+    _check_project_names(probe, sub, labels)
     wall, gate = counts["wall_columns"], counts["gate_columns"]
     _verdict(sub, "well_built", "PASS" if len(counts["wells"]) == 1 else "FAIL",
              f"standing wells {counts['wells']} (water source ringed by eight cobblestone)")

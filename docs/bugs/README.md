@@ -362,6 +362,9 @@ worker, runs the negative control.
    (`order_available`, `upgrade_available`, `project`, `built`, `blocks`).
    Stocking, planner fencing, observation races, unknown steps and failures at
    another level remain unrunnable.
+   `buildings-qa:perimeter.project_named` records red only if the Construction
+   status page actually displayed `Unknown blueprint`; observing no layout
+   project fails the gate but is not a negative control.
    A buildings-qa `<blueprint>.<behaviour>` ref runs that one blueprint
    (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
    20-blueprint default run has one 600 s deadline and cannot pass.

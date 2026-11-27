@@ -1,9 +1,12 @@
 """Unit tests of the buildings-qa `perimeter` scenario's pure reading of the client's block scan."""
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import mock
 
-from . import regressions
+from . import ledger, regressions
 from .backends import perimeter_qa as qa
+from .backends.probe_steps import ProbeSteps
 
 # The core's wall ring for today's deepest blueprint (settlements/layout.rs RING = 30); the gate
 # takes it from the same `settlement_map_qa.LAYOUT_RING` mirror the tests below pin.
@@ -95,6 +98,21 @@ class PerimeterProjectNames(unittest.TestCase):
         self.assertTrue(qa.project_named(qa.project_labels_from(names)))
         unknown = qa.project_labels_from(["Unknown blueprint L1 · Prepared 0/24"])
         self.assertFalse(qa.project_named(unknown))
+
+    def test_layout_control_requires_an_observed_unknown_blueprint(self):
+        for status_slot, red in (("Unknown blueprint L1 · Prepared", True),
+                                 ("House L1 · Prepared", False)):
+            with self.subTest(status_slot=status_slot), TemporaryDirectory() as tmp:
+                artifact = Path(tmp)
+                labels = qa.project_labels_from([status_slot])
+                with self.assertRaisesRegex(RuntimeError, "assertion failed: perimeter_project_named") as error:
+                    with ProbeSteps(None, artifact / "buildings-qa", 10, "buildings-qa") as probe:
+                        sub = {}
+                        probe.report["buildings_acceptance"] = {"blueprints": {"perimeter": sub}}
+                        qa._check_project_names(probe, sub, labels)
+                receipt = {"status": "failed", "error": str(error.exception), "details": {}}
+                regressions._attach_failed_scenario(receipt, artifact)
+                self.assertEqual(ledger._failing_verdict(receipt, "buildings-qa", "perimeter.project_named"), red)
 
 
 class PerimeterStatusRead(unittest.TestCase):
