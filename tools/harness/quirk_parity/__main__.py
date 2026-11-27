@@ -201,8 +201,9 @@ def krasnokamen_rejections(run: dict) -> list[str]:
             if not row.split(" => ", 1)[-1].startswith(BENIGN_KRASNOKAMEN)]
 
 
-def load_known_diffs(path: Path = KNOWN_DIFFS) -> dict[str, dict]:
+def load_known_diffs(path: Path | None = None) -> dict[str, dict]:
     """Case -> {"reason", "mismatches": [ids]}: intended or accepted differences from vanilla."""
+    path = KNOWN_DIFFS if path is None else path
     if not path.is_file():
         return {}
     known = {key: value for key, value in json.loads(path.read_text()).items() if not key.startswith("_")}

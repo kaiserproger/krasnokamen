@@ -304,9 +304,23 @@ class WildcardAndKnownDiffTests(unittest.TestCase):
         self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), pigs(4.0, 8.0), wildcards=wildcards)["status"], "pass")
         for label, krasnokamen in (("unrecorded position", pigs(5.0, 8.0)), ("unrecorded health", pigs(4.0, 7.0)),
                                    ("other pig moved", pigs(4.0, 8.0, first_x=1.5)),
-                                   ("other pig hurt", pigs(4.0, 8.0, first_health=9.0))):
+                                   ("other pig hurt", pigs(4.0, 8.0, first_health=9.0)),
+                                   ("position of recording 2, health of recording 1", pigs(4.0, 6.0))):
             self.assertEqual(oracle.verdict(scenario, pigs(3.0, 6.0), krasnokamen, wildcards=wildcards)["status"],
                              "fail", label)
+
+    def test_wildcard_values_of_the_two_recordings_never_mix(self):
+        """Vanilla showed the block at one of two cells; a world holding it at neither loses it."""
+        first, second = run({"0,0,0": "minecraft:sand"}), run({"1,0,0": "minecraft:sand"})
+        problems, wildcards = oracle.recording_problems(SCENARIO, [first, second])
+        self.assertEqual(problems, [])
+        self.assertEqual(wildcards["p/blocks/0,0,0"], ["minecraft:sand", None])
+        self.assertEqual(wildcards["p/blocks/1,0,0"], [None, "minecraft:sand"])
+        for label, krasnokamen, status in (("recording 1", first, "pass"), ("recording 2", second, "pass"),
+                                           ("air at both cells", run({}), "fail"),
+                                           ("sand at both cells", run({"0,0,0": "minecraft:sand",
+                                                                      "1,0,0": "minecraft:sand"}), "fail")):
+            self.assertEqual(oracle.verdict(SCENARIO, first, krasnokamen, wildcards=wildcards)["status"], status, label)
 
     def test_legacy_wildcard_paths_without_values_need_a_rerecord(self):
         self.assertEqual(oracle.recorded_wildcards(doc()), {})
