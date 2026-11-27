@@ -13,7 +13,7 @@
 //!
 //! Wire layout (per
 //! `net.minecraft.world.level.chunk.LevelChunkSection.write`,
-//! ADR 0002 javap):
+//! `javap` evidence under decision C2 of `DECISIONS.md`):
 //!
 //! ```text
 //! for each of 24 sections, concatenated:
@@ -72,8 +72,8 @@ const DIRECT_BITS_THRESHOLD: u8 = 9;
 const BIOME_DIRECT_BITS_THRESHOLD: u8 = 4;
 
 /// Heightmap type ids — the ordinals of `Heightmap$Types` in the
-/// vanilla source, verified via `javap -p -c` (ADR 0002). Only the
-/// three entries with `Usage.CLIENT` are sent on the wire.
+/// vanilla source, verified via `javap -p -c` (decision C2 of
+/// `DECISIONS.md`). Only the three entries with `Usage.CLIENT` are sent on the wire.
 pub mod heightmap_type {
     pub const WORLD_SURFACE: i32 = 1;
     pub const MOTION_BLOCKING: i32 = 4;

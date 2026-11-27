@@ -1,7 +1,7 @@
-//! Per-block-state light metadata. When a vanilla sidecar is configured,
-//! Krasnokamen loads `data/vanilla/reports/block_light.json` as a required
-//! runtime oracle. Without a sidecar, local fallback mode builds a
-//! conservative table from the embedded blocks report.
+//! Per-block-state light metadata. `CoreRegistry` requires
+//! `<content_cache>/reports/block_light.json` at startup; a missing or invalid
+//! report fails the load. The conservative blocks-report table is a test
+//! helper, not a server fallback.
 //!
 //! - `emission` — `BlockState.getLightEmission()`, 0..=15 (luminance
 //!   the block radiates; torches=14, glowstone=15, soul_lantern=10).
@@ -14,14 +14,12 @@
 //! - `suffocating` — `BlockState.isSuffocating()`, used by gameplay
 //!   checks that require a full blocking collision shape.
 //!
-//! The script's output is data (ADR 0001); the table is loaded at
-//! server start with the same posture as `blocks.json`.
+//! The extractor's output is data (decision C1 of `DECISIONS.md`);
+//! content-cache import and selection are documented in `docs/OPERATING.md`.
 //!
 //! See `tools/extract-block-light/LightExtractor.java` for the
-//! extraction. The Rust side is intentionally schema-stable: any
-//! incompatible change ships under a bumped `version` field, the
-//! script regenerates the file, and the loader's mismatch error is
-//! surfaced as a clear runtime message.
+//! extraction. The loader checks entry count, four-field shape and value
+//! ranges. The `version` field names the vanilla release, not a schema version.
 
 use std::path::{Path, PathBuf};
 
@@ -190,11 +188,10 @@ impl BlockLightTable {
         self.faces.push(0);
     }
 
-    /// Build a runtime table from `blocks.json` when the exact vanilla
-    /// light oracle is absent. Unknown blocks are treated as opaque and
-    /// non-emissive, which keeps caves and terrain sane; known air,
-    /// transparent, and light-emitting block families get small explicit
-    /// overrides.
+    /// Build a conservative test table from a blocks report, not a startup
+    /// fallback for a missing light oracle. Unknown blocks are opaque and
+    /// non-emissive; known air, transparent and light-emitting block families
+    /// get small explicit overrides.
     #[must_use]
     pub fn conservative_from_blocks_report(report: &[BlockReport]) -> Self {
         let len = report

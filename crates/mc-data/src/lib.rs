@@ -237,8 +237,8 @@ pub struct Registry {
     pub id: Identifier,
     /// Entry identifiers in lexicographic order. `minecraft:overworld`,
     /// `minecraft:plains`, etc. Vanilla loads in registration order,
-    /// which differs; per ADR 0001 we ship our own ordering and use it
-    /// consistently in every packet we emit.
+    /// which differs; Krasnokamen uses this ordering consistently in
+    /// every packet it emits. Content provenance: decision C1 of `DECISIONS.md`.
     pub entries: Vec<Identifier>,
 }
 
