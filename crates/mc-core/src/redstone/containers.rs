@@ -67,17 +67,32 @@ fn position(pos: (i32, i32, i32)) -> BlockPos {
     }
 }
 
+/// One cell and its six axis neighbours.
+const NEIGHBOURS: [(i32, i32, i32); 7] = [
+    (0, 0, 0),
+    (1, 0, 0),
+    (-1, 0, 0),
+    (0, 1, 0),
+    (0, -1, 0),
+    (0, 0, 1),
+    (0, 0, -1),
+];
+
+/// Track an automated hopper cell and its first-tick cooldown.
+fn track_hopper(state: &mut TickState, pos: BlockPos, cooldown: u64) {
+    let cell = key(pos);
+    state.redstone_containers.hoppers.insert(cell);
+    state.redstone_containers.sleeping.remove(&cell);
+    state
+        .redstone_containers
+        .cooldowns
+        .entry(cell)
+        .or_insert(cooldown);
+}
+
 /// Wake hoppers whose own inventory or one adjacent inventory changed.
 pub(crate) fn inventory_changed(containers: &mut ContainerState, pos: BlockPos) {
-    for step in [
-        (0, 0, 0),
-        (1, 0, 0),
-        (-1, 0, 0),
-        (0, 1, 0),
-        (0, -1, 0),
-        (0, 0, 1),
-        (0, 0, -1),
-    ] {
+    for step in NEIGHBOURS {
         if let Some(cell) = super::offset(pos, step) {
             containers.sleeping.remove(&key(cell));
         }
@@ -145,13 +160,7 @@ pub(crate) fn register(state: &mut TickState, pos: BlockPos) {
     let hopper = name == "hopper";
     if state.block_entities.contains_key(&key(pos)) {
         if hopper {
-            state.redstone_containers.hoppers.insert(key(pos));
-            state.redstone_containers.sleeping.remove(&key(pos));
-            state
-                .redstone_containers
-                .cooldowns
-                .entry(key(pos))
-                .or_insert(state.tick);
+            track_hopper(state, pos, state.tick);
         }
         return;
     }
@@ -173,13 +182,7 @@ pub(crate) fn register(state: &mut TickState, pos: BlockPos) {
         state.redstone_containers.dirty.insert(key(pos));
     }
     if hopper {
-        state.redstone_containers.hoppers.insert(key(pos));
-        state.redstone_containers.sleeping.remove(&key(pos));
-        state
-            .redstone_containers
-            .cooldowns
-            .entry(key(pos))
-            .or_insert(cooldown);
+        track_hopper(state, pos, cooldown);
     }
 }
 
@@ -630,15 +633,7 @@ fn changed(state: &mut TickState, pos: BlockPos) {
     if kind(state, pos).is_some_and(automated) {
         state.redstone_containers.dirty.insert(key(pos));
     }
-    for step in [
-        (0, 0, 0),
-        (1, 0, 0),
-        (-1, 0, 0),
-        (0, 1, 0),
-        (0, -1, 0),
-        (0, 0, 1),
-        (0, 0, -1),
-    ] {
+    for step in NEIGHBOURS {
         if let Some(cell) = super::offset(pos, step) {
             super::schedule_cell(state, cell, 1, 0);
         }
