@@ -2,11 +2,12 @@
 //! snapshot.
 use super::*;
 
-/// 26.3 `ArmorStand` client flags; bit `0x10` turns the stand into a marker.
+/// 26.3 `ArmorStand` data index that holds its client flags.
 const ARMOR_STAND_DATA_INDEX: u8 = 15;
-const ARMOR_STAND_MARKER_FLAG: i8 = 0x10;
 /// Shared entity flags; `0x20` makes the stand invisible.
 const INVISIBLE_FLAG: i8 = 0x20;
+/// Armor-stand client flags; `0x10` turns the stand into a marker.
+const ARMOR_STAND_MARKER_FLAG: i8 = 0x10;
 
 /// Release one seat: clear the passenger list, then remove the stand.
 fn push_seat_release(viewer: &ViewerState, out: &mut Vec<PlannedPacket>, seat: i32) {
