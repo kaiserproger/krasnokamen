@@ -79,6 +79,13 @@ fn wait_for<T>(
         assert!(!left.is_zero(), "timed out waiting for {what}");
         match events.recv_timeout(left) {
             Ok(Event::Tick(output)) => {
+                // This child has no edge pump. The join tick queues a reliable
+                // `PlayerJoined` batch, and the tick owner halts fail-closed once a
+                // queued batch goes unconsumed for OUTBOX_STALL_LIMIT. Drain exactly
+                // as the edge does (`core_stop_tests.rs` does the same for its player),
+                // so the fixture measures the drop/lease join and not a pump that does
+                // not exist here. No assertion or threshold changes.
+                let _ = core.try_drain_outbox();
                 if let Some(value) = found(&output) {
                     return value;
                 }
