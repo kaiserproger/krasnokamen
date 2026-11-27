@@ -545,29 +545,20 @@ fn execute_inner(
             "list" => {
                 return Ok((
                     if a.len() == 1 {
-                        format!(
-                            "Teams: {}",
-                            state
-                                .scoreboard
-                                .teams
-                                .keys()
-                                .cloned()
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
+                        format!("Teams: {}", joined(state.scoreboard.teams.keys().cloned()))
                     } else {
                         format!(
                             "Members: {}",
-                            state
-                                .scoreboard
-                                .teams
-                                .get(&a[1])
-                                .ok_or("Unknown team")?
-                                .members
-                                .iter()
-                                .cloned()
-                                .collect::<Vec<_>>()
-                                .join(", ")
+                            joined(
+                                state
+                                    .scoreboard
+                                    .teams
+                                    .get(&a[1])
+                                    .ok_or("Unknown team")?
+                                    .members
+                                    .iter()
+                                    .cloned()
+                            )
                         )
                     },
                     CommandResult::Completed,
@@ -709,13 +700,7 @@ fn execute_inner(
                 return Ok((
                     format!(
                         "Objectives: {}",
-                        state
-                            .scoreboard
-                            .objectives
-                            .keys()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
+                        joined(state.scoreboard.objectives.keys().cloned())
                     ),
                     CommandResult::Completed,
                 ));
@@ -847,6 +832,11 @@ fn execute_trigger(
     );
     Ok(format!("Triggered {objective} with value {value}"))
 }
+/// Joins list entries the way vanilla's list feedback does.
+fn joined(items: impl IntoIterator<Item = String>) -> String {
+    items.into_iter().collect::<Vec<_>>().join(", ")
+}
+
 fn execute_players(
     state: &mut TickState,
     executor: EntityId,
@@ -872,13 +862,7 @@ fn execute_players(
             } else {
                 format!(
                     "Score holders: {}",
-                    state
-                        .scoreboard
-                        .scores
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    joined(state.scoreboard.scores.keys().cloned())
                 )
             },
             CommandResult::Completed,
