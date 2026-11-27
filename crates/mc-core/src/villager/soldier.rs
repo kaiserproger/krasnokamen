@@ -1,11 +1,12 @@
 //! Barracks residents use ordinary villager pathfinding and native melee hits.
 //! Sensing is local (16 blocks, bounded candidate budget) and never loads chunks.
 use super::{Activity, VillagerState};
-use crate::boundary::{BlockPos, ChangeSet, EntityEvent, Hand, SwingKind};
+use crate::boundary::{BlockPos, ChangeSet, EntityEvent};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::settlements::army::Order;
 use crate::tick::TickState;
+use mc_domain::{Hand, SwingKind};
 
 const GUARD_ENGAGEMENT_RADIUS: f64 = 12.0;
 const MELEE_RANGE_SQUARED: f64 = 4.0;
@@ -209,10 +210,10 @@ fn attack(
     let held = state.entities.row(slot).appearance.equipment[0]
         .as_ref()
         .unwrap_or(&empty);
-    let hit = crate::combat::melee_hit(
+    let hit = mc_survival::combat::melee_hit(
         &state.registry.item_rules(),
         held,
-        crate::combat::Swing {
+        mc_survival::combat::Swing {
             ticks_since_reset: 100,
             falling: false,
             on_ground: true,
@@ -224,7 +225,7 @@ fn attack(
     );
     let target_id = state.entities.body(target).id;
     let damage = hit.damage + crate::enchantments::target_damage(state, target_id, held);
-    let fire_ticks = crate::combat::fire_aspect_ticks(held);
+    let fire_ticks = mc_survival::combat::fire_aspect_ticks(held);
     let attacker = state.entities.body(slot).id;
     let seq = state.next_seq(attacker);
     intents.push(Intent {
@@ -233,7 +234,7 @@ fn attack(
         kind: IntentKind::DamageEntity {
             target: target_id,
             amount: damage,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker,
                 position: pos,

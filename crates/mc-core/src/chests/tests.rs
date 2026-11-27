@@ -3,11 +3,11 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, run_tick};
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, DigAction, EntityId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::MenuKind;
 

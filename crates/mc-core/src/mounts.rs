@@ -1,11 +1,11 @@
 //! Native mount admission, exact-stack equipment transactions and rider motion.
-use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 use mc_data::entity_attachments_26_3::attachments;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;

@@ -30,11 +30,11 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::TestRunner;
 
-use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::horde_bench::flat_world;
 use crate::registry::CoreRegistry;
 use crate::tick::{BlockEntityState, TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, DigAction, EntityId, Hand};
 use mc_inventory::ClickMode;
 
 /// Block row the players stand on: the flat world's grass top is y=63.

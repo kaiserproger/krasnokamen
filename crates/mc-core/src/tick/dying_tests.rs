@@ -22,9 +22,9 @@ fn hit(
             custom_armor: false,
             amount,
             kind: if source.is_some() {
-                crate::survival::DamageKind::Melee
+                mc_survival::DamageKind::Melee
             } else {
-                crate::survival::DamageKind::GenericKill
+                mc_survival::DamageKind::GenericKill
             },
             source,
         },

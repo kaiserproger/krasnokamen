@@ -4,9 +4,9 @@
 use mc_data::{Identifier, ItemStack};
 use mc_world::{BlockStateId, ScheduledBlockTick};
 
-use crate::boundary::{BlockPos, ChangeSet, Hand};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::tick::{TickState, spawn_item_entity};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 const FULL: u8 = 7;
 const READY: u8 = 8;

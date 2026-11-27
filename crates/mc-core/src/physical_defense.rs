@@ -9,9 +9,9 @@ use mc_data::item_profiles::{
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::Hand;
 use crate::entities::EntitySlot;
 use crate::tick::{DamagePiece, TickState};
+use mc_domain::Hand;
 
 const OWNER: &str = "__native_physical";
 
@@ -453,7 +453,7 @@ fn apply_defense(
                     _ => None,
                 });
                 let player_attack = cause.is_some_and(|id| state.players.contains_key(&id));
-                let type_id = piece.kind.type_id(piece.source, player_attack);
+                let type_id = crate::intent::hit_type_id(piece.kind, piece.source, player_attack);
                 state.registry.tags.contains_raw_id(
                     "minecraft:damage_type",
                     "minecraft:bypasses_wolf_armor",
@@ -617,7 +617,7 @@ fn apply_defense(
         let rules = state.registry.item_rules();
         let breach = crate::mace::breach(piece.source);
         if let Some(player) = state.players.get(&state.entities.body(actor).id) {
-            crate::survival::reduce_damage_after_physical(
+            mc_survival::reduce_damage_after_physical(
                 &rules,
                 &player.inventory.slots[36..40],
                 plan.damage_hp,
@@ -747,7 +747,7 @@ fn native_impact(
     piece: &DamagePiece,
 ) -> Option<PhysicalImpact> {
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind as NativeKind;
+    use mc_survival::DamageKind as NativeKind;
     let kind = match piece.kind {
         NativeKind::Melee | NativeKind::Thorns => DamageKind::Crush,
         NativeKind::Projectile | NativeKind::Cactus | NativeKind::SweetBerryBush => {
@@ -786,7 +786,7 @@ fn native_impact(
             (
                 position,
                 source,
-                crate::combat::HIT_KNOCKBACK + bonus_knockback.max(0.0),
+                mc_survival::combat::HIT_KNOCKBACK + bonus_knockback.max(0.0),
             )
         }
         Some(DamageSource::Sweep {
@@ -797,7 +797,7 @@ fn native_impact(
                 .entities
                 .slot_of(attacker)
                 .map(|slot| state.entities.row(slot).uuid),
-            crate::combat::HIT_KNOCKBACK,
+            mc_survival::combat::HIT_KNOCKBACK,
         ),
         Some(DamageSource::Projectile {
             projectile,
@@ -817,7 +817,7 @@ fn native_impact(
                     .entities
                     .slot_of(owner)
                     .map(|slot| state.entities.row(slot).uuid),
-                crate::combat::HIT_KNOCKBACK + f64::from(punch) * 0.6,
+                mc_survival::combat::HIT_KNOCKBACK + f64::from(punch) * 0.6,
             )
         }
         Some(DamageSource::Explosion { kill_credit, .. }) => (
@@ -838,7 +838,7 @@ fn native_impact(
                 .and_then(|(entity, _)| state.entities.slot_of_any(entity))
                 .map(|slot| state.entities.row(slot).uuid),
             if position.is_some() {
-                crate::combat::HIT_KNOCKBACK
+                mc_survival::combat::HIT_KNOCKBACK
             } else {
                 0.0
             },

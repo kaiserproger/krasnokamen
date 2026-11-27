@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::commands::GameMode;
 use crate::native_checkpoint::tests::read_manifest;
+use mc_domain::ConnectionId;
 
 fn join(connection: ConnectionId, name: &str) -> PlayerInput {
     PlayerInput::Join {

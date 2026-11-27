@@ -197,7 +197,7 @@ impl Running {
         mut observe: impl FnMut(
             &mc_core::boundary::TickOutput,
             &[(
-                mc_core::boundary::ConnectionId,
+                mc_domain::ConnectionId,
                 Vec<mc_core::boundary::PlayerChange>,
             )],
         ) -> Option<T>,

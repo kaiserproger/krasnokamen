@@ -15,6 +15,7 @@ workspace = true
 mc-data = { path = "../mc-data" }
 mc-domain = { path = "../mc-domain" }
 mc-inventory = { path = "../mc-inventory" }
+mc-survival = { path = "../mc-survival" }
 mc-world = { path = "../mc-world" }
 mc-worldgen = { path = "../mc-worldgen" }
 mc-physics = { path = "../mc-physics" }

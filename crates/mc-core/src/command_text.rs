@@ -296,7 +296,7 @@ fn tail_after(
 /// Player targets of a command, or vanilla's `argument.entity.notfound.player`.
 fn target_players(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: EntityId,
     target: &crate::commands::Target,
 ) -> Option<Vec<EntityId>> {
@@ -324,7 +324,7 @@ fn target_players(
 /// deliver it as system chat. Vanilla sends no feedback to the sender.
 pub(crate) fn execute_tellraw(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: EntityId,
     target: &crate::commands::Target,
     message: &mc_nbt::Tag,
@@ -357,7 +357,7 @@ pub(crate) fn execute_tellraw(
 /// work. Feedback keys are exactly vanilla's.
 pub(crate) fn execute_title(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: EntityId,
     target: &crate::commands::Target,
     action: &TitleAction,
@@ -429,7 +429,7 @@ fn push_title(state: &mut TickState, target: EntityId, change: crate::boundary::
 
 fn title_feedback(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     targets: &[EntityId],
     action: &TitleAction,
 ) {
@@ -458,7 +458,7 @@ fn title_feedback(
         );
     }
 }
-fn error_text(state: &mut TickState, connection: crate::boundary::ConnectionId, message: String) {
+fn error_text(state: &mut TickState, connection: mc_domain::ConnectionId, message: String) {
     state.push_player(connection, crate::boundary::PlayerChange::Chat { message });
 }
 

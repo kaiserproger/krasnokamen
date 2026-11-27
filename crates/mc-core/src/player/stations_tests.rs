@@ -16,7 +16,7 @@ fn stack(registry: &CoreRegistry, name: &str, count: i32) -> ItemStack {
     )
 }
 fn player(registry: &CoreRegistry, kind: MenuKind) -> PlayerState {
-    let mut player = PlayerState::new(crate::boundary::ConnectionId(81), GameMode::Survival);
+    let mut player = PlayerState::new(mc_domain::ConnectionId(81), GameMode::Survival);
     player.vitals.experience.level = 40;
     player.open_menu(&registry.item_rules(), kind, "Station".into(), &[]);
     player.initialize_station(&registry.enchantments, &registry.item_rules(), 15);

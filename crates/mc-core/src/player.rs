@@ -8,11 +8,12 @@ use mc_data::ItemStack;
 use mc_data::inventory_semantics_26_1_2::{decrement_stack, take_from_stack};
 use mc_data::statistics::{CustomStat, StatType};
 
-use crate::boundary::{ConnectionId, Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::commands::{self, Command, GameMode};
-use crate::survival::Vitals;
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{ClickOutcome, ItemRules, Menu, MenuKind, OFF_HAND, PlayerInventory, SlotRef};
+use mc_survival::Vitals;
 
 pub(crate) use reservations::NativeToolWearPlan;
 
@@ -476,9 +477,9 @@ impl PlayerState {
                 ))
             .max(0.0);
             let damage = if stalagmite {
-                crate::survival::stalagmite_damage(distance)
+                mc_survival::stalagmite_damage(distance)
             } else {
-                crate::survival::fall_damage(distance)
+                mc_survival::fall_damage(distance)
             };
             self.fall_distance = 0.0;
             return damage;
@@ -1361,7 +1362,7 @@ impl PlayerState {
                 .dropped
                 .retain(|stack| mc_inventory::enchanting::level(stack, "vanishing_curse") == 0);
             if !keep_experience {
-                self.vitals.experience = crate::survival::Experience::default();
+                self.vitals.experience = mc_survival::Experience::default();
                 effects.changes.push(self.experience_change());
             }
         }
@@ -1440,7 +1441,7 @@ impl PlayerState {
                 if *levels {
                     experience.level = *amount;
                 } else {
-                    let needed = crate::survival::Experience::points_for_level(experience.level);
+                    let needed = mc_survival::Experience::points_for_level(experience.level);
                     if *amount >= needed {
                         return effects;
                     }

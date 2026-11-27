@@ -5,11 +5,12 @@
 
 use mc_nbt::Tag;
 
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::command_args::CommandError;
 use crate::command_feedback::{text, translated};
 use crate::tick::TickState;
 use crate::tick_control::{announce_state, announce_step};
+use mc_domain::ConnectionId;
 
 const MAX_RATE: f32 = 10_000.0;
 

@@ -58,8 +58,10 @@ fn checkpoint_motion_uses_vanilla_tick_units_and_recovers_core_seconds() {
 
 #[test]
 fn checkpoint_sheep_preserves_color_and_sheared_until_regrowth() {
-    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
     use crate::tick::run_tick;
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
 
     let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
     let generator = Arc::new(mc_worldgen::TerrainGenerator::new(

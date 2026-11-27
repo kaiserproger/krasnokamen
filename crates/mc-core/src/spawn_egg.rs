@@ -1,9 +1,9 @@
 //! SpawnEggItem.useOn admission, using 26.1.2 report-authored entity_data defaults.
 
-use crate::boundary::{BlockPos, Hand};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 
 fn entity_type(state: &TickState, stack: &ItemStack, default: &Identifier) -> Option<u32> {
@@ -191,7 +191,7 @@ pub(crate) fn use_on(
     if crate::trial_spawner::block(state, clicked, "spawner").is_some() {
         return configure_spawner(state, actor, hand, clicked, type_id, &stack_snapshot, false);
     }
-    if state.difficulty == crate::survival::Difficulty::Peaceful
+    if state.difficulty == mc_survival::Difficulty::Peaceful
         && blueprint.category == crate::blueprint::MobCategory::Monster
     {
         return true;

@@ -7,10 +7,10 @@ use mc_melee_range::MeleeReach;
 use super::faction::{in_melee_range, melee_reach, reach_bound};
 use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
-use crate::boundary::{EntityEvent, Hand};
+use crate::boundary::EntityEvent;
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 // The 21..25-tick action cycle skips one 20-tick decision after each attack.
 // Count that recovery before deriving odds; do not shorten the action clocks.
@@ -692,9 +692,9 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             entity: id,
             hand: Hand::Main,
             animation: if fighter.weapon == Weapon::Spear {
-                crate::boundary::SwingKind::Stab
+                mc_domain::SwingKind::Stab
             } else {
-                crate::boundary::SwingKind::Whack
+                mc_domain::SwingKind::Whack
             },
             duration_ticks: i32::from(fighter.weapon.cycle()),
         });
@@ -899,7 +899,7 @@ fn react_blocks(
             out.events.push(EntityEvent::Swing {
                 entity: target,
                 hand: Hand::Off,
-                animation: crate::boundary::SwingKind::Whack,
+                animation: mc_domain::SwingKind::Whack,
                 duration_ticks: 10,
             });
         }
@@ -980,7 +980,7 @@ fn strike(
         out.events.push(EntityEvent::Swing {
             entity: actor,
             hand: Hand::Main,
-            animation: crate::boundary::SwingKind::None,
+            animation: mc_domain::SwingKind::None,
             duration_ticks: weapon.stagger() as i32,
         });
         combat.work.parries += 1;
@@ -1020,9 +1020,9 @@ fn strike(
             target,
             amount,
             kind: if result == Outcome::Kill {
-                crate::survival::DamageKind::GenericKill
+                mc_survival::DamageKind::GenericKill
             } else {
-                crate::survival::DamageKind::Melee
+                mc_survival::DamageKind::Melee
             },
             source: Some(DamageSource::Melee {
                 attacker: actor,

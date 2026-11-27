@@ -304,7 +304,7 @@ async fn deop_reaches_rejoining_native_session() {
         mc_core::boundary::ClientSettings {
             view_distance: 2,
             locale: "en_us".into(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         },
     )
     .await
@@ -341,7 +341,7 @@ async fn deop_reaches_every_registered_session_for_one_uuid() {
         mc_core::boundary::ClientSettings {
             view_distance: 2,
             locale: "en_us".into(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         },
     )
     .await
@@ -391,7 +391,7 @@ async fn joining_session_and_deop_keep_native_permission_order() {
         mc_core::boundary::ClientSettings {
             view_distance: 2,
             locale: "en_us".into(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         },
     );
     tokio::pin!(joining);
@@ -520,7 +520,7 @@ async fn deop_between_snapshot_and_registration_reaches_native_join() {
         mc_core::boundary::ClientSettings {
             view_distance: 2,
             locale: "en_us".into(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         },
     )
     .await
@@ -559,7 +559,7 @@ async fn deop_between_join_submission_and_late_registration_keeps_native_level()
         mc_core::boundary::ClientSettings {
             view_distance: 2,
             locale: "en_us".into(),
-            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+            chat_visibility: mc_domain::ChatVisibility::Full,
         },
     ));
     // Exactly one poll reaches the boundary and parks: the Join is submitted and,

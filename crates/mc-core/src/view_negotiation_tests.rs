@@ -1,9 +1,10 @@
 //! View-negotiation residency: transient per-connection radii bound the
 //! per-player `desired_chunks` square independently of the configured view.
 
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::horde_bench::flat_world;
 use crate::tick::{TickState, run_tick};
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn state() -> TickState {

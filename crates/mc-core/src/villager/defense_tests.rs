@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::commands::GameMode;
 use crate::entities::EntityKind;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 /// The replaced implementation: one scan over every entity per player.
 fn linear_targets(state: &TickState) -> Vec<(EntityId, [f64; 3])> {

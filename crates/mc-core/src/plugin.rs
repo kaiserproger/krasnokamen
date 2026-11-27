@@ -470,7 +470,7 @@ struct ExecutionTrace {
 struct CommittedEvents {
     tick: u64,
     events: std::collections::VecDeque<mc_script::ScriptEvent>,
-    changes: Vec<(crate::boundary::ConnectionId, crate::boundary::PlayerChange)>,
+    changes: Vec<(mc_domain::ConnectionId, crate::boundary::PlayerChange)>,
     traces: Vec<ExecutionTrace>,
 }
 
@@ -573,7 +573,7 @@ pub(crate) struct PluginRuntime {
     pub(crate) required_auth_plugins: Vec<String>,
     catalogs: crate::plugin_structures::Catalogs,
     pub(crate) stats: Arc<PluginStats>,
-    pending_changes: Vec<(crate::boundary::ConnectionId, crate::boundary::PlayerChange)>,
+    pending_changes: Vec<(mc_domain::ConnectionId, crate::boundary::PlayerChange)>,
     pending_traces: Vec<ExecutionTrace>,
     observed_players: BTreeMap<u64, mc_script::ScriptPlayerContext>,
     pub(crate) pending_events: Vec<mc_script::ScriptEvent>,
@@ -734,7 +734,7 @@ impl PluginRuntime {
 
     fn queue_change(
         &mut self,
-        connection: crate::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
         change: crate::boundary::PlayerChange,
     ) {
         if self.pending_changes.len() < mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY {
@@ -1016,7 +1016,7 @@ pub(crate) fn validate_startup(state: &mut TickState, fresh: bool) -> Result<(),
 
 pub(crate) fn player_context(
     state: &TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     operator: bool,
 ) -> Option<mc_script::ScriptPlayerContext> {
     let entity = state.connections.entity_of(connection)?;
@@ -1040,7 +1040,7 @@ pub(crate) fn player_context(
 /// never from the command text or a host-maintained synthetic player.
 pub(crate) fn route_command(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     command: &str,
     permission: u8,
 ) -> bool {
@@ -1120,7 +1120,7 @@ pub(crate) fn route_command(
 
 fn player_world_mut(
     state: &mut TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
 ) -> Option<&mut TickState> {
     if state.connections.entity_of(connection).is_some() {
         return Some(state);
@@ -1136,7 +1136,7 @@ pub(crate) fn teleport_player(
     state: &mut TickState,
     request: &mc_script::ScriptPlayerTeleportRequest,
 ) -> Option<mc_script::ScriptPlayerTeleportFailure> {
-    let connection = crate::boundary::ConnectionId(request.player_id().value());
+    let connection = mc_domain::ConnectionId(request.player_id().value());
     let Some(world) = player_world_mut(state, connection) else {
         return Some(mc_script::ScriptPlayerTeleportFailure::PlayerUnavailable);
     };
@@ -1420,7 +1420,8 @@ fn execute(
     state: &mut TickState,
     admitted: mc_script::AdmittedScriptCommand,
 ) -> Option<mc_script::ScriptEvent> {
-    use crate::boundary::{ConnectionId, PlayerChange};
+    use crate::boundary::PlayerChange;
+    use mc_domain::ConnectionId;
     use mc_script::ScriptCommand;
     let owner = admitted.plugin_id().to_owned();
     match admitted.request() {

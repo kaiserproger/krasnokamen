@@ -1,9 +1,10 @@
-use crate::boundary::{ChangeSet, ConnectionId, EntityAppearance, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, EntityAppearance, PlayerChange, PlayerInput};
 use crate::entities::{ColdFields, EntityKind};
 use crate::tick::{
     TickState, apply_player_effects, hydrate_player, respawn_player, spawn_item_entity,
 };
 use mc_data::statistics::CustomStat;
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 pub(in crate::tick) fn plugin_client_ready(state: &mut TickState, connection: &ConnectionId) {
@@ -59,7 +60,7 @@ pub(in crate::tick) fn set_locale(
 /// in place, so the next chat or system message already follows it.
 pub(in crate::tick) fn set_chat_visibility(
     state: &mut TickState,
-    (connection, visibility): (&ConnectionId, &crate::boundary::ChatVisibility),
+    (connection, visibility): (&ConnectionId, &mc_domain::ChatVisibility),
 ) {
     state
         .connections
@@ -368,7 +369,7 @@ pub(in crate::tick) fn join(
             },
         },
     );
-    if state.difficulty != crate::survival::Difficulty::Easy {
+    if state.difficulty != mc_survival::Difficulty::Easy {
         state.push_player(
             *connection,
             PlayerChange::DifficultyChanged {

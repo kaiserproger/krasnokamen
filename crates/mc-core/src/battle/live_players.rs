@@ -397,7 +397,7 @@ pub(super) fn blow(
         kind: IntentKind::DamageEntity {
             target,
             amount: SOLDIER_HIT,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(DamageSource::Melee {
                 attacker: actor,
                 position: frame.entities.pos(slot),

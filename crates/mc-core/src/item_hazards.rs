@@ -1,7 +1,7 @@
 //! Dropped-item fire immunity from report-authored damage_resistant defaults.
 
-use crate::survival::DamageKind;
 use crate::tick::TickState;
+use mc_survival::DamageKind;
 
 pub(crate) fn resistant(
     state: &TickState,

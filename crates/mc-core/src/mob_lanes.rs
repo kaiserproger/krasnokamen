@@ -466,7 +466,7 @@ pub(crate) fn snow_trails(state: &mut TickState, writes: &mut Vec<(BlockPos, u32
                     physical: None,
                     custom_armor: false,
                     amount: 1.0,
-                    kind: crate::survival::DamageKind::Generic,
+                    kind: mc_survival::DamageKind::Generic,
                     source: None,
                 },
             ));

@@ -1,10 +1,10 @@
 //! Held-use archaeology. Progress is transient; revealed loot is journaled once.
-use crate::boundary::{BlockPos, Hand};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
 use mc_data::loot::chest_26_1_2::ChestRng;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 use std::collections::HashMap;
 
@@ -312,10 +312,11 @@ mod cold_residency_tests {
     //! reread through the cold overlay and decremented there.
 
     use super::*;
-    use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+    use crate::boundary::{ChunkPos, PlayerInput};
     use crate::tick::{TickState, run_tick};
     use crate::world::ChunkWorld;
     use mc_data::Identifier;
+    use mc_domain::ConnectionId;
     use std::sync::Arc;
 
     struct Empty(u32);

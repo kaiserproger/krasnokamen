@@ -1,10 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
 use super::*;
-use crate::boundary::{ChunkPos, DigAction, Hand, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::{DigAction, Hand};
 use mc_inventory::ClickMode;
 
 const POS: BlockPos = BlockPos { x: 0, y: 201, z: 0 };

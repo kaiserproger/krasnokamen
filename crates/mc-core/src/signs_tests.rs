@@ -1,6 +1,7 @@
 use super::{Y, give, held, plant, setup};
-use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, PlayerChange, PlayerInput};
 use crate::tick::{TickState, run_tick};
+use mc_domain::{ConnectionId, Hand};
 use mc_nbt::Tag;
 
 const POS: BlockPos = BlockPos {

@@ -2,12 +2,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::boundary::{ChangeSet, Hand};
+use crate::boundary::ChangeSet;
 use crate::config::CoreError;
 use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_inventory::cartography::set_map_id;
 use serde::{Deserialize, Serialize};
 
@@ -113,7 +113,7 @@ pub struct Maps {
     pub next_id: i64,
     pub(crate) dirty: BTreeSet<i32>,
     pub(crate) cursors: BTreeMap<i32, usize>,
-    pub(crate) viewers: BTreeMap<(crate::boundary::ConnectionId, i32), (Arc<SavedMap>, u64)>,
+    pub(crate) viewers: BTreeMap<(mc_domain::ConnectionId, i32), (Arc<SavedMap>, u64)>,
     pub(crate) pending_loot: BTreeMap<(Dimension, [i32; 3]), loot::Pending>,
     pub(crate) pending_trades: BTreeMap<EntityId, trades::Pending>,
     pub(crate) attempted_trades: BTreeSet<(uuid::Uuid, u8)>,

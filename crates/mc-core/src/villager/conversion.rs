@@ -1,12 +1,11 @@
 //! Zombie infection and weakness/golden-apple cure on the single tick owner.
 use super::{Gossip, VillagerState};
 use crate::{
-    boundary::Hand,
     effects::{ActiveEffect, EffectId},
     entities::{EntityKind, EntitySlot},
     tick::TickState,
 };
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 
 fn type_id(state: &TickState, name: &str) -> Option<u32> {
     state
@@ -67,8 +66,8 @@ pub(crate) fn infect(state: &mut TickState, slot: EntitySlot, attacker: Option<E
         return false;
     }
     let chance = match state.difficulty {
-        crate::survival::Difficulty::Hard => true,
-        crate::survival::Difficulty::Normal => {
+        mc_survival::Difficulty::Hard => true,
+        mc_survival::Difficulty::Normal => {
             (state.tick ^ state.entities.row(slot).uuid.as_u128() as u64).is_multiple_of(2)
         }
         _ => false,

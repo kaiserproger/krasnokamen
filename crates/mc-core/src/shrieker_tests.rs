@@ -3,7 +3,7 @@ use crate::boundary::PlayerChange;
 use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 fn fixture(can_summon: bool) -> (TickState, EntityId, BlockPos) {
     let (mut state, player, at) = crate::hostile_tests::setup(8.0);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     let pos = BlockPos {
         x: at[0] as i32,
         y: at[1] as i32,
@@ -77,7 +77,8 @@ fn data_view_uses_live_shrieker_warning_level() {
 
 #[test]
 fn shrieker_level_event_reaches_only_nearby_same_dimension() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let (mut state, player, pos) = fixture(false);
     crate::tick::run_tick(
         &mut state,
@@ -482,8 +483,9 @@ fn lazy_warning_decay_survives_native_checkpoint_and_wal_restart() {
 
 #[test]
 fn disconnected_warning_anchor_is_journaled_and_rejoin_does_not_count_offline_ticks() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
     use crate::dimensions::Dimension;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     let mut config = crate::CoreConfig::new(directory.path().to_path_buf(), 42);
     config.view_distance = 1;

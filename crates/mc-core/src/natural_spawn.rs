@@ -266,7 +266,7 @@ fn age_pass(
     for slot in &slots {
         admitted[slot.0 as usize] = 1;
     }
-    let peaceful_difficulty = state.difficulty == crate::survival::Difficulty::Peaceful;
+    let peaceful_difficulty = state.difficulty == mc_survival::Difficulty::Peaceful;
     let no_players = !has_observers(state);
     let (expired, candidates) = state.entities.advance_admitted_ages(
         &admitted,
@@ -422,7 +422,7 @@ fn run_with(
     let spawn_monsters =
         crate::command_rules::boolean(state, crate::command_rules::BoolRule::SPAWN_MONSTERS);
     census(state, &positions);
-    if spawn_monsters && state.difficulty != crate::survival::Difficulty::Peaceful {
+    if spawn_monsters && state.difficulty != mc_survival::Difficulty::Peaceful {
         phantoms::run(state, &observers, &mut rng, changes);
         patrols::run(state, &observers, &mut rng, changes);
         hostile::run(state, &positions, &mut rng, changes);
@@ -701,7 +701,7 @@ fn despawn(
     min_parallel: usize,
 ) {
     let mut gone: Vec<EntitySlot> = Vec::new();
-    let peaceful_difficulty = state.difficulty == crate::survival::Difficulty::Peaceful;
+    let peaceful_difficulty = state.difficulty == mc_survival::Difficulty::Peaceful;
     let no_players = players.table().is_empty();
     // Read-only filter first: almost every resident body has no despawn work,
     // so the serial pass below (RNG draws, clock writes, removals in slot
@@ -1105,7 +1105,7 @@ fn admitted(
     };
     match blueprint.category {
         MobCategory::Monster => {
-            if state.difficulty == crate::survival::Difficulty::Peaceful
+            if state.difficulty == mc_survival::Difficulty::Peaceful
                 || !crate::command_rules::boolean(
                     state,
                     crate::command_rules::BoolRule::SPAWN_MONSTERS,

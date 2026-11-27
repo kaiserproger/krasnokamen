@@ -1,10 +1,11 @@
 use super::*;
-use crate::boundary::{Hand, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::villager::{VillagerProfession, VillagerTradeOffer};
 use crate::world::ChunkWorld;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::Hand;
 
 fn fixture() -> (TickState, EntityId, EntityId) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
@@ -159,7 +160,7 @@ fn nonlethal_environmental_damage_closes_merchant_menu() {
         slot,
         crate::tick::DamagePiece {
             amount: 1.0,
-            kind: crate::survival::DamageKind::Lava,
+            kind: mc_survival::DamageKind::Lava,
             source: None,
             physical: None,
             custom_armor: false,

@@ -1,13 +1,11 @@
-use crate::boundary::{
-    BlockPos, ChangeSet, ConnectionId, DigAction, Hand, PlayerChange, PlayerInput,
-};
+use crate::boundary::{BlockPos, ChangeSet, PlayerChange, PlayerInput};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{
     TickState, apply_player_effects, bucket_intent, container_cells, container_menu_for,
     container_slots, held_slot_index, inventory_transition_refused, merchant, plan_break,
     plan_placement, stations, within_block_reach, within_entity_reach,
 };
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, DigAction, EntityId, Hand};
 
 pub(in crate::tick) fn build_preview_fence(fence: &crate::build_precommit::PreviewFence) {
     fence.apply();
@@ -691,7 +689,7 @@ pub(in crate::tick) fn release_use_item(state: &mut TickState, connection: &Conn
     if crate::projectiles::weapons::release(state, entity) {
         return;
     }
-    if crate::physical_defense::set_item_use(state, slot, crate::boundary::Hand::Main, false)
+    if crate::physical_defense::set_item_use(state, slot, mc_domain::Hand::Main, false)
         || crate::physical_attacks::try_release(state, slot)
             != crate::physical_attacks::AttackAdmission::NotCustom
     {

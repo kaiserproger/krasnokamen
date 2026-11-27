@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId};
+use crate::boundary::ChangeSet;
+use mc_domain::ConnectionId;
 
 fn summon(state: &mut TickState, actor: EntityId, kind: &str, nbt: &str) -> EntityId {
     let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();

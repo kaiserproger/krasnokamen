@@ -114,9 +114,9 @@ pub(crate) fn after_move(
     let distance = reset(state, slot) - drop;
     (
         if stalagmite {
-            crate::survival::stalagmite_damage(distance)
+            mc_survival::stalagmite_damage(distance)
         } else {
-            crate::survival::fall_damage(distance)
+            mc_survival::fall_damage(distance)
         },
         stalagmite,
     )

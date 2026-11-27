@@ -1,9 +1,9 @@
-use crate::boundary::{BlockPos, ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{BlockPos, ChunkPos, PlayerInput};
 use crate::effects::EffectId;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_nbt::Tag;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
@@ -168,7 +168,7 @@ fn open(state: &mut TickState) -> Vec<(ConnectionId, Vec<crate::boundary::Player
         state,
         &[PlayerInput::UseItemOn {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: POS,
             face: 1,
             cursor: [0.5, 1.0, 0.5],

@@ -17,13 +17,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TrySendError};
 
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::command_args::CommandError;
 use crate::command_feedback::{text, translated};
 use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use mc_data::Identifier;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_nbt::{ListTag, Tag};
 use mc_world::{BlockRegistry, BlockStateId, ChunkGenerator};
 use mc_worldgen::vanilla_features::BiomeTagIndex;

@@ -1,10 +1,10 @@
 //! Hanging displays: native entity custody, with no idle per-tick work.
-use crate::boundary::{BlockPos, ChangeSet, Hand};
+use crate::boundary::{BlockPos, ChangeSet};
+use mc_domain::{Hand, EntityId};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
 use mc_placement::Face;
 use std::sync::Arc;
 
@@ -467,7 +467,7 @@ pub(crate) fn eject_on_projectile(
     if crate::entity_controls::blocks_damage(
         state,
         slot,
-        crate::survival::DamageKind::Projectile,
+        mc_survival::DamageKind::Projectile,
         owner,
     ) {
         return false;
@@ -507,7 +507,7 @@ pub(crate) fn attack(
     if crate::entity_controls::blocks_damage(
         state,
         slot,
-        crate::survival::DamageKind::Melee,
+        mc_survival::DamageKind::Melee,
         Some(actor),
     ) {
         return true;

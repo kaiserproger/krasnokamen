@@ -7,8 +7,8 @@
 //! the mirror lock and swapped in, so a reader never waits for work
 //! proportional to the connection count.
 
-use crate::boundary::ConnectionId;
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::ConnectionId;
 use crate::tick::run_tick;
 use mc_data::entity_data_value::EntityDataValue;
 
@@ -360,7 +361,7 @@ fn armor_stand_recent_environmental_damage_does_not_count_as_the_first_punch() {
             physical: None,
             custom_armor: false,
             amount: 1.0,
-            kind: crate::survival::DamageKind::InFire,
+            kind: mc_survival::DamageKind::InFire,
             source: None,
         },
     ));
@@ -582,7 +583,7 @@ fn dropped_stacks(state: &TickState, spawned: &[EntityId]) -> Vec<ItemStack> {
 fn lethal_damage(
     state: &mut TickState,
     stand: EntityId,
-    kind: crate::survival::DamageKind,
+    kind: mc_survival::DamageKind,
 ) -> Vec<ItemStack> {
     let slot = state.entities.slot_of(stand).unwrap();
     state.merge_damage.push((
@@ -607,7 +608,7 @@ fn lethal_damage(
 #[test]
 fn armor_stand_environmental_death_drops_all_eight_equipment_slots_without_mob_drop_rolls_or_wear()
 {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for kind in [DamageKind::OnFire, DamageKind::Explosion, DamageKind::Lava] {
         let (mut state, actor) = fixture();
         let (stand, _) = place(&mut state, actor);
@@ -627,7 +628,7 @@ fn armor_stand_environmental_death_drops_all_eight_equipment_slots_without_mob_d
 
 #[test]
 fn armor_stand_projectile_death_drops_named_stand_and_all_nonvanishing_equipment() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for kind in [DamageKind::Projectile, DamageKind::Fireball] {
         let (mut state, actor) = fixture();
         let (stand, _) = place(&mut state, actor);
@@ -674,7 +675,7 @@ fn armor_stand_creative_first_punch_kills_without_stand_or_equipment_drops() {
 
 #[test]
 fn armor_stand_void_kill_and_disabled_entity_drops_discard_stand_and_equipment() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for (kind, drops_enabled) in [
         (DamageKind::Void, true),
         (DamageKind::Explosion, false),

@@ -13,8 +13,10 @@ installs ([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
   decode and per-viewer presentation; it does not own gameplay state.
 - `crates/mc-core`: native tick, gameplay, intents/merge, journal and checkpoint.
   Domain crates below it own rules that name no core type: `mc-inventory`
-  (player inventory, menus, crafting and station rules; core holds the state in
-  its players, drives it from the tick and persists it). The split plan is
+  (player inventory, menus, crafting and station rules) and `mc-survival`
+  (health, hunger, air, fall, damage reduction, experience and player melee);
+  core holds their state in its players, drives it from the tick and persists
+  it. The split plan is
   [ADR 0021](decisions/0021-build-time-and-crate-split.md#d124d128-crate-cuts-hub-value-types-down-then-domain-crates).
 - `crates/mc-world-conversion`: offline Anvil import/export, native census and
   probes; `crates/mc-world-tools`: stopped-world pregeneration, prune/compact

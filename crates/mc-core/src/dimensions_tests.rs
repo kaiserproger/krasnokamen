@@ -300,9 +300,9 @@ fn global_tick_budget_follows_dimension_swaps_without_refilling() {
     swap_globals(&mut root, &mut children[0]);
 }
 
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::Arc;
 
 fn dimension_state(
@@ -1409,7 +1409,7 @@ fn held(state: &mut TickState, actor: EntityId, name: &str, count: i32) -> usize
         .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
         .unwrap();
     let player = state.players.get_mut(&actor).unwrap();
-    let slot = crate::tick::held_slot_index(player, crate::boundary::Hand::Main);
+    let slot = crate::tick::held_slot_index(player, mc_domain::Hand::Main);
     player.inventory.slots[slot] = mc_data::ItemStack::new(item, count);
     slot
 }
@@ -1563,7 +1563,7 @@ fn wrong_dimension_beds_and_anchors_explode_without_source_loot() {
             &mut state,
             actor,
             position,
-            crate::boundary::Hand::Main,
+            mc_domain::Hand::Main,
             &mut intents
         ));
         state.merge(&mut intents);
@@ -1616,7 +1616,7 @@ fn simultaneous_anchor_charges_claim_one_glowstone_once() {
     state.world.set_block(8, 150, 8, anchor);
     let input = |connection| PlayerInput::UseItemOn {
         connection: ConnectionId(connection),
-        hand: crate::boundary::Hand::Main,
+        hand: mc_domain::Hand::Main,
         position,
         face: 1,
         cursor: [0.5; 3],
@@ -1669,7 +1669,7 @@ fn anchor_offhand_glowstone_charges_instead_of_exploding() {
             .id_of(&mc_data::Identifier::parse("minecraft:glowstone").unwrap())
             .unwrap();
         let player = state.players.get_mut(&actor).unwrap();
-        let off = crate::tick::held_slot_index(player, crate::boundary::Hand::Off);
+        let off = crate::tick::held_slot_index(player, mc_domain::Hand::Off);
         player.inventory.slots[off] = mc_data::ItemStack::new(glowstone, 2);
         let anchor = rules::anchor_state(&state, block(&state, "respawn_anchor"), 1).unwrap();
         state.world.set_block(8, 150, 8, anchor);
@@ -1679,7 +1679,7 @@ fn anchor_offhand_glowstone_charges_instead_of_exploding() {
             &mut state,
             &[PlayerInput::UseItemOn {
                 connection: ConnectionId(1),
-                hand: crate::boundary::Hand::Main,
+                hand: mc_domain::Hand::Main,
                 position: crate::boundary::BlockPos { x: 8, y: 150, z: 8 },
                 face: 1,
                 cursor: [0.5; 3],
@@ -1907,7 +1907,7 @@ fn nether_bucket_water_evaporates_but_cauldron_retains_it() {
         let input = if ray {
             PlayerInput::UseItem {
                 connection: ConnectionId(1),
-                hand: crate::boundary::Hand::Main,
+                hand: mc_domain::Hand::Main,
                 yaw: 0.0,
                 pitch: 90.0,
                 sequence: 2,
@@ -1915,7 +1915,7 @@ fn nether_bucket_water_evaporates_but_cauldron_retains_it() {
         } else {
             PlayerInput::UseItemOn {
                 connection: ConnectionId(1),
-                hand: crate::boundary::Hand::Main,
+                hand: mc_domain::Hand::Main,
                 position: crate::boundary::BlockPos { x: 8, y: 149, z: 8 },
                 face: 1,
                 cursor: [0.5; 3],
@@ -1941,7 +1941,7 @@ fn nether_bucket_water_evaporates_but_cauldron_retains_it() {
         &mut state,
         &[PlayerInput::UseItemOn {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: crate::boundary::BlockPos { x: 9, y: 150, z: 8 },
             face: 1,
             cursor: [0.5; 3],
@@ -2370,7 +2370,7 @@ fn open_diamond_chest(state: &mut TickState, connection: u64) -> PlayerInput {
         state,
         &[PlayerInput::UseItemOn {
             connection: ConnectionId(connection),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: crate::boundary::BlockPos {
                 x: 10,
                 y: 150,
@@ -2671,7 +2671,7 @@ fn data_edits_a_block_entity_in_another_loaded_dimension() {
 
 #[test]
 fn rejoin_child_dimension_keeps_the_clients_chat_setting() {
-    use crate::boundary::ChatVisibility;
+    use mc_domain::ChatVisibility;
     for (dimension, split) in [
         (Dimension::Nether, false),
         (Dimension::Nether, true),

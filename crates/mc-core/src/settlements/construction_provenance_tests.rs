@@ -341,7 +341,7 @@ fn evicted_identical_player_edit_after_lapse() {
 }
 
 /// Text lines queued for `connection`, burst lines included.
-fn chat(state: &TickState, connection: crate::boundary::ConnectionId) -> Vec<String> {
+fn chat(state: &TickState, connection: mc_domain::ConnectionId) -> Vec<String> {
     fn lines(change: &crate::boundary::PlayerChange, out: &mut Vec<String>) {
         match change {
             crate::boundary::PlayerChange::Chat { message } => out.push(message.clone()),
@@ -399,7 +399,7 @@ fn paid_lot() -> (Lot, String, [i32; 3]) {
 }
 
 const OWNER: uuid::Uuid = uuid::Uuid::from_u128(77);
-const OWNER_CONNECTION: crate::boundary::ConnectionId = crate::boundary::ConnectionId(77);
+const OWNER_CONNECTION: mc_domain::ConnectionId = mc_domain::ConnectionId(77);
 
 fn log_in(lot: &mut Lot) {
     lot.state.connections.insert(
@@ -437,13 +437,13 @@ fn a_paid_remainder_refused_for_provenance_tells_the_owner_once_after_a_late_log
     log_in(&mut lot);
     lot.state
         .connections
-        .set_chat_visibility(OWNER_CONNECTION, crate::boundary::ChatVisibility::Hidden);
+        .set_chat_visibility(OWNER_CONNECTION, mc_domain::ChatVisibility::Hidden);
     shift_passes(&mut lot, 2_000, 5);
     assert_eq!(told(&lot, at), 0);
     // Chat shown again, a few passes and no stall window later: told once.
     lot.state
         .connections
-        .set_chat_visibility(OWNER_CONNECTION, crate::boundary::ChatVisibility::Full);
+        .set_chat_visibility(OWNER_CONNECTION, mc_domain::ChatVisibility::Full);
     shift_passes(&mut lot, 2_000, 5);
     assert_eq!(
         told(&lot, at),

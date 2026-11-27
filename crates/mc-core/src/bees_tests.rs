@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 use std::sync::{Arc, LazyLock};
 
 pub(crate) const POS: BlockPos = BlockPos { x: 4, y: 201, z: 4 };
@@ -285,7 +286,7 @@ fn bottle_and_shears_harvest_and_smoke_prevents_anger() {
 fn nectar_grows_crops_and_sting_poisons_then_bee_dies() {
     let mut state = state(None);
     let actor = joined(&mut state);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     place(&mut state, POS, "minecraft:wheat");
     let id = mob(&mut state, "minecraft:bee", [4.5, 202.5, 4.5]);
     let slot = state.entities.slot_of(id).unwrap();
@@ -596,7 +597,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: POS,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 2,
         }],
     );
@@ -757,7 +758,7 @@ fn non_silk_break_releases_nectar_bee_once_even_when_hive_is_replaced() {
         &[PlayerInput::Dig {
             connection: ConnectionId(1),
             position: POS,
-            action: crate::boundary::DigAction::Finish,
+            action: mc_domain::DigAction::Finish,
             sequence: 2,
         }],
     );

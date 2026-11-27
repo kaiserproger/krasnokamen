@@ -1,10 +1,10 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, PlayerInput};
-use crate::combat::{mace_attack, smash_damage};
+use crate::boundary::PlayerInput;
 use crate::effects::EffectId;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
+use mc_survival::combat::{mace_attack, smash_damage};
 
 fn held(state: &TickState, enchants: &[(&str, i32)]) -> ItemStack {
     let mut held = ItemStack::new(
@@ -158,18 +158,18 @@ fn mace_breach_reduces_armor_fraction_without_bypassing_protection() {
         });
     }
     let rules = state.registry.item_rules();
-    let normal = crate::survival::reduce_damage_with_breach(
+    let normal = mc_survival::reduce_damage_with_breach(
         &rules,
         &armor,
         10.0,
-        crate::survival::DamageKind::Melee,
+        mc_survival::DamageKind::Melee,
         0,
     );
-    let breached = crate::survival::reduce_damage_with_breach(
+    let breached = mc_survival::reduce_damage_with_breach(
         &rules,
         &armor,
         10.0,
-        crate::survival::DamageKind::Melee,
+        mc_survival::DamageKind::Melee,
         4,
     );
     assert!(breached > normal && breached < 10.0);

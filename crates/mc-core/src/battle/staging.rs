@@ -615,7 +615,7 @@ fn setup(
     if !tagged_ids(state).is_empty() || state.tickets.contains_key(OWNER) {
         return Err("battle already staged; reset it first".into());
     }
-    if state.difficulty == crate::survival::Difficulty::Peaceful {
+    if state.difficulty == mc_survival::Difficulty::Peaceful {
         return Err("battle requires a non-peaceful world: peaceful removes hostile units".into());
     }
     if !origin.iter().all(|n| n.is_finite())

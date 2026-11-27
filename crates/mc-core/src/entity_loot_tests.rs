@@ -1,9 +1,9 @@
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::{ConnectionId, EntityId};
 use crate::entities::EntityKind;
 use crate::entity_loot::*;
 use crate::intent::DamageSource;
 use crate::registry::CoreRegistry;
-use crate::survival::{DamageKind, Difficulty};
 use crate::tick::{DamagePiece, TickState};
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::loot::entity_26_1_2::{
@@ -11,7 +11,7 @@ use mc_data::loot::entity_26_1_2::{
 };
 use mc_data::loot::{LootContextItem, LootEnchantments};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_survival::{DamageKind, Difficulty};
 use std::sync::Arc;
 
 fn id(name: &str) -> Identifier {

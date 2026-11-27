@@ -22,7 +22,8 @@
 
 use std::collections::HashMap;
 
-use mc_core::boundary::{ConnectionId, TickOutput};
+use mc_core::boundary::TickOutput;
+use mc_domain::ConnectionId;
 use rayon::prelude::*;
 
 use crate::plan::{

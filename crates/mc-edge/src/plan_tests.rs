@@ -2,10 +2,10 @@
 
 use super::*;
 use mc_core::boundary::{
-    BlockChange, ChangeSet, ConnectionId, EntityAppearance, EntityEvent as BoundaryEvent,
-    EntityView, Hand, PlayerChange, TickOutput, WorldSnapshot,
+    BlockChange, ChangeSet, EntityAppearance, EntityEvent as BoundaryEvent, EntityView,
+    PlayerChange, TickOutput, WorldSnapshot,
 };
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use mc_protocol::packets::play::{
     ClientboundOpenScreen, ClientboundSystemChat, SetEntityMotion, pack_block_pos,
 };
@@ -1621,7 +1621,7 @@ fn entity_events_map() {
         changes.entity_events.push(BoundaryEvent::Swing {
             entity: EntityId(5),
             hand: Hand::Main,
-            animation: mc_core::boundary::SwingKind::Stab,
+            animation: mc_domain::SwingKind::Stab,
             duration_ticks: 23,
         });
         changes.entity_events.push(BoundaryEvent::Hurt {

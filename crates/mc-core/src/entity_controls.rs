@@ -79,7 +79,7 @@ impl Controls {
 pub(crate) fn blocks_damage(
     state: &crate::tick::TickState,
     slot: crate::entities::EntitySlot,
-    kind: crate::survival::DamageKind,
+    kind: mc_survival::DamageKind,
     attacker: Option<mc_domain::EntityId>,
 ) -> bool {
     state.entities.row(slot).controls.invulnerable

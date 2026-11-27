@@ -1,11 +1,11 @@
 //! The existing dispatcher is the test surface before and after the pilot.
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerChange, PlayerInput};
 use crate::command_execution::{CommandResult, execute};
 use crate::command_feedback::{text, translated};
 use crate::commands::parse;
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::Arc;
 
 fn fixture() -> (TickState, EntityId, EntityId) {

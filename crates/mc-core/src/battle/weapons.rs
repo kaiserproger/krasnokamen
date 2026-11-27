@@ -14,10 +14,10 @@ use rustc_hash::FxHashMap;
 use super::combat::{Action, CombatRuntime, Weapon};
 use super::faction::{in_melee_range, melee_reach, reach_bound};
 use super::{BattleState, Frame, Output, Unit};
-use crate::boundary::{EntityEvent, Hand, SwingKind};
+use crate::boundary::EntityEvent;
 use crate::tick::TickState;
 use mc_data::ItemStack;
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand, SwingKind};
 use mc_melee_range::MeleeReach;
 
 /// An archer takes his sword once an enemy is this close (blocks, centre to

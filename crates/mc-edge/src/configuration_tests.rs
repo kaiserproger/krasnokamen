@@ -144,7 +144,7 @@ async fn vanilla_configuration_completes_with_only_native_optional_bundle() {
     assert_eq!(outcome.client_language, "ru_ru");
     assert_eq!(
         outcome.client_chat_visibility,
-        mc_core::boundary::ChatVisibility::Hidden,
+        mc_domain::ChatVisibility::Hidden,
         "and the chat setting the core filters text by"
     );
 }

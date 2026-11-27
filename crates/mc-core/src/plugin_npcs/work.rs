@@ -565,7 +565,7 @@ fn endpoint_position(
         ScriptInventoryEndpoint::PlayerInventory { player_id } => {
             let entity = state
                 .connections
-                .entity_of(crate::boundary::ConnectionId(*player_id))
+                .entity_of(mc_domain::ConnectionId(*player_id))
                 .ok_or(ScriptWorkPauseReason::Unloaded)?;
             let slot = state
                 .entities

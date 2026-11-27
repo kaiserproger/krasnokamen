@@ -1,7 +1,7 @@
 use super::*;
-use crate::boundary::{ChangeSet, ConnectionId};
+use crate::boundary::ChangeSet;
 use crate::crafter::tests::{block, fixture};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 pub(crate) fn command(state: &mut TickState, actor: EntityId, text: &str) {
     let mut words = text.split_whitespace();
@@ -330,8 +330,9 @@ fn setblock_with_nbt_sends_the_block_entity_to_connected_viewers() {
 
 #[test]
 fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
-    use crate::boundary::{Hand, PlayerChange, PlayerInput};
+    use crate::boundary::{PlayerChange, PlayerInput};
     use mc_data::{Identifier, item_stack::BannerPattern};
+    use mc_domain::Hand;
 
     let (mut state, actor) = fixture(None);
     let pos = BlockPos { x: 8, y: 201, z: 8 };
@@ -417,7 +418,8 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
 
 #[test]
 fn named_unpatterned_banner_retains_custom_name() {
-    use crate::boundary::{Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::Hand;
     let (mut state, actor) = fixture(None);
     let stack = crate::crafter::tests::stack(&state, "white_banner", 1).with_custom_name("Plain");
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack;
@@ -452,7 +454,8 @@ fn named_unpatterned_banner_retains_custom_name() {
 
 #[test]
 fn placed_head_and_pot_preserve_their_item_components() {
-    use crate::boundary::{Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::Hand;
     for (item, component, field, value) in [
         (
             "minecraft:player_head",
@@ -508,8 +511,9 @@ fn placed_head_and_pot_preserve_their_item_components() {
 
 #[test]
 fn refused_patterned_banner_item_use_does_not_change_custody() {
-    use crate::boundary::{Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
     use mc_data::{Identifier, item_stack::BannerPattern};
+    use mc_domain::Hand;
 
     let (mut state, actor) = fixture(None);
     let mut banner = crate::crafter::tests::stack(&state, "white_banner", 1);

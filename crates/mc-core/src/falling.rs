@@ -461,10 +461,8 @@ fn impact(
         return;
     };
     let (kind, multiplier) = match entry.block.id.path() {
-        "anvil" | "chipped_anvil" | "damaged_anvil" => {
-            (crate::survival::DamageKind::FallingAnvil, 2.0)
-        }
-        "pointed_dripstone" => (crate::survival::DamageKind::FallingStalactite, 6.0),
+        "anvil" | "chipped_anvil" | "damaged_anvil" => (mc_survival::DamageKind::FallingAnvil, 2.0),
+        "pointed_dripstone" => (mc_survival::DamageKind::FallingStalactite, 6.0),
         _ => return,
     };
     let distance = state.entities.row(falling).controls.fall_distance;

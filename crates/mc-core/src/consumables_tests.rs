@@ -1,7 +1,8 @@
 use super::flat_player_fixture;
-use crate::boundary::{Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::effects::{ActiveEffect, EffectId};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::Hand;
 
 fn item(state: &crate::tick::TickState, name: &str, count: i32) -> ItemStack {
     ItemStack::new(

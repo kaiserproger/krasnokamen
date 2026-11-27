@@ -3,8 +3,9 @@ use crate::battle::RETARGET_TICKS;
 use crate::battle::combat::Action;
 use crate::battle::formation::Order;
 use crate::battle::live_players::tests::{facing_blue, hold};
-use crate::boundary::{ConnectionId, EntityEvent, PlayerInput};
+use crate::boundary::{EntityEvent, PlayerInput};
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 
 /// His regiment holds its ground, so nothing but an answer moves him toward
 /// PovRed, and he carries no shield: a guard's raised shield blocks the jab.
@@ -721,7 +722,7 @@ fn a_grudge_forgets_only_an_attacker_who_left_the_columns() {
         horse,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,

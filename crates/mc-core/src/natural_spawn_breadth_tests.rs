@@ -270,7 +270,7 @@ fn despawn_distances_persistence_and_peaceful_override_are_category_aware() {
     for id in &retained {
         assert!(state.entities.slot_of(*id).is_some());
     }
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     state.tick = 40;
     crate::natural_spawn::run(&mut state, &mut changes);
     for id in retained {
@@ -461,7 +461,7 @@ fn no_observers_pause_distance_despawn_but_not_peaceful_removal() {
     assert!(state.entities.slot_of(distant).is_some());
     assert_eq!(state.entities.row(slot).no_action_time, 700);
     state.entities.row_mut(slot).persistent = true;
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     state.tick = 40;
     crate::natural_spawn::run(&mut state, &mut changes);
     assert!(changes.entities_removed.contains(&distant));

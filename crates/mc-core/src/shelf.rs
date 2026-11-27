@@ -1,9 +1,9 @@
 //! Wooden shelves: three displayed stacks and powered, bounded hotbar chains.
-use crate::boundary::{BlockPos, Hand, PlayerChange};
+use crate::boundary::{BlockPos, PlayerChange};
 use crate::tick::{BlockEntityState, TickState};
 use mc_data::ItemStack;
 use mc_data::block_entity_kinds::BlockEntityKind;
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 fn key(pos: BlockPos) -> (i32, i32, i32) {
     (pos.x, pos.y, pos.z)

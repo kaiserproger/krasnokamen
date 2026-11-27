@@ -54,7 +54,7 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
     state.entities.set_kind(
         player_slot,
         EntityKind::Player {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
         },
     );
     let collect = |state: &TickState, intents: &mut Vec<Intent>| {
@@ -282,7 +282,7 @@ fn synthetic_player_body_keeps_global_motion_admission_without_player_state() {
     state.entities.set_kind(
         slot,
         EntityKind::Player {
-            connection: crate::boundary::ConnectionId(991),
+            connection: mc_domain::ConnectionId(991),
         },
     );
     let body = state.entities.body_mut(slot);
@@ -2315,7 +2315,7 @@ fn sensors_damage_commit_replaces_target_with_attacker() {
             physical: None,
             custom_armor: false,
             amount: 1.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: second,
                 position: [15.5, 101.0, 8.5],
@@ -2429,7 +2429,7 @@ fn parallel_dense_admission_marks_match_the_serial_marks_and_the_slot_oracle() {
     state.entities.set_kind(
         player_slot,
         EntityKind::Player {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
         },
     );
     state.world.set_active_chunks(

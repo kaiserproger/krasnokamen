@@ -9,12 +9,12 @@
 
 use std::sync::Arc;
 
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput, TickTimes};
+use crate::boundary::{ChunkPos, PlayerInput, TickTimes};
 use crate::config::CoreError;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 #[cfg(test)]
 #[path = "merge_cost_tests.rs"]

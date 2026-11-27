@@ -201,7 +201,9 @@ async fn command(runtime: &crate::test_support::Running, text: &str) {
 
 #[tokio::test]
 async fn rc5_hive_item_export_import_place_release_preserves_native_bee() {
-    use mc_core::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+    use mc_core::boundary::{BlockPos, PlayerInput};
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     use mc_world::native::NativeCheckpoint;
     use mc_world::{BlockStateId, Chunk, ChunkPos};
     let temp = tempfile::tempdir().unwrap();

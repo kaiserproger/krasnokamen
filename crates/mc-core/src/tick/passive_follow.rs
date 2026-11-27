@@ -2,11 +2,11 @@
 //! No retained target, allocation, or world-wide animal scan: children query
 //! the existing chunk membership, players share the entity-phase target grid.
 use super::{ReadRow, StepCtx};
-use crate::boundary::{ChunkPos, ConnectionId, Hand};
+use crate::boundary::ChunkPos;
 use crate::entities::EntityKind;
 use crate::player::PlayerState;
 use crate::target_grid::{TargetGrid, distance};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
 use rustc_hash::FxHashMap;
 use std::collections::BTreeSet;
 

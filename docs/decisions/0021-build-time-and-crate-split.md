@@ -397,6 +397,20 @@ largest cycle drops from 185 to 183 modules (`inventory`, `command_items`);
 code-health keeps counting the crate's literals and `.path()` comparisons
 (`split_crates` in `ratchet.rs`), so the move loosens no anti-pattern ceiling.
 
+**`mc-survival`:** `survival.rs` (health, hunger, air, fall, damage reduction,
+experience) and `combat.rs` (player melee damage, knockback, mace smash), with
+their pure tests, become the crate by `git mv`. Out-edges cut:
+
+| Edge | Cut |
+|---|---|
+| `enchantments::breach_damage` | moves into the crate (armor-fraction formula; `entity_loot` imports it) |
+| `enchantments::density_damage` | moves into `combat.rs`, its only caller |
+| `intent::DamageSource` in `DamageKind::{type_name,type_id}` | the source-aware identity (command type, falling mace smash, projectile name) becomes `intent::{hit_type_name,hit_type_id}` beside `DamageSource`; `DamageKind::type_name(player_attack)` keeps the kind-only identity |
+
+`command_damage_tests` pins every admitted command identity through
+`hit_type_name`/`hit_type_id`. The crate is in `split_crates`. No behaviour,
+encoded record or call order changes.
+
 **Build effect.** An edit inside a lower crate still rebuilds every crate above
 it (`mc-core`, then the server), so the server edit loop changes only by the
 lines that left `mc-core`; the crate's own test loop (`cargo test -p

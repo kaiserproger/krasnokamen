@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 
 fn fixture() -> (TickState, EntityId) {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
@@ -1180,13 +1181,13 @@ fn fireball_and_lightning_preserve_fire_and_armor_mitigation_categories() {
     ];
     let rules = state.registry.item_rules();
     for kind in [DamageKind::Fireball, DamageKind::Lightning] {
-        assert!(crate::survival::reduce_damage(&rules, &armor, 6.0, kind) < 6.0);
+        assert!(mc_survival::reduce_damage(&rules, &armor, 6.0, kind) < 6.0);
         let mut effects = crate::effects::ActiveEffects::default();
         effects.add(ActiveEffect::new(EffectId::FireResistance, 200, 0));
         assert_eq!(effects.reduce_damage(kind, 6.0), 0.0);
     }
     assert_eq!(
-        crate::survival::reduce_damage(&rules, &armor, 6.0, DamageKind::Generic),
+        mc_survival::reduce_damage(&rules, &armor, 6.0, DamageKind::Generic),
         6.0
     );
 }
@@ -1403,7 +1404,7 @@ fn trial_wind_charge_player_throw_boosts_owner_and_protects_next_landing() {
         &mut state,
         &[PlayerInput::UseItem {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             yaw: 0.0,
             pitch: 90.0,
             sequence: 1,
@@ -1705,7 +1706,7 @@ fn variant_eggs_hatch_chicken_with_variant_metadata() {
             &mut state,
             owner,
             chicken,
-            crate::boundary::Hand::Main
+            mc_domain::Hand::Main
         ));
         let appearance = &state
             .entities

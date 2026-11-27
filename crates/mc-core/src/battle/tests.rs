@@ -704,7 +704,7 @@ fn deferred_multi_dimension_commands_invalidate_facts_before_the_travel_drain() 
     state
         .other_dimensions
         .insert(crate::dimensions::Dimension::Nether, Box::new(nether));
-    let connection = crate::boundary::ConnectionId(1);
+    let connection = mc_domain::ConnectionId(1);
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
@@ -944,7 +944,7 @@ fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() 
             [8.5, 64.0, 8.5],
         );
         let near = if player {
-            let connection = crate::boundary::ConnectionId(1);
+            let connection = mc_domain::ConnectionId(1);
             crate::tick::run_tick(
                 &mut state,
                 &[crate::boundary::PlayerInput::Join {

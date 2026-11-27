@@ -997,9 +997,9 @@ fn review_resident_hit(
             custom_armor: false,
             amount,
             kind: if source.is_some() {
-                crate::survival::DamageKind::Melee
+                mc_survival::DamageKind::Melee
             } else {
-                crate::survival::DamageKind::GenericKill
+                mc_survival::DamageKind::GenericKill
             },
             source,
         },
@@ -1049,7 +1049,7 @@ fn review_resident_death_reaches_daily_safety_once_and_expires() {
 #[test]
 fn review_hard_infection_is_not_a_resident_death() {
     let mut state = fixture();
-    state.difficulty = crate::survival::Difficulty::Hard;
+    state.difficulty = mc_survival::Difficulty::Hard;
     let source = town(&mut state, "source", 8, 32);
     let victim = resident(&mut state, source, 10.5);
     let zombie_type = state.registry.entity_type_id("minecraft:zombie").unwrap();

@@ -506,10 +506,11 @@ fn admiring_survives_native_checkpoint_restart_and_anvil_export() {
 
 #[test]
 fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
     use crate::dimensions::Dimension;
     use crate::journal::{CheckpointManifest, JournalWriter, replay_batches};
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
+    use mc_domain::ConnectionId;
     use mc_world::native::NativeCheckpoint;
 
     for dropped in [false, true] {

@@ -400,7 +400,8 @@ fn empty_runtime_world_publishes_initial_three_dimension_native_checkpoint() {
 
 #[test]
 fn inhabited_time_production_tick_wal_recovers_and_closes_without_players_after_restart() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
     config.simulation_distance = 0;
@@ -966,7 +967,8 @@ async fn native_save_ack_publishes_durable_checkpoint_before_shutdown() {
 
 #[test]
 fn custom_name_visible_survives_native_store_restart_without_opaque_shadow() {
-    use crate::boundary::{ChangeSet, ConnectionId};
+    use crate::boundary::ChangeSet;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(directory.path().to_owned(), 42);
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
@@ -1236,9 +1238,10 @@ fn statistics_native_checkpoint_restart_and_wal_postimage_restore() {
 
 #[test]
 fn statistics_only_patch_and_non_statistics_full_player_postimage() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
     use crate::journal::JournalEntry;
     use mc_data::statistics::CustomStat;
+    use mc_domain::ConnectionId;
 
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
@@ -1287,9 +1290,10 @@ fn statistics_only_patch_and_non_statistics_full_player_postimage() {
 
 #[test]
 fn idle_statistics_wal_bytes_compare_full_compact_and_lazy_for_ten_players() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
     use crate::journal::JournalEntry;
     use mc_data::statistics::CustomStat;
+    use mc_domain::ConnectionId;
 
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);

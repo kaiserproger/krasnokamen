@@ -1,9 +1,9 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::{Arc, LazyLock};
 
 struct Empty(u32, &'static str);
@@ -716,7 +716,7 @@ fn hurt_axolotl_in_water_plays_dead_and_regenerates() {
                 physical: None,
                 custom_armor: false,
                 amount: 1.0,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: Some(crate::intent::DamageSource::Melee {
                     attacker: player,
                     position: [8.5, 80.0, 8.5],

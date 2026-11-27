@@ -5,8 +5,9 @@ use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemStack};
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{ConnectionId, Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::commands::GameMode;
+use mc_domain::{ConnectionId, Hand};
 use mc_inventory::ClickMode;
 use mc_inventory::{ItemRules, MenuKind, OFF_HAND};
 
@@ -335,7 +336,7 @@ fn death_drops_every_stack_exactly_once() {
     assert!(p.inventory.slots.iter().all(ItemStack::is_empty));
     assert_eq!(total(&p, &died, STONE), 12);
     assert_eq!(total(&p, &died, APPLE), 4);
-    assert_eq!(p.vitals.experience, crate::survival::Experience::default());
+    assert_eq!(p.vitals.experience, mc_survival::Experience::default());
 }
 
 #[test]

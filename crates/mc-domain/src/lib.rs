@@ -9,6 +9,45 @@
 )]
 pub struct EntityId(pub i32);
 
+/// Player identity for the lifetime of one connection, assigned by the edge.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct ConnectionId(pub u64);
+
+/// The client's chat setting: which text the server may send it (vanilla
+/// `ChatVisiblity`). `System` is "commands only": no player chat, but command
+/// feedback and other system messages; `Hidden` receives neither.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum ChatVisibility {
+    #[default]
+    Full,
+    System,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Hand {
+    Main,
+    Off,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum DigAction {
+    Start,
+    Cancel,
+    Finish,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwingKind {
+    None,
+    Whack,
+    Stab,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameMode {
     Survival,

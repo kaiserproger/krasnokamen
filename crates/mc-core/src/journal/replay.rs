@@ -50,7 +50,7 @@ pub struct Replay {
     pub(crate) recovered_held_ticks: u64,
     pub(crate) sim_debt_anchored_since: Option<u64>,
     pub border: crate::command_border::Border,
-    pub difficulty: crate::survival::Difficulty,
+    pub difficulty: mc_survival::Difficulty,
     pub default_game_mode: crate::commands::GameMode,
     pub gamerules: BTreeMap<String, String>,
     /// Domain-owned settlement and migration post-images for this dimension.

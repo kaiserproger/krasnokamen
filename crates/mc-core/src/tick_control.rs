@@ -19,11 +19,12 @@
 
 use std::time::Duration;
 
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::command_feedback::text;
 use crate::config::CoreError;
 use crate::tick::TickState;
 use crate::weather::GameClockImage;
+use mc_domain::ConnectionId;
 
 /// Vanilla `TickRateManager.tickrate` default.
 pub const DEFAULT_RATE: f32 = 20.0;

@@ -1,8 +1,9 @@
 use super::{flat_player_fixture, join};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::scoreboard::{self, ScoreboardCommand};
-use crate::survival::DamageKind;
 use crate::tick::DamagePiece;
+use mc_domain::ConnectionId;
+use mc_survival::DamageKind;
 
 #[test]
 fn damage_scoreboard_auto_criteria_accept_authoritative_values() {
@@ -157,9 +158,9 @@ fn damage_scoreboard_damage_identities_are_distinct_and_registry_backed() {
         (DamageKind::Stalagmite, "stalagmite"),
     ] {
         let expected = format!("minecraft:{name}");
-        assert_eq!(kind.type_name(None, false), expected);
+        assert_eq!(kind.type_name(false), expected);
         assert_eq!(
-            mc_data::required_registry_entry("damage_type", kind.type_id(None, false) as u32)
+            mc_data::required_registry_entry("damage_type", kind.type_id(false) as u32)
                 .unwrap()
                 .as_str(),
             expected

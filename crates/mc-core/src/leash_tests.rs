@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, Hand, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::mounts::tests::{fixture, hold, slot, spawn, use_entity};
 use crate::tick::run_tick;
+use mc_domain::{ConnectionId, Hand};
 #[test]
 fn leash_attach_secondary_detach_and_distance_break_transfer_one_lead() {
     let (mut state, actor, pos) = fixture();

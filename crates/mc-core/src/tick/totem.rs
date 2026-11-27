@@ -1,12 +1,13 @@
 //! Lethal-hit interception, before death/drop/plugin notifications.
-use crate::boundary::{Hand, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::effects::{ActiveEffect, EffectId};
 use crate::player::PlayerState;
 use crate::registry::CoreRegistry;
-use crate::survival::DamageKind;
 use mc_data::ItemStack;
 use mc_data::data_component_types_26_1_2 as component_types;
 use mc_data::item_stack::death_protection::{self, DeathEffect, EffectTargets, Sound};
+use mc_domain::Hand;
+use mc_survival::DamageKind;
 
 pub(super) struct Rescue {
     pub used: ItemStack,

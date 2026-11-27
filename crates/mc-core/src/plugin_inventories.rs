@@ -6,8 +6,9 @@ use mc_script::{ScriptInventoryEndpoint as Endpoint, ScriptOperationFailure as F
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::boundary::{BlockPos, ConnectionId};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 mod reservations;
 pub(crate) use reservations::*;
 mod floors;

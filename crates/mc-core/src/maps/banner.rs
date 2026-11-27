@@ -1,7 +1,7 @@
 use super::Banner;
-use crate::boundary::{BlockPos, Hand};
+use crate::boundary::BlockPos;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_inventory::cartography::map_id;
 use std::sync::Arc;
 

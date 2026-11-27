@@ -11,10 +11,11 @@
 use std::sync::Arc;
 
 use crate::battle::staging::{BattleCommand, execute};
-use crate::boundary::{ChangeSet, ConnectionId, PlayerInput, TickTimes};
+use crate::boundary::{ChangeSet, PlayerInput, TickTimes};
 use crate::projectiles::PostTimes;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
+use mc_domain::ConnectionId;
 
 const PHASES: [&str; 13] = [
     "input",

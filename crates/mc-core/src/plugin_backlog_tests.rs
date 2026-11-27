@@ -8,9 +8,10 @@
 
 use std::task::{Context, Poll, Waker};
 
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::plugin_tests::{fixture, join_native_player};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 
 const COMMANDS_PER_TICK: usize = 64;
 const TICKS: u64 = 64;

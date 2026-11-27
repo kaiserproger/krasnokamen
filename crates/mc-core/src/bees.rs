@@ -1,12 +1,12 @@
 //! Bee pollination, hive custody and harvesting on the native tick owner.
 //! Save keys and metadata verified against the 26.1.2 Bee/BeehiveBlockEntity bytecode.
-use crate::boundary::{BlockPos, ChangeSet, Hand};
+use crate::boundary::{BlockPos, ChangeSet};
+use mc_domain::{Hand, EntityId};
 use crate::config::CoreError;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -1124,7 +1124,7 @@ pub(crate) fn run(
                             physical: None,
                             custom_armor: false,
                             amount: 2.0,
-                            kind: crate::survival::DamageKind::Melee,
+                            kind: mc_survival::DamageKind::Melee,
                             source: Some(crate::intent::DamageSource::Melee {
                                 attacker: id,
                                 position: p,
@@ -1418,8 +1418,8 @@ pub(crate) fn accepted_hit(
         bee.angry_at = None;
         crate::projectiles::embedded_projectiles::sting(state, victim);
         let duration = match state.difficulty {
-            crate::survival::Difficulty::Hard => 360,
-            crate::survival::Difficulty::Normal => 200,
+            mc_survival::Difficulty::Hard => 360,
+            mc_survival::Difficulty::Normal => 200,
             _ => 0,
         };
         if duration > 0 {

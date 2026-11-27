@@ -8,8 +8,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use mc_core::boundary::ConnectionId;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use serde::Deserialize;
 use uuid::Uuid;
 

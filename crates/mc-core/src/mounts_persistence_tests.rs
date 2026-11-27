@@ -100,7 +100,9 @@ fn actual_region_checkpoint_and_wal_tail_restore_tame_owner_collar_and_equipment
 
 #[test]
 fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
-    use crate::boundary::{ConnectionId, Hand, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     for leaving in [1, 2] {
         let (mut state, actor, pos) = fixture();
         let first_uuid = state.entities.row(slot(&state, actor)).uuid;
@@ -266,7 +268,7 @@ fn native_mounts_fixture(
     run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid,
             name: "rider".into(),
             permission_level: 0,
@@ -275,7 +277,7 @@ fn native_mounts_fixture(
     state.world.ensure_blocking(&state.desired_chunks());
     let actor = state
         .connections
-        .entity_of(crate::boundary::ConnectionId(1))
+        .entity_of(mc_domain::ConnectionId(1))
         .unwrap();
     let pos = [8.5, 200.0, 8.5];
     for x in 5..=11 {
@@ -388,7 +390,7 @@ fn mounts_plugin_unlock_restores_pending_seat_without_waiting_for_active_tick() 
     let pig_slot = slot(&state, pig);
     state.entities.set_riders(pig_slot, vec![uuid]);
     state.require_plugin_login = true;
-    let connection = crate::boundary::ConnectionId(2);
+    let connection = mc_domain::ConnectionId(2);
     run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
@@ -426,7 +428,7 @@ fn mounts_plugin_unlock_restores_pending_seat_without_waiting_for_active_tick() 
         &[crate::boundary::PlayerInput::InteractEntity {
             connection,
             target,
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             location: [0.0; 3],
         }],
     );
@@ -464,7 +466,8 @@ fn mounts_plugin_unlock_restores_pending_seat_without_waiting_for_active_tick() 
 
 #[test]
 fn mounts_clean_core_shutdown_and_reopen_keep_the_pending_rider() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
     config.view_distance = 0;
@@ -528,7 +531,8 @@ fn mounts_clean_core_shutdown_and_reopen_keep_the_pending_rider() {
 fn reopen_mount_without_passenger(
     config: &CoreConfig,
 ) -> (TickState, mc_domain::EntityId, uuid::Uuid) {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let uuid = uuid::Uuid::from_u128(0x3333);
     let (mut state, actor, pos) = native_mounts_fixture(config, uuid);
     let horse = spawn(&mut state, "horse", pos);
@@ -601,7 +605,7 @@ fn reconnect_pending_mount_rider(
     horse: mc_domain::EntityId,
     uuid: uuid::Uuid,
 ) {
-    let connection = crate::boundary::ConnectionId(20);
+    let connection = mc_domain::ConnectionId(20);
     run_tick(
         state,
         &[crate::boundary::PlayerInput::Join {
@@ -654,7 +658,8 @@ fn mounts_absent_claim_after_core_restart_does_not_suppress_ai_or_breeding() {
 
 #[test]
 fn mounts_absent_claim_after_core_restart_does_not_block_leash_follow() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
     config.view_distance = 0;

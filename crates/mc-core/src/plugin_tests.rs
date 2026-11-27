@@ -351,7 +351,7 @@ fn native_wal_contains_only_touched_keys_and_replays_domain_removal_and_null() {
 }
 
 pub(crate) fn join_native_player(state: &mut TickState) -> mc_domain::EntityId {
-    let connection = crate::boundary::ConnectionId(1);
+    let connection = mc_domain::ConnectionId(1);
     crate::tick::run_tick(
         state,
         &[crate::boundary::PlayerInput::Join {
@@ -386,9 +386,7 @@ fn teleport_of_connected_dead_player_refuses_without_native_side_effects() {
     assert_eq!(state.entities.pos(slot), position);
     assert_eq!(state.players[&entity], player);
     assert_eq!(
-        state
-            .connections
-            .entity_of(crate::boundary::ConnectionId(1)),
+        state.connections.entity_of(mc_domain::ConnectionId(1)),
         Some(entity)
     );
 }
@@ -427,7 +425,7 @@ async fn restored_clock_and_owned_command_follow_native_committed_event_fifo() {
     crate::plugin::observe_players(&mut state);
     assert!(crate::plugin::route_command(
         &mut state,
-        crate::boundary::ConnectionId(1),
+        mc_domain::ConnectionId(1),
         "owned keep order",
         0
     ));
@@ -502,7 +500,7 @@ fn console_msg_uses_native_path_despite_player_plugin_reservation() {
     assert!(completed.try_recv().is_ok());
     assert!(
         deliveries.iter().any(|(connection, changes)| {
-            *connection == crate::boundary::ConnectionId(1)
+            *connection == mc_domain::ConnectionId(1)
                 && changes.iter().any(|change| {
                     matches!(
                         change,
@@ -545,7 +543,8 @@ fn console_msg_uses_native_path_despite_player_plugin_reservation() {
 
 #[test]
 fn retired_manifest_root_never_falls_back_to_the_native_command() {
-    use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+    use crate::boundary::{PlayerChange, PlayerInput};
+    use mc_domain::ConnectionId;
     let mut state = fixture();
     join_native_player(&mut state);
     let capacity = std::num::NonZeroUsize::new(4).unwrap();
@@ -697,7 +696,7 @@ fn actual_native_barter_spends_only_excess_and_refusal_does_not_begin_admiration
         &mut state,
         actor,
         first,
-        crate::boundary::Hand::Main
+        mc_domain::Hand::Main
     ));
     assert_eq!(state.players[&actor].inventory.slots[0].count, 1);
     assert!(crate::plugin_inventories::has_reservations_for_player(
@@ -709,7 +708,7 @@ fn actual_native_barter_spends_only_excess_and_refusal_does_not_begin_admiration
         &mut state,
         actor,
         second,
-        crate::boundary::Hand::Main
+        mc_domain::Hand::Main
     ));
     assert!(state.entities.row(slot).special_mob.is_none());
     assert_eq!(state.players[&actor].inventory.slots[0].count, 1);
@@ -804,7 +803,7 @@ fn actual_drop_input_retains_floor_without_blanket_disabling_excess_stock() {
         1,
     );
     let input = crate::boundary::PlayerInput::DropSelected {
-        connection: crate::boundary::ConnectionId(1),
+        connection: mc_domain::ConnectionId(1),
         whole_stack: false,
     };
     let (accepted, _, _) = crate::tick::run_tick(&mut state, std::slice::from_ref(&input));
@@ -1371,7 +1370,8 @@ async fn observation_shedding_is_per_plugin_fair_and_never_halts_authority() {
 
 #[test]
 fn required_auth_retirement_refuses_logins_without_stopping_established_players() {
-    use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+    use crate::boundary::{PlayerChange, PlayerInput};
+    use mc_domain::ConnectionId;
     for required in [false, true] {
         let mut state = fixture();
         let established = join_native_player(&mut state);

@@ -1116,7 +1116,7 @@ fn protected_crown_above_access_headroom_stays_outside_the_territory() {
 fn disabled_block_history_protects_natural_forest_near_a_live_player() {
     let (mut state, _, slot, _, root, _) = forest();
     let entity = state.entities.body(slot).id;
-    let connection = crate::boundary::ConnectionId(999);
+    let connection = mc_domain::ConnectionId(999);
     state
         .entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });
@@ -1380,7 +1380,7 @@ fn disabled_history_near_player_vetoes_registered_sapling_and_natural_halo() {
     let sapling = block(&state, "minecraft:birch_sapling", &[]);
     state.world.set_block(root[0], root[1], root[2], sapling);
     let entity = state.entities.body(slot).id;
-    let connection = crate::boundary::ConnectionId(999);
+    let connection = mc_domain::ConnectionId(999);
     state
         .entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });

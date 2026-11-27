@@ -2,11 +2,10 @@
 use std::sync::Arc;
 
 use super::TickState;
-use crate::boundary::ConnectionId;
 use crate::command_args::CommandError;
 use crate::command_execution::{self, CommandResult};
 use crate::commands::{Command, Target};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 pub(crate) fn parse(args: &[&str]) -> Result<Command, CommandError> {
     let (target, player) = match args {

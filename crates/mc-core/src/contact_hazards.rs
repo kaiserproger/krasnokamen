@@ -8,10 +8,10 @@ use crate::registry::{
     HAZARD_BERRY, HAZARD_CACTUS, HAZARD_CAMPFIRE, HAZARD_FIRE, HAZARD_LAVA, HAZARD_MAGMA,
     HAZARD_SOUL_CAMPFIRE, HAZARD_WATER,
 };
-use crate::survival::DamageKind;
 use crate::tick::TickState;
 use mc_domain::EntityId;
 use mc_physics::mth::floor_i32;
+use mc_survival::DamageKind;
 use std::sync::{Arc, LazyLock};
 
 // Test-only attribution of the whole contact pass, including the cauldron tail.

@@ -1,7 +1,7 @@
 //! Living-entity status effects: vanilla 26.1.2 identities and pure transitions.
-use crate::survival::{DamageKind, Vitals};
 pub use mc_data::mob_effects_26_1_2::MobEffect as EffectId;
 use mc_physics::mth;
+use mc_survival::{DamageKind, Vitals};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -725,7 +725,7 @@ fn is_living(kind: crate::entities::EntityKind) -> bool {
 
 pub(crate) fn execute_command(
     state: &mut crate::tick::TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     executor: mc_domain::EntityId,
     command: &crate::commands::Command,
 ) -> crate::command_execution::CommandResult {

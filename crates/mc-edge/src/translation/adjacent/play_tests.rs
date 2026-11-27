@@ -687,7 +687,8 @@ fn faction_team_create_and_full_add_translate_to_776() {
 
 #[test]
 fn old_client_stab_reaches_core_input_through_adjacent_translation() {
-    use mc_core::boundary::{ConnectionId, PlayerInput};
+    use mc_core::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use mc_protocol::Packet;
     use mc_protocol::packets::play::ServerboundPlayerAction;
 

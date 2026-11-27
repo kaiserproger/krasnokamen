@@ -1010,7 +1010,7 @@ fn status_tick_matches_command_commit_in_local_and_shared_dispatch() {
 #[test]
 fn peaceful_world_rejects_setup_without_partial_changes() {
     let mut state = fixture();
-    state.difficulty = crate::survival::Difficulty::Peaceful;
+    state.difficulty = mc_survival::Difficulty::Peaceful;
     let mut changes = ChangeSet::default();
     let error = setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 9, 100).unwrap_err();
     assert!(error.contains("peaceful"));
@@ -1041,7 +1041,7 @@ fn commands_require_operator_and_enforce_count_bounds() {
     assert_eq!(
         crate::command_execution::execute(
             &mut state,
-            crate::boundary::ConnectionId(1),
+            mc_domain::ConnectionId(1),
             EntityId(1),
             &roster,
             &mut changes
@@ -1070,7 +1070,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
         slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,

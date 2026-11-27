@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use crate::bees::tests::{POS, item, joined, place, state};
-use crate::boundary::{ChangeSet, Hand};
+use crate::boundary::ChangeSet;
+use mc_domain::{Hand, EntityId};
 use crate::tick::TickState;
-use mc_domain::EntityId;
 use mc_placement::Face;
 
 fn fixture(block: &str, held: &str) -> (TickState, EntityId) {

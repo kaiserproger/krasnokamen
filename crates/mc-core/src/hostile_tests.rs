@@ -3,14 +3,14 @@
 use std::sync::Arc;
 
 use crate::blueprint::FUSE_TICKS;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::{ConnectionId, EntityId};
 use crate::hostile::{CREEPER_SWELL_DIR_INDEX, launch_arrow};
 use crate::projectiles::{ARROW_IN_GROUND_INDEX, ARROW_STUCK_TICKS};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_domain::EntityId;
 
 /// Platform height: far above the flat fixture floor.
 const Y: i32 = 200;
@@ -74,7 +74,7 @@ pub(crate) fn setup(offset: f64) -> (TickState, EntityId, [f64; 3]) {
 #[test]
 fn daylight_zombie_acquires_and_damages_a_player_eight_blocks_away() {
     let (mut state, player, centre) = setup(8.0);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.players.get_mut(&player).unwrap().vitals.food = 17;
     let zombie = state.spawn_mob(type_id(&state, "minecraft:zombie"), centre, 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
@@ -262,9 +262,9 @@ fn skeleton_arrow_damages_a_player_at_range() {
 #[test]
 fn skeleton_draws_for_twenty_ticks_and_uses_difficulty_bow_intervals() {
     for (difficulty, second_shot) in [
-        (crate::survival::Difficulty::Easy, 81),
-        (crate::survival::Difficulty::Normal, 81),
-        (crate::survival::Difficulty::Hard, 61),
+        (mc_survival::Difficulty::Easy, 81),
+        (mc_survival::Difficulty::Normal, 81),
+        (mc_survival::Difficulty::Hard, 61),
     ] {
         let (mut state, _, centre) = setup(8.0);
         state.difficulty = difficulty;
@@ -293,7 +293,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
     use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, player, centre) = setup(12.0);
     state.day_time = 18_000;
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.players.get_mut(&player).unwrap().vitals.food = 17;
     let player_uuid = state
         .entities
@@ -384,7 +384,8 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
             {
                 assert_eq!(
                     source_type_id,
-                    crate::survival::DamageKind::Projectile.type_id(
+                    crate::intent::hit_type_id(
+                        mc_survival::DamageKind::Projectile,
                         Some(crate::intent::DamageSource::Projectile {
                             projectile: direct,
                             direct_type_id: type_id(&state, "minecraft:arrow"),
@@ -613,7 +614,7 @@ fn hostile_gap_spiders_use_local_light_and_retaliate_in_bright_light() {
 
 #[test]
 fn hostile_gap_manual_creeper_ignition_survives_target_departure() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     for (name, hand, index) in [
         ("minecraft:flint_and_steel", Hand::Main, 0),
         ("minecraft:fire_charge", Hand::Off, mc_inventory::OFF_HAND),
@@ -938,7 +939,7 @@ fn accepted_arrow_hit_pushes_along_flight_after_the_arrow_is_removed() {
     let (mut state, player, centre) = setup(0.0);
     let victim = state.entities.slot_of(player).unwrap();
     state.entities.set_ground(victim, true);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     let shooter_type = type_id(&state, "minecraft:skeleton");
     let shooter = state.spawn_mob(shooter_type, [centre[0] + 8.0, centre[1], centre[2]], 20.0);
     let from = [centre[0] - 0.6, centre[1] + 1.0, centre[2] - 0.8];
@@ -994,7 +995,7 @@ fn accepted_arrow_hit_pushes_along_flight_after_the_arrow_is_removed() {
 #[test]
 fn fresh_hits_publish_damage_and_excess_hits_journal_mob_health_without_wire_events() {
     use crate::boundary::EntityEvent;
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, _, centre) = setup(8.0);
     let mob = state.spawn_mob(type_id(&state, "minecraft:cow"), centre, 20.0);
     let slot = state.entities.slot_of(mob).unwrap();
@@ -1032,7 +1033,7 @@ fn fresh_hits_publish_damage_and_excess_hits_journal_mob_health_without_wire_eve
         assert_eq!(
             events.contains(&EntityEvent::Damage {
                 entity: mob,
-                source_type_id: DamageKind::Cactus.type_id(None, false),
+                source_type_id: DamageKind::Cactus.type_id(false),
                 cause: None,
                 direct: None,
                 source_position: None,

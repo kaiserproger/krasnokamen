@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 #[test]
 #[ignore = "requires the real vanilla 26.1.2 headless round-trip driver"]
 fn vanilla_headless_world_roundtrip() {
-    use mc_core::boundary::{ConnectionId, PlayerChange, PlayerInput, TickOutput};
+    use mc_core::boundary::{PlayerChange, PlayerInput, TickOutput};
+    use mc_domain::ConnectionId;
     use std::sync::Arc;
 
     let root = std::path::PathBuf::from(
@@ -286,7 +287,7 @@ pub(super) fn modern_fixture(root: &Path, config: &CoreConfig) {
         domain_versions: bridge::domain_versions(),
         world_spawn: Some([12, 75, -45]),
         world_spawn_rotation: [90.0, 15.0],
-        difficulty: mc_core::survival::Difficulty::Hard,
+        difficulty: mc_survival::Difficulty::Hard,
         climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
             game_clock: Default::default(),
@@ -554,9 +555,11 @@ fn has_field(tag: &Tag, key: &str) -> bool {
 #[tokio::test]
 async fn imported_mount_cargo_menu_roundtrip_uses_native_contents() {
     use crate::test_support::Running;
-    use mc_core::boundary::{ConnectionId, Hand, PlayerChange, PlayerInput};
+    use mc_core::boundary::{PlayerChange, PlayerInput};
     use mc_data::{Identifier, ItemStack};
+    use mc_domain::ConnectionId;
     use mc_domain::EntityId;
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     use mc_nbt::{ListTag, tag_type};
 

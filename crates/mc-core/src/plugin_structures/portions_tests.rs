@@ -440,7 +440,7 @@ fn outside_changed_cell_rederives_but_history_veto_publishes_nothing() {
                 let slot =
                     crate::settlements::allocator::tests::villager(&mut state, [20.5, 201.0, 4.5]);
                 let entity = state.entities.body(slot).id;
-                let connection = crate::boundary::ConnectionId(999);
+                let connection = mc_domain::ConnectionId(999);
                 state
                     .entities
                     .set_kind(slot, crate::entities::EntityKind::Player { connection });

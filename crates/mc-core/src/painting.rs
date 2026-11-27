@@ -1,10 +1,10 @@
 //! Native hanging paintings. The journaled variant/direction owns attachment.
-use crate::boundary::{BlockPos, ChangeSet, Hand};
+use crate::boundary::{BlockPos, ChangeSet};
+use mc_domain::{Hand, EntityId};
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
 use std::sync::Arc;
 
 /// The painting entity id: the summon command checks it in four places.
@@ -298,7 +298,7 @@ pub(crate) fn attack(
     if crate::entity_controls::blocks_damage(
         state,
         slot,
-        crate::survival::DamageKind::Melee,
+        mc_survival::DamageKind::Melee,
         Some(actor),
     ) {
         return true;

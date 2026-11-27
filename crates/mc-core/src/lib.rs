@@ -53,7 +53,6 @@ mod chests {
 pub mod chiseled_shelf;
 mod chorus;
 pub(crate) mod chunk_tickets;
-pub mod combat;
 pub mod command_args;
 pub mod command_attribute;
 mod command_block_entity;
@@ -214,7 +213,6 @@ pub mod special_mobs;
 pub mod species;
 mod statistics;
 mod strider;
-pub mod survival;
 pub mod taming;
 mod target_grid;
 pub mod terrain;

@@ -144,20 +144,6 @@ pub(crate) fn bane_ticks(level: u32, seed: &mut i32) -> u32 {
     30 + (random(seed) * f64::from(level.saturating_sub(1).saturating_mul(10))) as u32
 }
 
-/// Authored 26.1.2 density: half a damage point per level and fallen block.
-pub(crate) fn density_damage(stack: &ItemStack, distance: f64) -> f32 {
-    (0.5 * f64::from(level(stack, "density")) * distance) as f32
-}
-
-/// Breach subtracts from armor's damage fraction, not from armor points.
-pub(crate) fn breach_damage(amount: f32, armored: f32, level: u32) -> f32 {
-    if level == 0 {
-        return armored;
-    }
-    let amount = amount.max(0.0);
-    (armored + amount * 0.15 * level as f32).min(amount)
-}
-
 pub(crate) fn wind_burst_multiplier(level: u32) -> f64 {
     match level {
         0 => 0.0,

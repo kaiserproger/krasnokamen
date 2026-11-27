@@ -233,7 +233,7 @@ def expand_src(s):
 
 
 TEST_TEXT = {}
-for crate in ("mc-core", "mc-world-conversion", "mc-world-tools", "mc-edge", "mc-script", "mc-plugin-host", "mc-loader"):
+for crate in ("mc-core", "mc-world-conversion", "mc-world-tools", "mc-edge", "mc-script", "mc-plugin-host", "mc-loader", "mc-survival"):
     for p in (SOL / "crates" / crate / "src").rglob("*.rs"):
         if p.name.endswith("_tests.rs") or p.name == "tests.rs":
             TEST_TEXT[str(p.relative_to(SOL))] = p.read_text(errors="ignore")
@@ -257,6 +257,8 @@ def unit_tests_for(srcs):
             continue
         base = s[:-3]
         cands = [base + "_tests.rs", base + "/tests.rs"]
+        if s == "crates/mc-survival/src/lib.rs":
+            cands.append("crates/mc-survival/src/survival_tests.rs")
         if base.endswith("/mod"):
             d = base.rsplit("/", 1)[0]
             cands += sorted(f for f in TEST_FILES if f.rsplit("/", 1)[0] == d)
@@ -1098,7 +1100,7 @@ CODE_DIMS = {
     "menu_kind (core:inventory.rs MenuKind)": {v: MENU_MAP[v] for v in CG["menu_kinds"]},
     "click_mode (core:boundary.rs ClickMode)": CLICK_MAP,
     "command_root (edge:command_tree.rs ROOTS)": {r: f"commands.{r}" for r, _ in CG["roots"]},
-    "damage_kind (core:survival.rs DamageKind)": {k: f"damage.{k}" for k in CG["kinds"]},
+    "damage_kind (crates/mc-survival/src/lib.rs DamageKind)": {k: f"damage.{k}" for k in CG["kinds"]},
     "mob_effect (mc-data MobEffect)": {e: f"effects.{e}" for e in CG["effects"]},
     "gamerule (core:command_rules.rs RULES, canonical 26.1.2 ids)": {r: f"gamerules.{r}" for r, _ in CG["rules"]},
     "living_entity (mc-data entity contracts)": {n: f"mobs.{n}" for n, _, _ in CG["living"]},
@@ -1431,7 +1433,7 @@ matrix = {
         "client_kind": [{"id": k, **v} for k, v in CLIENTS.items()],
         "game_mode": {"values": GAME_MODES, "source": "crates/mc-core/src/commands.rs GameMode"},
         "dimension": {"values": DIMS, "source": "crates/mc-core/src/dimensions.rs Dimension"},
-        "difficulty": {"values": DIFFS, "source": "crates/mc-core/src/survival.rs Difficulty"},
+        "difficulty": {"values": DIFFS, "source": "crates/mc-survival/src/lib.rs Difficulty"},
         "player_count": {"values": PLAYERS, "note": "N8 = 8 concurrent (catalog-load fleets go larger)"},
         "network_condition": [{"id": k, "desc": v} for k, v in NETWORK.items()],
         "server_lifecycle": [{"id": k, "desc": v} for k, v in LIFECYCLE.items()],
@@ -1581,7 +1583,7 @@ for s in gap_subjects:
 lines += ["",
           "## Divergences/notes found in code (not memory)", "",
           "- Duplicate login: `crates/mc-core/src/tick/input/session.rs` join refuses the NEW connection ('UUID is already joined'); vanilla kicks the EXISTING session. Decide policy; triples `disconnect_x_*:duplicate_login` encode both.",
-          "- `DamageKind` (crates/mc-core/src/survival.rs) has no freeze, fly_into_wall, cramming, sonic_boom, dragon_breath or stalagmite kinds; listed as `damage.vanilla_*` gap subjects.",
+          "- `DamageKind` (crates/mc-survival/src/lib.rs) has no freeze, fly_into_wall, cramming, sonic_boom, dragon_breath or stalagmite kinds; listed as `damage.vanilla_*` gap subjects.",
           "- Illusioner falls to the generic `Melee` combat policy (crates/mc-data/src/mob_behavior_26_1_2.rs combat_policy); vanilla illusioner is a ranged spellcaster.",
           "- No server-side Simple Voice Chat bridge in any crate; `fabric_svc` can only test join/compat today.",
           "- Computer terminal exists only in Fabric Loader (loader-core ComputerProtocol, loader-fabric ComputerClient); native client has no `krasnokamen:computer`; screen sharing to other players is excluded by ADR 0018.",

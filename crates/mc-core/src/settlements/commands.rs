@@ -339,7 +339,7 @@ pub(crate) fn lookup<'a>(
 /// dialog payloads cannot bypass the live player-position fence.
 pub(crate) fn claim(
     state: &mut crate::tick::TickState,
-    connection: crate::boundary::ConnectionId,
+    connection: mc_domain::ConnectionId,
     target: Option<super::SettlementId>,
 ) -> Result<String, &'static str> {
     let owner = state

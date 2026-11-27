@@ -8,8 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use mc_core::boundary::ConnectionId;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::packets::{CustomPayload, Packet, play::ServerboundCustomPayload};
 use uuid::Uuid;
 

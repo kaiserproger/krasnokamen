@@ -1038,7 +1038,7 @@ fn an_infected_builders_debt_survives_a_reopen_and_delivers_after_a_real_cure() 
         .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
         .expect("zombie type");
     // Hard difficulty makes the bite deterministic (conversion.rs).
-    state.difficulty = crate::survival::Difficulty::Hard;
+    state.difficulty = mc_survival::Difficulty::Hard;
     let pos = state.entities.pos(slot);
     let zombie = state.spawn_mob(zombie_type, [pos[0] + 1.0, pos[1], pos[2]], 20.0);
     assert!(

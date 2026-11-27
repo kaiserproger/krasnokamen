@@ -7,7 +7,8 @@
 //! the world lease flock, and finally the reopened world.
 
 use super::*;
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, PlayerInput, WorldSnapshot};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, PlayerInput, WorldSnapshot};
+use mc_domain::ConnectionId;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};

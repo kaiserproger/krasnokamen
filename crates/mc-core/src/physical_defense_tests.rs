@@ -368,7 +368,7 @@ fn fixture() -> (TickState, mc_domain::EntityId, mc_domain::EntityId) {
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {
-            connection: crate::boundary::ConnectionId(1),
+            connection: mc_domain::ConnectionId(1),
             uuid: uuid::Uuid::new_v4(),
             name: "Defender".into(),
             permission_level: 0,
@@ -376,7 +376,7 @@ fn fixture() -> (TickState, mc_domain::EntityId, mc_domain::EntityId) {
     );
     let player = state
         .connections
-        .entity_of(crate::boundary::ConnectionId(1))
+        .entity_of(mc_domain::ConnectionId(1))
         .unwrap();
     let npc = state.spawn_mob(state.registry.zombie_type_id, [0.0, 80.0, 0.0], 20.0);
     let actor = state.entities.slot_of(player).unwrap();
@@ -399,7 +399,7 @@ fn piece(state: &TickState, slot: EntitySlot, kind: DamageKind) -> DamagePiece {
     hit.origin = [hit.point[0], hit.point[1], hit.point[2] + 3.0];
     DamagePiece {
         amount: hit.damage_hp,
-        kind: crate::survival::DamageKind::Melee,
+        kind: mc_survival::DamageKind::Melee,
         source: None,
         physical: Some(hit),
         custom_armor: false,

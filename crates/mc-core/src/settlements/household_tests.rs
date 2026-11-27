@@ -18,7 +18,7 @@ impl std::io::Write for AuditLog {
 #[test]
 fn claim_logs_the_authoritative_settlement_and_tick() {
     let mut state = state();
-    let connection = crate::boundary::ConnectionId(7);
+    let connection = mc_domain::ConnectionId(7);
     crate::tick::run_tick(
         &mut state,
         &[crate::boundary::PlayerInput::Join {

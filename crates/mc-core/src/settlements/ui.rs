@@ -27,10 +27,11 @@ use uuid::Uuid;
 use super::buildings::{self, BuildingId, BuildingKind, CertError};
 use super::ui_text::{self, Key, Lang};
 use super::{SettlementId, building_discovery, economy_customization};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::dialog::{Button, ClickPayload, Dialog, Input};
 use crate::tick::TickState;
 use crate::villager::VillagerProfession as Profession;
+use mc_domain::ConnectionId;
 
 pub(crate) const OWNER: &str = "settlement";
 

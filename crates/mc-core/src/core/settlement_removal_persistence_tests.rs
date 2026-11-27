@@ -2,10 +2,11 @@
 //! through the journal thread's real writer must delete its `settlement/<id>`
 //! row, or the following startup refuses the stale row.
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::dimensions::Dimension;
 use crate::native_checkpoint::tests::{fixture_store, read_manifest};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 
 /// One tick with `inputs`, its WAL batch, then a checkpoint of that tick
 /// frozen and written exactly as the journal thread does.

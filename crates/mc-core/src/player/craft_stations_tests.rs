@@ -1,9 +1,9 @@
 use super::*;
-use crate::boundary::ConnectionId;
 use crate::commands::GameMode;
 use crate::player::PlayerState;
 use crate::registry::CoreRegistry;
 use mc_data::Identifier;
+use mc_domain::ConnectionId;
 use mc_inventory::ClickMode;
 
 fn stack(registry: &CoreRegistry, name: &str, count: i32) -> ItemStack {

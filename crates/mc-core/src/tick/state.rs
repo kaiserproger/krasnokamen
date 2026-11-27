@@ -109,7 +109,7 @@ impl TickState {
             last_swing: HashMap::default(),
             armor_stand_hits: HashMap::default(),
             // Vanilla dedicated-server default; the join sends it.
-            difficulty: crate::survival::Difficulty::Easy,
+            difficulty: mc_survival::Difficulty::Easy,
             journaled_difficulty: None,
             journaled_default_game_mode: None,
             weather: (crate::commands::Weather::Clear, 0),
@@ -216,7 +216,7 @@ impl TickState {
     /// clients are not.
     #[must_use]
     pub(crate) fn accepts_chat(&self, connection: ConnectionId) -> bool {
-        self.connections.chat_visibility_of(connection) == crate::boundary::ChatVisibility::Full
+        self.connections.chat_visibility_of(connection) == mc_domain::ChatVisibility::Full
     }
 
     /// Reliable per-player push. On cap overflow the queue is sealed with a
@@ -252,8 +252,7 @@ impl TickState {
         // setting is hidden gets no text at all, neither chat nor command
         // feedback. Titles and the action bar are not text lines here.
         if change.is_text()
-            && self.connections.chat_visibility_of(connection)
-                == crate::boundary::ChatVisibility::Hidden
+            && self.connections.chat_visibility_of(connection) == mc_domain::ChatVisibility::Hidden
         {
             return;
         }

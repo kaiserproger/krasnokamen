@@ -1,10 +1,10 @@
 //! Leash authority is exercised through native Interact decoding and viewer wire plans.
 use super::{CONNECTION, DecodeState, entity_slot, fixture, packet, stack};
 use crate::plan::{ChunkPacketCache, PlannedPacket, ViewerState, plan_viewer};
-use mc_core::boundary::{ConnectionId, PlayerInput, TickOutput};
+use mc_core::boundary::{PlayerInput, TickOutput};
 use mc_core::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::frame::{Compression, try_decode_frame};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{

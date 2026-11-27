@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use mc_core::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use tracing::warn;
 
 use crate::config::{EdgeConfig, ProxyMode};

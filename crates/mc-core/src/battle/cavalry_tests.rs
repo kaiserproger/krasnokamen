@@ -1394,7 +1394,7 @@ fn a_rider_whose_horse_dies_walks_from_the_next_battle_tick() {
         horse_slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,

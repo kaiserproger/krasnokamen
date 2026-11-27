@@ -91,7 +91,7 @@ fn command(state: &mut TickState, actor: mc_domain::EntityId, text: &str) {
     let parsed = crate::command_world::parse(root, &words.collect::<Vec<_>>()).unwrap();
     crate::command_world::execute(
         state,
-        crate::boundary::ConnectionId(1),
+        mc_domain::ConnectionId(1),
         actor,
         &parsed,
         &mut Default::default(),
@@ -433,7 +433,7 @@ fn committed_mob_death_near_catalyst_suppresses_orbs_and_spreads_once() {
         kind: crate::intent::IntentKind::DamageEntity {
             target: entity,
             amount: 1000.0,
-            kind: crate::survival::DamageKind::Magic,
+            kind: mc_survival::DamageKind::Magic,
             source: None,
         },
         footprint: crate::intent::Footprint {

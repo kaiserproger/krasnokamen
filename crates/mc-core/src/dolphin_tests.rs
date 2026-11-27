@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerChange, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 use std::sync::{Arc, LazyLock};
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

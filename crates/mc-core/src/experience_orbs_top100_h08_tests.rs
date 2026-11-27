@@ -74,7 +74,8 @@ fn expired_orb_removal_does_not_skip_a_swapped_live_orb() {
 
 #[test]
 fn equal_distance_pickup_uses_lowest_player_id() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let (mut state, first, pos) = crate::hostile_tests::setup(0.0);
     crate::tick::run_tick(
         &mut state,
@@ -177,7 +178,8 @@ fn populate(state: &mut TickState, pos: [f64; 3], count: usize) {
 
 #[test]
 fn body_visit_ladder_bounds_all_search_work() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut excessive = Vec::new();
     for orbs in [0, 10_000, 100_000] {
         for players in [1, 100, 1000] {

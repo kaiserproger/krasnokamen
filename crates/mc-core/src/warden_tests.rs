@@ -2,7 +2,7 @@ use super::*;
 use crate::journal::{JournalWriter, Replay, replay_batches};
 fn fixture(range: f64) -> (TickState, EntityId, EntityId, [f64; 3]) {
     let (mut state, player, pos) = crate::hostile_tests::setup(range);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.tick = 0;
     let ty = state
         .registry
@@ -76,7 +76,7 @@ fn vibrations_anger_roar_darkness_then_melee() {
             .has(EffectId::Darkness)
     );
     let hits = step(&mut state, mob, player, 164);
-    assert!(hits.iter().any(|i|matches!(i.kind,crate::intent::IntentKind::DamageEntity{target,amount:30.0,kind:crate::survival::DamageKind::Melee,..} if target==player)));
+    assert!(hits.iter().any(|i|matches!(i.kind,crate::intent::IntentKind::DamageEntity{target,amount:30.0,kind:mc_survival::DamageKind::Melee,..} if target==player)));
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn angered_warden_sonic_attack_retains_damage_identity() {
         crate::intent::IntentKind::DamageEntity {
             target,
             amount: 10.0,
-            kind: crate::survival::DamageKind::SonicBoom,
+            kind: mc_survival::DamageKind::SonicBoom,
             ..
         } if target == player
     )));

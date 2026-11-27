@@ -309,7 +309,7 @@ fn spawn_egg_spectator_and_peaceful_monster_refuse_without_debit() {
         if spectator {
             state.players.get_mut(&actor).unwrap().game_mode = GameMode::Spectator;
         } else {
-            state.difficulty = mc_core::survival::Difficulty::Peaceful;
+            state.difficulty = mc_survival::Difficulty::Peaceful;
         }
         equip(&mut state, actor, name, InteractionHand::MainHand, 1);
         let before = state.players[&actor].inventory.slots[0].clone();

@@ -1701,7 +1701,8 @@ fn player_opaque_fields_survive_typed_edits_without_resurrecting_removed_keys() 
 
 #[test]
 fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use std::sync::Arc;
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(

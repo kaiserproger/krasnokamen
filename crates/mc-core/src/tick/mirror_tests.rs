@@ -1,8 +1,9 @@
 //! A player's entity removal is a membership change too.
 
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::core::session_mirror::{stamp, unlocked_sessions};
+use mc_domain::ConnectionId;
 use std::sync::Arc;
 
 fn fixture() -> TickState {

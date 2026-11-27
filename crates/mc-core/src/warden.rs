@@ -288,7 +288,7 @@ pub(crate) fn run(
                         id,
                         target,
                         30.0,
-                        crate::survival::DamageKind::Melee,
+                        mc_survival::DamageKind::Melee,
                     );
                     state.entities.body_mut(slot).attack_cooldown = 18;
                     event(state, id, 4);

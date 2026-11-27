@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use super::{TickState, apply_player_effects};
-use crate::boundary::{BlockChange, BlockPos, ChangeSet, ConnectionId, PlayerChange};
-use mc_domain::EntityId;
+use crate::boundary::{BlockChange, BlockPos, ChangeSet, PlayerChange};
+use mc_domain::{ConnectionId, EntityId};
 use mc_inventory::MenuKind;
 
 pub(super) fn craft_menu_for_block(name: &str) -> Option<(MenuKind, String, usize)> {

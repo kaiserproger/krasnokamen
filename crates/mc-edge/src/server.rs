@@ -47,8 +47,9 @@
 //! change if delivery is ever reshaped again.
 
 use mc_core::Core;
-use mc_core::boundary::{ChangeSet, ConnectionId, PlayerInput, TickOutput};
+use mc_core::boundary::{ChangeSet, PlayerInput, TickOutput};
 use mc_data::VanillaData;
+use mc_domain::ConnectionId;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Write};
@@ -571,7 +572,7 @@ impl EdgeServer {
             return Ok(());
         }
         // Vanilla's ServerPlayer.acceptsSystemMessages: a Hidden client gets no text lines.
-        if self.connections.chat_visibility(id) == mc_core::boundary::ChatVisibility::Hidden {
+        if self.connections.chat_visibility(id) == mc_domain::ChatVisibility::Hidden {
             return Ok(());
         }
         let mut content_nbt = Vec::new();

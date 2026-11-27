@@ -682,7 +682,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 matches!(
                     intent.kind,
                     IntentKind::DamageEntity {
-                        kind: crate::survival::DamageKind::Melee,
+                        kind: mc_survival::DamageKind::Melee,
                         ..
                     }
                 )
@@ -726,9 +726,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                     target: actor,
                     amount: fall,
                     kind: if stalagmite {
-                        crate::survival::DamageKind::Stalagmite
+                        mc_survival::DamageKind::Stalagmite
                     } else {
-                        crate::survival::DamageKind::Fall
+                        mc_survival::DamageKind::Fall
                     },
                     source: None,
                 },

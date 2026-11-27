@@ -1,6 +1,6 @@
 //! The tick's authoritative plugin-login lock set with a change counter.
 
-use crate::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use std::collections::BTreeSet;
 
 /// The tick's authoritative plugin-login lock set, with a change counter.

@@ -10,9 +10,10 @@ use super::{
     LocateCommand, ResourceOrTag, SavedStarts, StructureSearchOptions, found_distance, poi_states,
     sample_heights, search_biome, search_poi, search_structure, square_ring,
 };
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::commands::parse;
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 
 #[path = "command_locate_crystal_tests.rs"]
 mod crystal;

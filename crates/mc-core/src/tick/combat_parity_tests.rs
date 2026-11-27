@@ -1,10 +1,10 @@
 use super::{flat_player_fixture, join};
-use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{ChangeSet, PlayerChange, PlayerInput};
 use crate::commands::GameMode;
 use crate::intent::DamageSource;
-use crate::survival::{DamageKind, Difficulty};
 use crate::tick::{DamagePiece, TickState, run_tick};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId, Hand};
+use mc_survival::{DamageKind, Difficulty};
 
 fn hit(state: &mut TickState, target: EntityId, kind: DamageKind, source: Option<DamageSource>) {
     let slot = state.entities.slot_of(target).unwrap();
@@ -366,7 +366,7 @@ fn parity_death_message_keys_match_the_damage_type_registry_and_language_file() 
                 _ => None,
             })
             .expect("the player died");
-        let type_name = kind.type_name(None, false);
+        let type_name = kind.type_name(false);
         let registry: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(format!(
                 "{root}/data/minecraft/damage_type/{}.json",
@@ -755,7 +755,7 @@ fn death_protection_changes_fire_admission_before_the_next_same_tick_hit() {
             );
             assert!(!events.iter().any(|event| matches!(event,
                 crate::boundary::EntityEvent::Damage { entity, source_type_id, .. }
-                if *entity == player && *source_type_id == DamageKind::Lava.type_id(None, false)
+                if *entity == player && *source_type_id == DamageKind::Lava.type_id(false)
             )));
         }
     }

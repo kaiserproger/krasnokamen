@@ -255,13 +255,11 @@ pub fn import_tags(
             };
             manifest.difficulty = match field(settings, "difficulty") {
                 Some(Tag::String(value)) if value == "peaceful" => {
-                    crate::survival::Difficulty::Peaceful
+                    mc_survival::Difficulty::Peaceful
                 }
-                Some(Tag::String(value)) if value == "easy" => crate::survival::Difficulty::Easy,
-                Some(Tag::String(value)) if value == "normal" => {
-                    crate::survival::Difficulty::Normal
-                }
-                Some(Tag::String(value)) if value == "hard" => crate::survival::Difficulty::Hard,
+                Some(Tag::String(value)) if value == "easy" => mc_survival::Difficulty::Easy,
+                Some(Tag::String(value)) if value == "normal" => mc_survival::Difficulty::Normal,
+                Some(Tag::String(value)) if value == "hard" => mc_survival::Difficulty::Hard,
                 _ => {
                     return Err(failure(
                         level_path,
@@ -515,10 +513,10 @@ pub fn checkpoint_tags(
     }
     let difficulty_settings = compound_field_mut(data, "difficulty_settings", path)?;
     let difficulty = match manifest.difficulty {
-        crate::survival::Difficulty::Peaceful => "peaceful",
-        crate::survival::Difficulty::Easy => "easy",
-        crate::survival::Difficulty::Normal => "normal",
-        crate::survival::Difficulty::Hard => "hard",
+        mc_survival::Difficulty::Peaceful => "peaceful",
+        mc_survival::Difficulty::Easy => "easy",
+        mc_survival::Difficulty::Normal => "normal",
+        mc_survival::Difficulty::Hard => "hard",
     };
     put(
         difficulty_settings,
@@ -998,7 +996,7 @@ mod tests {
         let mut tags = MetadataTags::new();
         let mut manifest = CheckpointManifest {
             tick: 79,
-            difficulty: crate::survival::Difficulty::Hard,
+            difficulty: mc_survival::Difficulty::Hard,
             world_spawn: Some([12, 75, -45]),
             world_spawn_rotation: [90.0, 15.0],
             climate: Some(ClimateImage {
@@ -1063,7 +1061,7 @@ mod tests {
         let mut imported = CheckpointManifest::default();
         import_tags(&tags, &mut imported).unwrap();
         assert_eq!(imported.tick, 79);
-        assert_eq!(imported.difficulty, crate::survival::Difficulty::Hard);
+        assert_eq!(imported.difficulty, mc_survival::Difficulty::Hard);
         assert_eq!(imported.world_spawn, manifest.world_spawn);
         assert_eq!(imported.world_spawn_rotation, manifest.world_spawn_rotation);
         assert_eq!(imported.climate, manifest.climate);

@@ -2,9 +2,9 @@
 //! sequences for add/set players/value/max/visible/remove, join sync, errors.
 
 use super::*;
-use crate::boundary::{BossBarChange, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{BossBarChange, PlayerChange, PlayerInput};
 use crate::command_bossbar::BossBarCommand;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 use std::sync::Arc;
 
 fn fixture() -> (TickState, EntityId, EntityId) {

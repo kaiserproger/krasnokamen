@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use mc_data::advancements::{AdvancementRewards, Criterion};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 use std::collections::BTreeMap;
 
 fn fixture(mut tree: AdvancementTree) -> (TickState, EntityId) {
@@ -381,7 +382,7 @@ fn vanilla_advancement_stone_age_crafting_table_mob_kill_nether_and_sleep() {
             physical: None,
             custom_armor: false,
             amount: 40.,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: entity,
                 position: [0., 80., 0.],
@@ -636,7 +637,7 @@ fn accepted_projectile_shield_block_awards_deflection_without_health_damage() {
         .unwrap();
     let player = state.players.get_mut(&entity).unwrap();
     player.inventory.slots[0] = ItemStack::new(shield, 1);
-    player.use_item(&state.registry.item_rules(), crate::boundary::Hand::Main);
+    player.use_item(&state.registry.item_rules(), mc_domain::Hand::Main);
     for _ in 0..5 {
         player.tick_item_use(&state.registry.item_rules());
     }
@@ -651,7 +652,7 @@ fn accepted_projectile_shield_block_awards_deflection_without_health_damage() {
             physical: None,
             custom_armor: false,
             amount: 3.5,
-            kind: crate::survival::DamageKind::Projectile,
+            kind: mc_survival::DamageKind::Projectile,
             source: Some(crate::intent::DamageSource::Projectile {
                 owner: EntityId(-1),
                 projectile: EntityId(-2),
@@ -717,7 +718,7 @@ fn bare_armour_snapshot_satisfies_piglin_inverted_safe_armour_predicates() {
         &mut state,
         entity,
         piglin,
-        crate::boundary::Hand::Main,
+        mc_domain::Hand::Main,
     ));
     run(&mut state, &mut ChangeSet::default());
     assert_eq!(
@@ -884,7 +885,7 @@ fn mace_dealt_damage_keeps_its_own_raw_amount_before_hurt_window_delta() {
     let (mut state, entity) = mace_fixture(overoverkill_definition());
     let mace = &state.players[&entity].inventory.slots[0];
     let attack =
-        crate::combat::mace_attack(&state.registry.item_rules(), mace, 10., false).unwrap();
+        mc_survival::combat::mace_attack(&state.registry.item_rules(), mace, 10., false).unwrap();
     let cow = state
         .registry
         .entity_types
@@ -898,7 +899,7 @@ fn mace_dealt_damage_keeps_its_own_raw_amount_before_hurt_window_delta() {
             physical: None,
             custom_armor: false,
             amount: 50.,
-            kind: crate::survival::DamageKind::Generic,
+            kind: mc_survival::DamageKind::Generic,
             source: None,
         },
     ));
@@ -908,7 +909,7 @@ fn mace_dealt_damage_keeps_its_own_raw_amount_before_hurt_window_delta() {
             physical: None,
             custom_armor: false,
             amount: 60.,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Mace {
                 attacker: entity,
                 position: [0.5, 80., 0.5],
@@ -942,7 +943,7 @@ fn mace_dealt_damage_keeps_its_own_raw_amount_before_hurt_window_delta() {
 fn ordinary_or_gliding_mace_attacks_never_receive_smash_damage_tag() {
     let (mut state, entity) = mace_fixture(overoverkill_definition());
     for (height, gliding) in [(1.5, false), (100., true)] {
-        let attack = crate::combat::mace_attack(
+        let attack = mc_survival::combat::mace_attack(
             &state.registry.item_rules(),
             &state.players[&entity].inventory.slots[0],
             height,
@@ -963,7 +964,7 @@ fn ordinary_or_gliding_mace_attacks_never_receive_smash_damage_tag() {
                 physical: None,
                 custom_armor: false,
                 amount: 120.,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: Some(crate::intent::DamageSource::Mace {
                     attacker: entity,
                     position: [0.5, 80., 0.5],
@@ -1012,7 +1013,7 @@ fn accepted_armoured_damage_distinguishes_raw_dealt_from_health_taken() {
             physical: None,
             custom_armor: false,
             amount: 10.,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: None,
         },
     ));

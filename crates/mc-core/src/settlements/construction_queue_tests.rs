@@ -176,7 +176,7 @@ fn the_joint_proof_keeps_a_second_project_out_of_the_first_ones_stock() {
 /// join tick (whose planning pass then has no sweep to start), and the number
 /// of street frontages its site sweep walks.
 fn owner_in_open_plan() -> (TickState, SettlementId, usize) {
-    const CONN: crate::boundary::ConnectionId = crate::boundary::ConnectionId(7);
+    const CONN: mc_domain::ConnectionId = mc_domain::ConnectionId(7);
     let (mut state, id, _slot) = fixture();
     open_plan(&mut state);
     crate::tick::run_tick(
@@ -242,7 +242,7 @@ fn an_owner_order_answers_at_once_and_its_turns_start_it() {
     let chat = tick_chat(
         &mut state,
         &[crate::boundary::PlayerInput::Command {
-            connection: crate::boundary::ConnectionId(7),
+            connection: mc_domain::ConnectionId(7),
             command: "settlement build house".into(),
             permission_level: 0,
         }],

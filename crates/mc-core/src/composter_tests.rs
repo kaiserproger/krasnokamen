@@ -1,11 +1,12 @@
 use super::*;
 use std::sync::Arc;
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::commands::GameMode;
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 
 pub(crate) const POS: BlockPos = BlockPos { x: 1, y: 200, z: 0 };
 

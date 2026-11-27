@@ -6,10 +6,8 @@ use std::sync::Arc;
 use super::*;
 use crate::fanout::publish_with_registries;
 use crate::plan::{ChunkPacketCache, PlanRegistries, ViewerState};
-use mc_core::boundary::{
-    BlockChange, ChangeSet, ConnectionId, SnapshotChunk, TickOutput, WorldSnapshot,
-};
-use mc_domain::EntityId;
+use mc_core::boundary::{BlockChange, ChangeSet, SnapshotChunk, TickOutput, WorldSnapshot};
+use mc_domain::{ConnectionId, EntityId};
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{
     LevelChunkWithLight, SectionBlockChange, SectionBlocksUpdate, pack_section_pos,

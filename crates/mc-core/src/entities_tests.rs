@@ -77,7 +77,7 @@ fn wire_fields(position: [f64; 3]) -> ColdFields {
 #[test]
 fn pickup_and_mob_lanes_follow_compaction_transfer_and_kind_changes() {
     let player = EntityKind::Player {
-        connection: crate::boundary::ConnectionId(1),
+        connection: mc_domain::ConnectionId(1),
     };
     let item = EntityKind::Item { type_id: 1 };
     let mob = EntityKind::Mob { type_id: 30 };
@@ -1370,7 +1370,7 @@ fn armor_motion_flag_matches_cold_predicate_after_equipment_and_lifecycle_change
         EntityId(3),
         Uuid::from_u128(3),
         EntityKind::Player {
-            connection: crate::boundary::ConnectionId(3),
+            connection: mc_domain::ConnectionId(3),
         },
         armored.clone(),
     );

@@ -1,7 +1,7 @@
 """Subjects part 3: combat, death, mobs/world systems, redstone, fluids, environment."""
 from subjects import domain
 
-domain("combat", ["core:combat.rs", "core:physical_attacks.rs", "core:physical_defense.rs", "core:tick/damage.rs"], ["attack_entity", "read_world_state"], [
+domain("combat", ["crates/mc-survival/src/combat.rs", "core:physical_attacks.rs", "core:physical_defense.rs", "core:tick/damage.rs"], ["attack_entity", "read_world_state"], [
     ("melee_cooldown_crit_sweep", "attack at partial/full cooldown, falling crit, sword sweep", "damage scales by cooldown; crit x1.5; sweep hits neighbours", {}),
     ("knockback", "hit while sprinting, knockback enchant, knockback resistance", "knockback vector/strength per vanilla", {}),
     ("pvp", "player hits player with pvp gamerule true/false", "damage only when pvp=true; team friendlyFire respected", {"mp": True}),
@@ -18,7 +18,7 @@ domain("combat", ["core:combat.rs", "core:physical_attacks.rs", "core:physical_d
     ("mob_targets_player", "hostile mob detects and attacks player", "target acquisition by follow range/line of sight; hits deal damage", {"src": ["core:hostile.rs"]}),
 ])
 
-domain("death_respawn", ["core:survival.rs", "core:entity_life.rs"], ["respawn", "read_world_state"], [
+domain("death_respawn", ["crates/mc-survival/src/lib.rs", "core:entity_life.rs"], ["respawn", "read_world_state"], [
     ("death_screen_respawn", "die then click Respawn", "death screen with message; respawn at world spawn with full health", {}),
     ("keep_inventory_false", "die with items and XP (keepInventory=false)", "items drop at death spot; XP orbs 7*level capped 100; inventory empty on respawn", {"custody": True}),
     ("keep_inventory_true", "die with keepInventory=true", "inventory and levels kept; nothing dropped", {"custody": True, "op": 2}),

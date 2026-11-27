@@ -16,7 +16,7 @@ pub(crate) fn repair(
     state: &mut TickState,
     actor: mc_domain::EntityId,
     target: mc_domain::EntityId,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
 ) -> bool {
     let Some(slot) = state.entities.slot_of(target) else {
         return false;

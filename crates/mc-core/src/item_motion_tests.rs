@@ -1,7 +1,8 @@
 use super::flat_player_fixture;
-use crate::boundary::{BlockPos, ConnectionId, DigAction, PlayerInput};
+use crate::boundary::{BlockPos, PlayerInput};
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::{ConnectionId, DigAction};
 use mc_physics::{Aabb, BlockMaterial, EntityBody, Vec3};
 
 struct Material(BlockMaterial);

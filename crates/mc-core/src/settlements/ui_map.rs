@@ -28,13 +28,13 @@ use super::ui_text::{Key, map_scale};
 use super::{
     Ctx, OWNER, blueprint_label, button, corner_text, kind_label, player_pos, present, short,
 };
-use crate::boundary::ConnectionId;
 use crate::dialog::{Button, Dialog};
 use crate::settlements::buildings::{BuildingId, BuildingKind};
 use crate::settlements::layout;
 use crate::settlements::registry::MAX_RADIUS;
 use crate::settlements::{SettlementId, SettlementRecord};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 
 /// Thirteen nine-pixel rows leave room for two compact action rows at scale 3.
 /// The full legend has its own page; it must not displace navigation.

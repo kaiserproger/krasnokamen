@@ -65,7 +65,7 @@ fn unbreaking_existing_player_tool_wear_skips_and_breaks_only_on_admitted_damage
         .max_damage
         .unwrap();
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(4),
+        mc_domain::ConnectionId(4),
         crate::commands::GameMode::Survival,
     );
     let seed = (0..1000)
@@ -112,7 +112,7 @@ fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
             mc_inventory::ClickMode::Throw,
         ] {
             let mut player = crate::player::PlayerState::new(
-                crate::boundary::ConnectionId(4),
+                mc_domain::ConnectionId(4),
                 if creative {
                     crate::commands::GameMode::Creative
                 } else {
@@ -154,7 +154,7 @@ fn vanishing_curse_destroys_inventory_and_full_inventory_cursor_on_death() {
     let mut cursed = enchanted("vanishing_curse", 1);
     cursed.item_id = sword;
     let mut player = crate::player::PlayerState::new(
-        crate::boundary::ConnectionId(4),
+        mc_domain::ConnectionId(4),
         crate::commands::GameMode::Survival,
     );
     player.inventory.slots.fill(ItemStack::new(stone, 64));
@@ -191,7 +191,7 @@ fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage()
     let plain = ItemStack::new(sword, 1);
     let mut knockback = enchanted("knockback", 2);
     knockback.item_id = sword;
-    let swing = crate::combat::Swing {
+    let swing = mc_survival::combat::Swing {
         ticks_since_reset: 20,
         falling: false,
         on_ground: true,
@@ -200,8 +200,8 @@ fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage()
         melee_bonus: 0.0,
         attack_speed_multiplier: 1.0,
     };
-    let base = crate::combat::melee_hit(&rules, &plain, swing);
-    let pushed = crate::combat::melee_hit(&rules, &knockback, swing);
+    let base = mc_survival::combat::melee_hit(&rules, &plain, swing);
+    let pushed = mc_survival::combat::melee_hit(&rules, &knockback, swing);
     assert_eq!(pushed.damage, base.damage);
     assert_eq!(pushed.bonus_knockback, base.bonus_knockback + 1.0);
 }

@@ -45,7 +45,8 @@ fn fixture() -> TickState {
 
 #[test]
 fn locked_session_stages_no_blast_damage_or_knockback() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = fixture();
     let (output, _, _) = run_tick(
         &mut state,
@@ -359,7 +360,7 @@ fn generic_damage_never_kills_or_loots_nonliving_primed_tnt() {
         kind: IntentKind::DamageEntity {
             target: id,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Explosion,
+            kind: mc_survival::DamageKind::Explosion,
             source: None,
         },
         footprint: Footprint {

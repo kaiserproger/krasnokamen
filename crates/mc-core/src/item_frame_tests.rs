@@ -1,6 +1,7 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

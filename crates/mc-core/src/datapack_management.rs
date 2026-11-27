@@ -10,10 +10,10 @@
 //! and its result is delivered on a later tick ([`listed`], [`created`],
 //! [`activated`]).
 use super::{Action, Failure, Job, ListScope, Listing, Selection};
-use crate::boundary::ConnectionId;
 use crate::command_execution::CommandResult;
 use crate::command_feedback::{text, translated};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use mc_nbt::{ListTag, Tag, tag_type};
 
 /// `Brigadier StringArgumentType.escapeIfRequired`.

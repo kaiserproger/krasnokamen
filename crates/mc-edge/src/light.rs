@@ -6,7 +6,7 @@
 //! deferred update is encoded from the newest snapshot, including zero masks
 //! that clear light after an emitter disappears.
 
-use mc_core::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use mc_protocol::packets::play::{GameEvent, LightData, LightUpdate};
 use mc_world::chunk::{Chunk, SectionLight};
 use rustc_hash::FxHashMap;

@@ -4,7 +4,7 @@ use crate::projectiles::{ProjectileData, ProjectileKind};
 
 fn fixture(name: &str, range: f64) -> (TickState, EntityId, EntityId, [f64; 3]) {
     let (mut state, player, pos) = crate::hostile_tests::setup(range);
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     let type_id = summons::type_id(&state, &format!("minecraft:{name}")).unwrap();
     let health = state.registry.blueprint(type_id).unwrap().params.max_health;
     let mob = state.spawn_mob(type_id, pos, health);
@@ -1438,7 +1438,7 @@ fn raider_names_resolve_by_protocol_id_lookup() {
         assert!(!raiders::owns(crate::entities::EntityKind::Mob { type_id }));
     }
     assert!(!raiders::owns(crate::entities::EntityKind::Player {
-        connection: crate::boundary::ConnectionId(1),
+        connection: mc_domain::ConnectionId(1),
     }));
     for type_id in [mc_data::entity_types::ENTITY_TYPE_COUNT as u32, u32::MAX] {
         assert!(!raiders::owns(crate::entities::EntityKind::Mob { type_id }));

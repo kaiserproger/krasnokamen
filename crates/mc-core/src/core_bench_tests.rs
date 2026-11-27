@@ -32,8 +32,9 @@ fn wal_metrics_refuses_an_empty_measurement() {
 
 #[test]
 fn moving_fixture_acknowledges_join_before_rotation_commits() {
-    use mc_core::boundary::{ConnectionId, PlayerInput};
+    use mc_core::boundary::PlayerInput;
     use mc_core::{Core, CoreConfig};
+    use mc_domain::ConnectionId;
 
     let root = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(root.path().to_owned(), 42);

@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use crate::blueprint::MobCategory;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 fn test_state(sim_distance: i32) -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry loads"));
@@ -1142,7 +1142,7 @@ fn fused_fixture(
     let around = join(&mut state);
     state.gamerules.insert("spawn_mobs".into(), "false".into());
     if peaceful {
-        state.difficulty = crate::survival::Difficulty::Peaceful;
+        state.difficulty = mc_survival::Difficulty::Peaceful;
     }
     let zombie = state.registry.zombie_type_id;
     let cow = state.registry.cow_type_id;
@@ -1342,7 +1342,7 @@ fn fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled() {
         )],
     );
     let (output, _, _) = run_tick(&mut state, &[]);
-    assert_eq!(state.difficulty, crate::survival::Difficulty::Peaceful);
+    assert_eq!(state.difficulty, mc_survival::Difficulty::Peaceful);
     for id in &ids[..2] {
         assert!(
             state.entities.slot_of(*id).is_none(),
@@ -1413,9 +1413,9 @@ fn insomnia_spawn_respects_rest_sky_gamerule_and_peaceful() {
             .gamerules
             .insert("spawn_phantoms".into(), (case != "disabled").to_string());
         state.difficulty = if case == "peaceful" {
-            crate::survival::Difficulty::Peaceful
+            mc_survival::Difficulty::Peaceful
         } else {
-            crate::survival::Difficulty::Hard
+            mc_survival::Difficulty::Hard
         };
         state.day_time = if case == "day" { 6_000 } else { 18_000 };
         let [x, y, z] = pos.map(|v| v.floor() as i32);
@@ -1442,7 +1442,7 @@ fn insomnia_spawn_respects_rest_sky_gamerule_and_peaceful() {
 fn patrols_spawn_pillagers_near_an_exposed_player_after_five_days() {
     let mut state = grass_state("minecraft:plains", "minecraft:plains");
     join(&mut state);
-    state.difficulty = crate::survival::Difficulty::Hard;
+    state.difficulty = mc_survival::Difficulty::Hard;
     state.day_time = 126_000;
     let pillager = state
         .registry
@@ -1484,9 +1484,9 @@ fn patrol_spawning_obeys_age_gamerule_and_difficulty() {
             _ => 126_000,
         };
         state.difficulty = if case == "peaceful" {
-            crate::survival::Difficulty::Peaceful
+            mc_survival::Difficulty::Peaceful
         } else {
-            crate::survival::Difficulty::Hard
+            mc_survival::Difficulty::Hard
         };
         state
             .gamerules

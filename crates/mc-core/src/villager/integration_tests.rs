@@ -1,9 +1,6 @@
 use super::{Gossip, conversion_tests::state, defense};
-use crate::{
-    boundary::{ConnectionId, PlayerInput},
-    core::journal_entries_for_tick,
-    tick::run_tick,
-};
+use crate::{boundary::PlayerInput, core::journal_entries_for_tick, tick::run_tick};
+use mc_domain::ConnectionId;
 fn type_id(state: &crate::tick::TickState, name: &str) -> u32 {
     state
         .registry

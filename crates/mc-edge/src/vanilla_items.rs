@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
 
 use bytes::BufMut;
-use mc_core::boundary::ConnectionId;
+use mc_domain::ConnectionId;
 use mc_protocol::CodecError;
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::with_vanilla_item_models;

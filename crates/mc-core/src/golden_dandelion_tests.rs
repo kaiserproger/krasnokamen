@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ConnectionId, EntityEvent, PlayerInput};
+use crate::boundary::{EntityEvent, PlayerInput};
 use crate::crafter::tests::{fixture, stack};
 use crate::tick::run_tick;
+use mc_domain::ConnectionId;
 use std::collections::BTreeMap;
 fn spawn(state: &mut TickState, name: &str) -> EntityId {
     let id = state

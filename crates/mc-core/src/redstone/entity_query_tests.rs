@@ -182,7 +182,7 @@ fn decorate(s: &mut TickState, rng: &mut Rng, slots: &[EntitySlot]) {
     for (index, &slot) in slots.iter().enumerate() {
         match index % 23 {
             0..=2 => {
-                let connection = crate::boundary::ConnectionId(index as _);
+                let connection = mc_domain::ConnectionId(index as _);
                 s.entities.set_kind(slot, EntityKind::Player { connection });
                 let mode = if index % 23 == 1 {
                     crate::commands::GameMode::Spectator

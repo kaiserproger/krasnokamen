@@ -682,7 +682,7 @@ pub(crate) fn crystal_hits(state: &mut TickState) {
                 piece.amount = piece.amount.max(1000.0);
             }
         }
-        if kind != crate::survival::DamageKind::Explosion {
+        if kind != mc_survival::DamageKind::Explosion {
             crate::explosion::apply(state, Some(id), state.entities.pos(slot), 6.0, None, None);
         }
     }
@@ -701,18 +701,18 @@ pub(crate) fn damage_allowed(
     }
     if matches!(
         piece.kind,
-        crate::survival::DamageKind::InFire
-            | crate::survival::DamageKind::OnFire
-            | crate::survival::DamageKind::Lava
-            | crate::survival::DamageKind::Fireball
-            | crate::survival::DamageKind::Fall
+        mc_survival::DamageKind::InFire
+            | mc_survival::DamageKind::OnFire
+            | mc_survival::DamageKind::Lava
+            | mc_survival::DamageKind::Fireball
+            | mc_survival::DamageKind::Fall
     ) {
         return false;
     }
     if matches!(
         state.end_fight.phase,
         Phase::PerchingScanning | Phase::PerchingAttacking | Phase::PerchingFlaming
-    ) && piece.kind == crate::survival::DamageKind::Projectile
+    ) && piece.kind == mc_survival::DamageKind::Projectile
     {
         return false;
     }
@@ -983,7 +983,7 @@ pub(crate) fn use_crystal(
     state: &mut TickState,
     entity: EntityId,
     pos: crate::boundary::BlockPos,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     changes: &mut ChangeSet,
 ) -> bool {
     let Some(player) = state.players.get(&entity) else {

@@ -291,7 +291,7 @@ fn function_trace_write_failure_is_reported_not_hidden() {
 fn function_trace_records_only_what_the_source_is_sent() {
     let world = tempfile::tempdir().unwrap();
     let mut state = fixture(world.path());
-    let player = crate::boundary::ConnectionId(1);
+    let player = mc_domain::ConnectionId(1);
     let entity = state.connections.entity_of(player).expect("joined");
     state.outbox.clear();
     state.command_context.current = None;

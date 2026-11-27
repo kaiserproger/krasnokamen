@@ -71,7 +71,7 @@ pub enum DamageSource {
         bonus_knockback: f64,
         fire_ticks: u32,
         bane_ticks: u32,
-        attack: crate::combat::MaceAttack,
+        attack: mc_survival::combat::MaceAttack,
     },
     /// Sweep knockback follows the attacker's yaw, not the victim's position.
     Sweep {
@@ -102,12 +102,50 @@ pub enum DamageSource {
     },
     /// Explicit `/damage` identity and attribution, captured before merge.
     Command {
-        connection: crate::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
         damage_type: &'static str,
         direct: Option<(EntityId, u32)>,
         cause: Option<(EntityId, u32)>,
         position: Option<[f64; 3]>,
     },
+}
+
+/// Vanilla damage identity of a `kind` hit from `source`, for wire publication
+/// and advancement tags: a command names its type, a falling mace smashes and a
+/// projectile names its projectile; otherwise the kind decides.
+pub(crate) fn hit_type_name(
+    kind: mc_survival::DamageKind,
+    source: Option<DamageSource>,
+    player_attack: bool,
+) -> &'static str {
+    use mc_survival::DamageKind;
+    match (kind, source) {
+        (_, Some(DamageSource::Command { damage_type, .. })) => damage_type,
+        (DamageKind::Melee, Some(DamageSource::Mace { attack, .. }))
+            if attack.fall_distance > 0.0 =>
+        {
+            "minecraft:mace_smash"
+        }
+        (DamageKind::Projectile, Some(DamageSource::Projectile { direct_type_id, .. })) => {
+            match mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(direct_type_id)
+                .map(|contract| contract.name)
+            {
+                Some("minecraft:trident") => "minecraft:trident",
+                Some("minecraft:arrow" | "minecraft:spectral_arrow") => "minecraft:arrow",
+                _ => "minecraft:thrown",
+            }
+        }
+        _ => kind.type_name(player_attack),
+    }
+}
+
+/// Registry id of [`hit_type_name`].
+pub(crate) fn hit_type_id(
+    kind: mc_survival::DamageKind,
+    source: Option<DamageSource>,
+    player_attack: bool,
+) -> i32 {
+    mc_survival::damage_type_id(hit_type_name(kind, source, player_attack))
 }
 
 /// What the intent does once its footprint validates.
@@ -133,7 +171,7 @@ pub enum IntentKind {
         target: EntityId,
         amount: f32,
         /// How armor and enchantments reduce it.
-        kind: crate::survival::DamageKind,
+        kind: mc_survival::DamageKind,
         source: Option<DamageSource>,
     },
     /// Take `count` items from an item entity.
@@ -174,7 +212,7 @@ pub enum IntentKind {
     /// lever): the footprint carries the expected and toggled states.
     UseBlock {
         pos: BlockPos,
-        hand: Option<crate::boundary::Hand>,
+        hand: Option<mc_domain::Hand>,
     },
     /// Native animal harvesting; the exact held stack is checked at merge.
     HarvestAnimal {

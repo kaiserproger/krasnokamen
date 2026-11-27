@@ -2,12 +2,12 @@
 //! Loot weights/counts/components are the 26.1.2 piglin_bartering table, read
 //! from the local server jar. Piglin.getArmPose (javap) uses loved offhand items
 //! for ADMIRING_ITEM, so no extra animation metadata or packet is needed.
-use crate::boundary::{ChangeSet, Hand};
+use crate::boundary::ChangeSet;
 use crate::entities::{ColdRow, EntityKind, EntitySlot};
 use crate::special_mobs::Retained;
 use crate::tick::TickState;
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_physics::mth;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

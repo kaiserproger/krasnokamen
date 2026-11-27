@@ -1,10 +1,10 @@
 //! Vanilla death components and server-side team broadcast visibility.
 use crate::boundary::PlayerChange;
 use crate::intent::DamageSource;
-use crate::survival::DamageKind;
 use crate::tick::TickState;
 use mc_domain::EntityId;
 use mc_nbt::{ListTag, Tag};
+use mc_survival::DamageKind;
 
 pub(super) fn component(
     state: &TickState,
@@ -23,7 +23,8 @@ pub(super) fn component(
         }) if projectile == owner => Some(owner),
         _ => None,
     });
-    let type_name = kind.type_name(
+    let type_name = crate::intent::hit_type_name(
+        kind,
         source,
         attacker.is_some_and(|id| state.players.contains_key(&id)),
     );

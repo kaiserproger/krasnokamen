@@ -1,12 +1,13 @@
 use std::sync::{Arc, LazyLock};
 
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::journal::{CheckpointManifest, JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::native_checkpoint::tests::{read_manifest, write_manifest};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 
 const POS: BlockPos = BlockPos { x: 4, y: 201, z: 4 };
 const FLOOR: BlockPos = BlockPos { x: 4, y: 200, z: 4 };

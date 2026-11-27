@@ -2,9 +2,10 @@
 //! Dialogs restore the last displayed view; every action still revalidates live
 //! authority and state. Chest views are re-rendered from current world state.
 use super::{Ctx, menus};
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
 use crate::settlements::SettlementId;
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use mc_nbt::Tag;
 
 const MAX_HISTORY: usize = 16;

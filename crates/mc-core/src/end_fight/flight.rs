@@ -1,7 +1,7 @@
 use super::*;
 use crate::projectiles::{ProjectileData, ProjectileKind, ProjectileState};
-use crate::survival::DamageKind;
 use mc_physics::mth;
+use mc_survival::DamageKind;
 
 fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
     a.into_iter().zip(b).map(|(a, b)| (a - b).powi(2)).sum()

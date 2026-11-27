@@ -30,7 +30,7 @@ pub struct EntitySlot(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityKind {
     Player {
-        connection: crate::boundary::ConnectionId,
+        connection: mc_domain::ConnectionId,
     },
     Mob {
         /// Protocol entity type id; selects the blueprint.
@@ -1420,7 +1420,7 @@ impl EntityStore {
         slot: EntitySlot,
         tick: u64,
         amount: f32,
-        kind: crate::survival::DamageKind,
+        kind: mc_survival::DamageKind,
     ) -> f32 {
         let (body, row) = self.parts_mut(slot);
         if kind.bypasses_invulnerability() {

@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::ConnectionId;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
 use mc_placement::concrete;

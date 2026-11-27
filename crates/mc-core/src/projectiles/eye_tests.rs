@@ -1,6 +1,6 @@
 use super::flight_tests::setup;
-use crate::boundary::Hand;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::Hand;
 
 #[test]
 fn physics_eye_without_stronghold_is_handled_without_consumption() {

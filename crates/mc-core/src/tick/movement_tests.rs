@@ -1,7 +1,8 @@
 use super::{flat_player_fixture, run_tick};
-use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
 use crate::effects::{ActiveEffect, EffectId};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 
 fn movement(position: [f64; 3]) -> PlayerInput {
     PlayerInput::Move {
@@ -168,7 +169,7 @@ fn physics_landing_blocks_reduce_damage_without_trusting_ground_claims() {
 #[test]
 fn pointed_dripstone_tip_landing_emits_stalagmite_damage_not_fall() {
     use crate::boundary::EntityEvent;
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for (direction, thickness, waterlogged, kind) in [
         ("up", "tip", "false", Some(DamageKind::Stalagmite)),
         ("up", "tip", "true", None),
@@ -212,7 +213,7 @@ fn pointed_dripstone_tip_landing_emits_stalagmite_damage_not_fall() {
             assert!(
                 output.changes.entity_events.iter().any(|event| matches!(
                     event, EntityEvent::Damage { entity, source_type_id, .. }
-                        if *entity == player && *source_type_id == kind.type_id(None, false)
+                        if *entity == player && *source_type_id == kind.type_id(false)
                 )),
                 "{direction} {thickness} {waterlogged}"
             );
@@ -546,7 +547,7 @@ fn gliding_firework_use_boosts_flight_speed() {
         &mut state,
         &[PlayerInput::UseItem {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             yaw: 0.0,
             pitch: 0.0,
             sequence: 1,

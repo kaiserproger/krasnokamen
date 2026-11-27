@@ -537,7 +537,8 @@ fn event_validation_matches_full_oracle_after_churn_and_reload() {
 /// without a resident row mutation or a POI block revision.
 #[test]
 fn occupied_bed_blocks_claim_through_event_gate() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let connection = ConnectionId(1);
     crate::tick::run_tick(

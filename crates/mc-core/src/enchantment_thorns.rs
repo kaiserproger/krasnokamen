@@ -1,8 +1,8 @@
 use crate::enchantments::{durability_damage, random};
 use crate::intent::DamageSource;
-use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_inventory::enchanting::level;
+use mc_survival::DamageKind;
 
 fn trigger(stack: &mc_data::ItemStack, seed: &mut i32) -> f32 {
     let level = level(stack, "thorns");

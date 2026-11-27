@@ -149,7 +149,8 @@ fn accepted_destroy_keeps_its_once_rolled_loot_after_a_later_replacement_write()
 
 #[test]
 fn shulker_break_pickup_and_accepted_or_rejected_clicks_publish_one_custody_image() {
-    use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+    use crate::boundary::{PlayerChange, PlayerInput};
+    use mc_domain::ConnectionId;
     use mc_inventory::ClickMode;
     let (mut state, actor, pos, current) = setup();
     state.stage_command_break(pos, current);

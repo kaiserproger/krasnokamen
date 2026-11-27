@@ -220,7 +220,7 @@ pub enum JournalEntry {
         value: crate::command_border::Border,
     },
     Difficulty {
-        value: crate::survival::Difficulty,
+        value: mc_survival::Difficulty,
     },
     /// Canonical gamerule overrides, including rules without an active subsystem.
     GameRules {
@@ -1514,7 +1514,7 @@ pub struct CheckpointManifest {
     #[serde(default)]
     pub border: crate::command_border::Border,
     #[serde(default)]
-    pub difficulty: crate::survival::Difficulty,
+    pub difficulty: mc_survival::Difficulty,
     /// Vanilla `level.dat` `Data.GameType`: the mode a new player joins in.
     #[serde(default)]
     pub default_game_mode: crate::commands::GameMode,

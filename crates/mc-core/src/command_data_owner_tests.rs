@@ -1,5 +1,6 @@
 use super::*;
-use crate::boundary::{ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{PlayerChange, PlayerInput};
+use mc_domain::{ConnectionId, Hand};
 
 const POS: BlockPos = BlockPos { x: 4, y: 64, z: 4 };
 

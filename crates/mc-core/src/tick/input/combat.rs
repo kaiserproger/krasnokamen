@@ -1,11 +1,11 @@
 use mc_data::ItemStack;
 use mc_physics::mth;
 
-use crate::boundary::{ChangeSet, ConnectionId};
+use crate::boundary::ChangeSet;
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::tick::{TickState, apply_player_effects, within_entity_reach};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 pub(in crate::tick) fn attack(
     state: &mut TickState,
@@ -88,17 +88,17 @@ pub(in crate::tick) fn attack(
                     .any(|(name, value)| name == "waterlogged" && value == "true")
                 || crate::statistics::climbable(state, block.block.raw_id)
         });
-    let mace = crate::combat::mace_attack(
+    let mace = mc_survival::combat::mace_attack(
         &rules,
         &held,
         state.players[&entity].fall_distance,
         state.entities.row(actor_slot).appearance.pose == 1,
     );
-    let mut hit = crate::combat::melee_hit_with_effective_attributes(
+    let mut hit = mc_survival::combat::melee_hit_with_effective_attributes(
         &rules,
         &held,
         &attribute_held,
-        crate::combat::Swing {
+        mc_survival::combat::Swing {
             ticks_since_reset: since_reset,
             falling,
             on_ground: state.entities.ground(actor_slot),
@@ -118,7 +118,7 @@ pub(in crate::tick) fn attack(
         attack_attributes(state, entity),
     );
     if let Some(attack) = mace {
-        hit.damage += crate::combat::smash_damage(&held, attack);
+        hit.damage += mc_survival::combat::smash_damage(&held, attack);
         hit.sweep_damage = None;
     }
     hit.damage += crate::enchantments::target_damage(state, *target, &held) * hit.strength;
@@ -146,9 +146,7 @@ pub(in crate::tick) fn attack(
         .get_mut(&entity)
         .expect("prepared melee player");
     if !player.creative() && hit.weapon_wear > 0 {
-        player
-            .vitals
-            .add_exhaustion(crate::survival::ATTACK_EXHAUSTION);
+        player.vitals.add_exhaustion(mc_survival::ATTACK_EXHAUSTION);
     }
     let effects = player.apply_tool_wear(wear);
     apply_player_effects(state, *connection, entity, effects, changes);
@@ -159,7 +157,7 @@ pub(in crate::tick) fn attack(
             position: state.entities.pos(actor_slot),
             yaw: state.entities.rot(actor_slot)[0],
             bonus_knockback: hit.bonus_knockback,
-            fire_ticks: crate::combat::fire_aspect_ticks(&held),
+            fire_ticks: mc_survival::combat::fire_aspect_ticks(&held),
             bane_ticks,
             attack,
         }
@@ -170,7 +168,7 @@ pub(in crate::tick) fn attack(
             yaw: state.entities.rot(actor_slot)[0],
             bonus_knockback: hit.bonus_knockback,
             sweep: hit.sweep_damage.is_some(),
-            fire_ticks: crate::combat::fire_aspect_ticks(&held),
+            fire_ticks: mc_survival::combat::fire_aspect_ticks(&held),
             bane_ticks,
         }
     };
@@ -180,7 +178,7 @@ pub(in crate::tick) fn attack(
         kind: IntentKind::DamageEntity {
             target: *target,
             amount: hit.damage,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(source),
         },
         footprint: Footprint {
@@ -261,13 +259,13 @@ pub(in crate::tick) fn attack(
                 kind: IntentKind::DamageEntity {
                     target: nearby_id,
                     amount: sweep + target_bonus,
-                    kind: crate::survival::DamageKind::Melee,
+                    kind: mc_survival::DamageKind::Melee,
                     source: Some(crate::intent::DamageSource::Sweep {
                         attacker: entity,
                         primary: *target,
                         position,
                         yaw,
-                        fire_ticks: crate::combat::fire_aspect_ticks(&held),
+                        fire_ticks: mc_survival::combat::fire_aspect_ticks(&held),
                         bane_ticks,
                     }),
                 },
@@ -337,7 +335,7 @@ pub(in crate::tick) fn stab(
             0.0,
         ),
     };
-    let swing = crate::combat::Swing {
+    let swing = mc_survival::combat::Swing {
         ticks_since_reset: since_reset(state, entity),
         falling: false,
         on_ground: state.entities.ground(actor_slot),
@@ -347,10 +345,11 @@ pub(in crate::tick) fn stab(
         attack_speed_multiplier: attack_speed_multiplier(state, entity),
     };
     let attributes = attack_attributes(state, entity);
-    if crate::combat::below_minimum_charge(&rules, &held, &attribute_held, swing, attributes) {
+    if mc_survival::combat::below_minimum_charge(&rules, &held, &attribute_held, swing, attributes)
+    {
         return;
     }
-    let hit = crate::combat::melee_hit_with_effective_attributes(
+    let hit = mc_survival::combat::melee_hit_with_effective_attributes(
         &rules,
         &held,
         &attribute_held,
@@ -463,15 +462,13 @@ pub(in crate::tick) fn stab(
         .expect("prepared melee player");
     if !player.creative() && hit.weapon_wear > 0 {
         for _ in &hits {
-            player
-                .vitals
-                .add_exhaustion(crate::survival::ATTACK_EXHAUSTION);
+            player.vitals.add_exhaustion(mc_survival::ATTACK_EXHAUSTION);
         }
     }
     let effects = player.apply_tool_wear(wear);
     apply_player_effects(state, *connection, entity, effects, changes);
     let bonus_knockback = if piercing.deals_knockback {
-        crate::combat::HIT_KNOCKBACK + hit.bonus_knockback
+        mc_survival::combat::HIT_KNOCKBACK + hit.bonus_knockback
     } else {
         0.0
     };
@@ -483,14 +480,14 @@ pub(in crate::tick) fn stab(
             kind: IntentKind::DamageEntity {
                 target,
                 amount,
-                kind: crate::survival::DamageKind::Melee,
+                kind: mc_survival::DamageKind::Melee,
                 source: Some(crate::intent::DamageSource::Melee {
                     attacker: entity,
                     position,
                     yaw,
                     bonus_knockback,
                     sweep: false,
-                    fire_ticks: crate::combat::fire_aspect_ticks(&held),
+                    fire_ticks: mc_survival::combat::fire_aspect_ticks(&held),
                     bane_ticks,
                 }),
             },

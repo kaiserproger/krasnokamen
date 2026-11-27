@@ -324,7 +324,7 @@ fn push_damage_arguments(
                 let Some(name) = mc_data::required_registry_entry("damage_type", id) else {
                     break;
                 };
-                if mc_core::survival::DamageKind::command_type(name.as_str()).is_some() {
+                if mc_survival::DamageKind::command_type(name.as_str()).is_some() {
                     push_suggestion(out, prefix, name.as_str());
                 }
             }

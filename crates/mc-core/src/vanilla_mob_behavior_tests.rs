@@ -1,9 +1,9 @@
-use crate::boundary::{BlockPos, ChangeSet, ConnectionId, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{BlockPos, ChangeSet, PlayerChange, PlayerInput};
+use mc_domain::{Hand, ConnectionId, EntityId};
 use crate::mounts::tests::{hold, slot, spawn, use_entity};
 use crate::tick::{TickState, run_tick};
 use mc_data::Identifier;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_domain::EntityId;
 
 fn fixture() -> (TickState, EntityId, [f64; 3]) {
     let mut state = crate::mob_lanes::tests::fixture("minecraft:plains");

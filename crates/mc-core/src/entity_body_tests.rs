@@ -204,7 +204,7 @@ fn land_hit_uses_body_hurt_at_and_marks() {
     store.take_touched();
     // First hit lands and records the tick in the Body column.
     assert_eq!(
-        store.land_hit(slot, 100, 5.0, crate::survival::DamageKind::Melee),
+        store.land_hit(slot, 100, 5.0, mc_survival::DamageKind::Melee),
         5.0
     );
     assert_eq!(store.body(slot).hurt_at, Some(100));
@@ -217,13 +217,13 @@ fn land_hit_uses_body_hurt_at_and_marks() {
     // Absorbed attempts retain the old row_mut custody; stronger hits land
     // only their excess without extending the original hurt window.
     assert_eq!(
-        store.land_hit(slot, 105, 4.0, crate::survival::DamageKind::Melee),
+        store.land_hit(slot, 105, 4.0, mc_survival::DamageKind::Melee),
         0.0
     );
     assert_eq!(store.touched_ids(), &[EntityId(91)]);
     assert_eq!(store.dirty_ids_len_for_test(), 1);
     assert_eq!(
-        store.land_hit(slot, 105, 7.0, crate::survival::DamageKind::Melee),
+        store.land_hit(slot, 105, 7.0, mc_survival::DamageKind::Melee),
         2.0
     );
     assert_eq!(store.row(slot).last_hurt, 7.0);
@@ -233,14 +233,14 @@ fn land_hit_uses_body_hurt_at_and_marks() {
         "stronger hits do not extend the window"
     );
     assert_eq!(
-        store.land_hit(slot, 110, 1.0, crate::survival::DamageKind::Melee),
+        store.land_hit(slot, 110, 1.0, mc_survival::DamageKind::Melee),
         1.0,
         "the original window expires even after a stronger excess hit"
     );
     assert_eq!(store.touched_ids(), &[EntityId(91)]);
     // Void bypasses invulnerability and still lands.
     assert_eq!(
-        store.land_hit(slot, 105, 3.0, crate::survival::DamageKind::Void),
+        store.land_hit(slot, 105, 3.0, mc_survival::DamageKind::Void),
         3.0
     );
 }

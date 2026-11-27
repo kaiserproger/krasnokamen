@@ -51,7 +51,7 @@ pub(super) struct RegistryInner {
     pub(super) locales: HashMap<ConnectionId, String>,
     /// Chat setting last admitted to the core (`ClientInformation.chat_visibility`);
     /// deduplicates Play updates and is cleared on disconnect.
-    pub(super) chat_visibilities: HashMap<ConnectionId, mc_core::boundary::ChatVisibility>,
+    pub(super) chat_visibilities: HashMap<ConnectionId, mc_domain::ChatVisibility>,
     /// Measured tab-list latency and profile id per connection, recorded on
     /// keepalive replies and broadcast batched by the pump; cleared on disconnect.
     pub(super) latencies: HashMap<ConnectionId, (uuid::Uuid, i32)>,
@@ -190,13 +190,13 @@ impl ConnectionRegistry {
     }
 
     /// The chat setting last admitted for this connection; Full while none is known.
-    pub(crate) fn chat_visibility(&self, id: ConnectionId) -> mc_core::boundary::ChatVisibility {
+    pub(crate) fn chat_visibility(&self, id: ConnectionId) -> mc_domain::ChatVisibility {
         self.inner
             .lock()
             .chat_visibilities
             .get(&id)
             .copied()
-            .unwrap_or(mc_core::boundary::ChatVisibility::Full)
+            .unwrap_or(mc_domain::ChatVisibility::Full)
     }
 
     /// Read actual mpsc occupied-or-reserved slots only on telemetry requests.

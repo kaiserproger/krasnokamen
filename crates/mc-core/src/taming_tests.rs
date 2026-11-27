@@ -113,7 +113,7 @@ fn cat_and_parrot_food_rolls_set_owner_and_ocelot_trust_persists() {
                     &mut state,
                     actor,
                     animal,
-                    crate::boundary::Hand::Main,
+                    mc_domain::Hand::Main,
                     false,
                     &mut intents
                 ),
@@ -226,7 +226,7 @@ fn failed_tame_roll_spends_one_food_without_granting_ownership() {
     assert!(state.players[&actor].inventory.slots[0].is_empty());
     assert!(state.entities.row(slot).entity_life.taming.owner.is_none());
     assert!(!state.entities.row(slot).entity_life.tamed);
-    assert!(drains.iter().filter(|(connection,_)|*connection==crate::boundary::ConnectionId(1))
+    assert!(drains.iter().filter(|(connection,_)|*connection==mc_domain::ConnectionId(1))
         .flat_map(|(_,changes)|changes).any(|change|
         matches!(change,crate::boundary::PlayerChange::ProjectileStatus { entity,event:6,.. } if *entity==wolf)));
 }

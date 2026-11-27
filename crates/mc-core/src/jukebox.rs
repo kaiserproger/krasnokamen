@@ -2,12 +2,12 @@
 //! Verified JukeboxBlockEntity/JukeboxSongPlayer 26.1.2: RecordItem, optional
 //! ticks_since_song_started, level events 1010(song registry id)/1011(0).
 use crate::bees::{block, centre, distance, fail, field, property};
-use crate::boundary::{BlockPos, ChangeSet, Hand, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, PlayerChange};
 use crate::config::CoreError;
 use crate::tick::{BlockEntityState, TickState};
 use mc_data::item_nbt::{stack_from_fields, stack_to_fields};
 use mc_data::{Identifier, ItemStack};
-use mc_domain::EntityId;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 use std::collections::BTreeMap;
 

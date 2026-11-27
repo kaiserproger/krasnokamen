@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use mc_world::ChunkPos;
 
-use crate::boundary::{ConnectionId, DigAction, PlayerInput};
+use crate::boundary::PlayerInput;
+use mc_domain::{DigAction, ConnectionId};
 use crate::config::CoreConfig;
 use crate::core::Core;
 use crate::horde_bench::flat_world;
@@ -76,7 +77,7 @@ fn integrity_lethal_damage_rejects_staged_pickup_before_respawn() {
         player_slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
             physical: None,
             custom_armor: false,
@@ -687,7 +688,7 @@ fn sword_sweep_uses_target_box_and_strict_unbuffered_reach_and_requires_primary_
 
 #[test]
 fn entity_interactions_refuse_distant_targets_without_swing_costs() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     let (mut state, player, pos) = flat_player_fixture();
     state.tick = 20;
     let cow_type = state
@@ -807,7 +808,8 @@ fn melee_breaks_worn_sword_and_syncs_slot_but_creative_preserves_it() {
 }
 #[test]
 fn block_interactions_require_reach_and_ack_refusals() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     let mut state = test_state();
     let entity = join(&mut state, 1, "reach");
     let slot = state.entities.slot_of(entity).expect("slot");
@@ -1316,7 +1318,8 @@ fn published_batches(journal_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 /// polls the WAL for the durability boundary with a bounded spin).
 #[test]
 fn checkpoint_round_trip_through_real_core() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     // Child mode: selected by env flag (re-exec of this test binary). The
@@ -1981,7 +1984,8 @@ fn player_air_is_initialized_on_join_and_reset_on_respawn() {
 /// checkpoint durable), reopen, rejoin the same uuid -> exact inventory.
 #[test]
 fn shutdown_joins_and_reopen_restores_inventory() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!("mc-core-shut-{}", std::process::id()));
@@ -2069,7 +2073,8 @@ fn shutdown_joins_and_reopen_restores_inventory() {
 /// total unchanged), xp, and a damaged mob (no rollback).
 #[test]
 fn checkpoint_holds_full_durable_state() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!("mc-core-full-{}", std::process::id()));
@@ -2267,7 +2272,8 @@ fn checkpoint_holds_full_durable_state() {
 /// creative; empty hand on a plain block does nothing.
 #[test]
 fn use_item_on_places_held_block_and_consumes() {
-    use crate::boundary::{BlockPos, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::Hand;
     let mut state = test_state();
     let entity = join(&mut state, 51, "placer");
     // Give 3 dirt into hotbar slot 0 (selected by default).
@@ -2306,7 +2312,7 @@ fn use_item_on_places_held_block_and_consumes() {
     let _ = run_tick(
         &mut state,
         &[PlayerInput::UseItemOn {
-            connection: crate::boundary::ConnectionId(51),
+            connection: mc_domain::ConnectionId(51),
             hand: Hand::Main,
             position: BlockPos {
                 x: 8,
@@ -2329,14 +2335,15 @@ fn use_item_on_places_held_block_and_consumes() {
 /// Task 2: empty hand on a plain block does nothing.
 #[test]
 fn use_item_on_empty_hand_is_noop() {
-    use crate::boundary::{BlockPos, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::Hand;
     let mut state = test_state();
     join(&mut state, 52, "empty");
     let before = state.world.block_at(8, 81, 8);
     let _ = run_tick(
         &mut state,
         &[PlayerInput::UseItemOn {
-            connection: crate::boundary::ConnectionId(52),
+            connection: mc_domain::ConnectionId(52),
             hand: Hand::Main,
             position: BlockPos { x: 8, y: 80, z: 8 },
             face: 1,
@@ -2354,7 +2361,7 @@ fn use_item_on_empty_hand_is_noop() {
 /// young piglet cannot breed until adulthood.
 #[test]
 fn feeding_gates_breeding_and_takes_one_food() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     use crate::entities::EntityKind;
     let registry = test_registry();
     let mut state = test_state();
@@ -2478,7 +2485,7 @@ fn shearing_drops_colored_wool_once_and_wears_the_shears() {
     let shear = |connection: u64| PlayerInput::InteractEntity {
         connection: ConnectionId(connection),
         target: sheep,
-        hand: crate::boundary::Hand::Main,
+        hand: mc_domain::Hand::Main,
         location: [0.0; 3],
     };
     let (output, _, _) = run_tick(&mut state, &[shear(401), shear(402)]);
@@ -2582,7 +2589,7 @@ fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
     let shear = || PlayerInput::InteractEntity {
         connection: ConnectionId(403),
         target: golem,
-        hand: crate::boundary::Hand::Main,
+        hand: mc_domain::Hand::Main,
         location: [0.0; 3],
     };
     let (output, _, _) = run_tick(&mut state, &[shear()]);
@@ -2658,7 +2665,8 @@ fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
 /// state, no dupe.
 #[test]
 fn torn_checkpoint_publishes_nothing() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::{Core, FAIL_CHECKPOINT_AFTER_REGIONS};
     let dir = std::env::temp_dir().join(format!("mc-core-torn-{}", std::process::id()));
@@ -2751,7 +2759,8 @@ fn torn_checkpoint_publishes_nothing() {
 /// Every batch covered by a durable shutdown checkpoint is redundant.
 #[test]
 fn shutdown_checkpoint_prunes_all_covered_batches() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!("mc-core-prune-{}", std::process::id()));
@@ -2804,7 +2813,8 @@ fn shutdown_checkpoint_prunes_all_covered_batches() {
 /// observed WAL durability point); the parent reopens and asserts recovery.
 #[test]
 fn custody_survives_checkpoint_crash() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     use mc_inventory::ClickMode;
@@ -3122,7 +3132,8 @@ fn custody_survives_checkpoint_crash() {
 /// Survival break spawns the block's loot with a correctly admitted mining tool.
 #[test]
 fn survival_break_spawns_loot() {
-    use crate::boundary::{BlockPos, DigAction, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::DigAction;
     let mut state = test_state();
     let entity = join(&mut state, 101, "miner");
     // The embedded loot fixture contains stone -> cobblestone.
@@ -3141,13 +3152,13 @@ fn survival_break_spawns_loot() {
         crate::crafter::tests::stack(&state, "diamond_pickaxe", 1);
     crate::tick::mining_tests::ready_to_finish(
         &mut state,
-        crate::boundary::ConnectionId(101),
+        mc_domain::ConnectionId(101),
         BlockPos { x: 8, y: 81, z: 8 },
     );
     let _ = run_tick(
         &mut state,
         &[PlayerInput::Dig {
-            connection: crate::boundary::ConnectionId(101),
+            connection: mc_domain::ConnectionId(101),
             position: BlockPos { x: 8, y: 81, z: 8 },
             action: DigAction::Finish,
             sequence: 1,
@@ -3172,7 +3183,8 @@ fn survival_break_spawns_loot() {
 /// Pickup moves the stack into the inventory and syncs (embedded data).
 #[test]
 fn pickup_fills_inventory_and_syncs() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let entity = join(&mut state, 102, "picker");
     // Drop a dirt stack at the player's feet via TestGive + DropSelected.
@@ -3416,7 +3428,8 @@ fn partial_pickup_journals_the_ground_remainder() {
 /// stack (rejected intents debit nothing).
 #[test]
 fn contested_placement_charges_only_the_winner() {
-    use crate::boundary::{BlockPos, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::Hand;
     let mut state = test_state();
     let registry = test_registry();
     let dirt = mc_data::Identifier::parse("minecraft:dirt").expect("dirt");
@@ -3466,7 +3479,7 @@ fn contested_placement_charges_only_the_winner() {
         "target starts air"
     );
     let place = |connection: u64, sequence: i32| PlayerInput::UseItemOn {
-        connection: crate::boundary::ConnectionId(connection),
+        connection: mc_domain::ConnectionId(connection),
         hand: Hand::Main,
         position: clicked,
         face: 1,
@@ -3504,7 +3517,7 @@ fn contested_placement_charges_only_the_winner() {
     // The winner's last synced window 0 already shows the debit.
     let mut synced = None;
     for (connection, changes) in &drains {
-        if *connection != crate::boundary::ConnectionId(61) {
+        if *connection != mc_domain::ConnectionId(61) {
             continue;
         }
         for change in changes {
@@ -3526,7 +3539,8 @@ fn contested_placement_charges_only_the_winner() {
 /// Leave stores the final image: rejoin restores inventory, xp and position.
 #[test]
 fn leave_rejoin_restores_full_player_state() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let uuid = uuid::Uuid::new_v4();
     let entity = {
@@ -3601,7 +3615,8 @@ fn leave_rejoin_restores_full_player_state() {
 /// empty (dead-inclusive lookup revives; journaled post-image is emptied).
 #[test]
 fn kill_died_respawn_drops_once_and_revives() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let registry = test_registry();
     let dirt_id = registry
@@ -3623,7 +3638,7 @@ fn kill_died_respawn_drops_once_and_revives() {
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -3740,7 +3755,8 @@ fn kill_died_respawn_drops_once_and_revives() {
 /// client's next move drags the server position back.
 #[test]
 fn teleport_command_syncs_the_teleported_client() {
-    use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
+    use crate::boundary::{PlayerChange, PlayerInput};
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let entity = join(&mut state, 204, "jumper");
     let (_, drains, _) = run_tick(
@@ -3960,7 +3976,8 @@ fn radius_split_furnace_does_not_consume_fuel_until_resident_chunk_activates() {
 
 #[test]
 fn furnace_charcoal_cooks_and_updates_every_open_viewer() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     let mut state = test_state();
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     state.registry = Arc::new(CoreRegistry::load(Some(&dir)).expect("full registry"));
@@ -4158,7 +4175,8 @@ fn furnace_charcoal_cooks_and_updates_every_open_viewer() {
 
 #[test]
 fn furnace_result_pickup_and_shift_click_award_experience_once() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     for mode in [ClickMode::Pickup, ClickMode::QuickMove] {
         let mut state = test_state();
@@ -4309,7 +4327,10 @@ fn furnace_result_pickup_and_shift_click_award_experience_once() {
 /// storage in one transaction; a new chest there starts empty.
 #[test]
 fn breaking_filled_chest_drops_contents_and_clears_storage() {
-    use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::DigAction;
+    use mc_domain::Hand;
+    use mc_domain::ConnectionId;
     let mut state = test_state();
     let registry = test_registry();
     let chest_block = registry
@@ -4432,7 +4453,9 @@ fn breaking_filled_chest_drops_contents_and_clears_storage() {
 #[test]
 fn shared_chest_second_viewer_syncs_and_stale_click_resyncs() {
     use crate::boundary::PlayerChange;
-    use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::Hand;
+    use mc_domain::ConnectionId;
     use mc_inventory::ClickMode;
     let mut state = test_state();
     let registry = test_registry();
@@ -4561,7 +4584,8 @@ fn shared_chest_second_viewer_syncs_and_stale_click_resyncs() {
 /// Leave -> checkpoint -> reopen -> rejoin: the offline image is durable.
 #[test]
 fn leave_checkpoint_reopen_rejoin_restores_state() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!(
@@ -4656,7 +4680,8 @@ fn death_after_checkpoint_no_dupe_after_reopen() {
 }
 
 fn death_no_dupe_after_reopen(checkpoint_every_ticks: u64) {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!(
@@ -4801,7 +4826,8 @@ fn death_no_dupe_after_reopen(checkpoint_every_ticks: u64) {
 /// the checkpoint ack (fail closed, no manifest advance).
 #[test]
 fn journal_append_failure_poisons_and_blocks_checkpoint() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::{Core, FAIL_JOURNAL_APPEND};
     use crate::native_checkpoint::tests::fixture_store;
@@ -4893,7 +4919,8 @@ fn journal_append_failure_poisons_and_blocks_checkpoint() {
 /// tick is skipped — the outbox drain carries it.
 #[test]
 fn chat_delivered_via_reliable_outbox() {
-    use crate::boundary::{ConnectionId, PlayerInput};
+    use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
     let dir = std::env::temp_dir().join(format!(
@@ -4978,7 +5005,10 @@ fn settle(
 /// no resurrection and a fresh chest starts empty.
 #[test]
 fn container_break_drops_survive_restart_without_resurrection() {
-    use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
+    use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::DigAction;
+    use mc_domain::Hand;
+    use mc_domain::ConnectionId;
     use crate::boundary::{PlayerChange, TickOutput};
     use crate::config::CoreConfig;
     use crate::core::Core;
@@ -5433,7 +5463,7 @@ fn default_weather_durations_use_each_vanilla_distribution_deterministically() {
 
 #[test]
 fn damage_rules_only_bypass_their_player_damage_types() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     for (rule, kind) in [
         ("fall_damage", DamageKind::Fall),
         ("drowning_damage", DamageKind::Drowning),
@@ -5510,7 +5540,7 @@ fn keep_inventory_and_immediate_respawn_retain_xp_and_inventory_without_death_ch
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -5555,7 +5585,7 @@ fn mob_drops_rule_suppresses_death_loot_without_suppressing_death() {
             physical: None,
             custom_armor: false,
             amount: f32::MAX,
-            kind: crate::survival::DamageKind::Void,
+            kind: mc_survival::DamageKind::Void,
             source: None,
         },
     ));
@@ -5676,7 +5706,7 @@ fn unsneak_under_low_ceiling_stays_crouched_until_standing_fits() {
 
 #[test]
 fn forced_crouch_bucket_uses_physical_eye_height() {
-    use crate::boundary::Hand;
+    use mc_domain::Hand;
     let (mut state, player, pos) = crouching_passage_fixture();
     let slot = state.entities.slot_of(player).unwrap();
     state.entities.set_pos(slot, [pos[0] + 2.0, pos[1], pos[2]]);
@@ -5845,7 +5875,8 @@ fn sprinting_accepted_distance_drains_hunger_and_reports_it() {
 
 #[test]
 fn predicted_table_use_waits_for_accepted_placement() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     let (mut state, player, pos) = flat_player_fixture();
     let table = state
         .registry
@@ -5972,7 +6003,8 @@ fn vanilla_pickup_box_collects_items_above_the_players_feet() {
 
 #[test]
 fn sign_placement_opens_owned_editor_and_text_is_journaled() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     let (mut state, player, pos) = flat_player_fixture();
     let sign = state
         .registry
@@ -6047,7 +6079,7 @@ fn sign_placement_opens_owned_editor_and_text_is_journaled() {
 fn accepted_mob_hits_push_players_once_per_hurt_window() {
     use crate::boundary::{EntityEvent, PlayerChange};
     let (mut state, player, pos) = flat_player_fixture();
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     state.day_time = 14_000;
     let zombie_type = state
         .registry
@@ -6316,8 +6348,8 @@ fn bottom_slab_accepts_player_step_and_supports_mob_at_half_height() {
 #[test]
 fn nonlethal_player_damage_publishes_committed_health_without_waiting_for_death() {
     use crate::boundary::PlayerChange;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
 
     let (mut state, player, _) = flat_player_fixture();
     let slot = state.entities.slot_of(player).unwrap();
@@ -6392,9 +6424,9 @@ fn nonlethal_player_damage_publishes_committed_health_without_waiting_for_death(
 fn accepted_melee_wears_and_breaks_armor_and_syncs_the_inventory() {
     use crate::boundary::PlayerChange;
     use crate::commands::GameMode;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
     use mc_data::item_components::{ItemArmorFacts, ItemFacts, ItemFactsTable};
+    use mc_survival::DamageKind;
 
     for (kind, mode, breaks) in [
         (DamageKind::Melee, GameMode::Survival, true),
@@ -6477,7 +6509,8 @@ fn accepted_melee_wears_and_breaks_armor_and_syncs_the_inventory() {
 
 #[test]
 fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
-    use crate::boundary::{EntityEvent, Hand, PlayerChange};
+    use crate::boundary::{EntityEvent, PlayerChange};
+    use mc_domain::Hand;
     use mc_inventory::OFF_HAND;
     for (hand, elapsed, front, blocked) in [
         (Hand::Off, 5, true, true),
@@ -6486,7 +6519,7 @@ fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
         (Hand::Off, 4, true, false),
     ] {
         let (mut state, player, pos) = flat_player_fixture();
-        state.difficulty = crate::survival::Difficulty::Normal;
+        state.difficulty = mc_survival::Difficulty::Normal;
         state.day_time = 14_000;
         let victim = state.entities.slot_of(player).unwrap();
         state.entities.row_mut(victim).protected_until = 0;
@@ -6577,10 +6610,11 @@ fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
 
 #[test]
 fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damage() {
-    use crate::boundary::{EntityEvent, Hand};
+    use crate::boundary::EntityEvent;
+    use mc_domain::Hand;
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     for (kind, velocity, blocked) in [
         (DamageKind::Projectile, [0.0, -1.0], true),
         (DamageKind::Projectile, [0.0, 1.0], false),
@@ -6639,10 +6673,11 @@ fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damag
 
 #[test]
 fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
-    use crate::boundary::{EntityEvent, Hand, PlayerChange};
+    use crate::boundary::{EntityEvent, PlayerChange};
+    use mc_domain::Hand;
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     for breaks in [false, true] {
         let (mut state, player, pos) = flat_player_fixture();
         let slot = state.entities.slot_of(player).unwrap();
@@ -6740,8 +6775,8 @@ fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
 #[test]
 fn team_join_and_friendly_fire_block_melee_and_projectiles_without_hurt_side_effects() {
     use crate::intent::DamageSource;
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     let (mut state, victim, pos) = flat_player_fixture();
     let attacker = join(&mut state, 2, "Attacker");
     let victim_name = state.connections.name_of(victim).unwrap().to_owned();
@@ -7024,7 +7059,7 @@ fn zombie_player_kill_spawns_five_experience_in_vanilla_buckets() {
             physical: None,
             custom_armor: false,
             amount: 100.0,
-            kind: crate::survival::DamageKind::Melee,
+            kind: mc_survival::DamageKind::Melee,
             source: Some(crate::intent::DamageSource::Melee {
                 attacker: player,
                 position: pos,
@@ -7328,7 +7363,8 @@ fn accepted_coal_break_spawns_orbs_and_silk_touch_spawns_none() {
 
 #[test]
 fn workstation_wire_inputs_own_inputs_and_commit_station_outputs() {
-    use crate::boundary::{BlockPos, Hand, PlayerChange};
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     use mc_inventory::MenuKind;
     for (block, kind, menu_type) in [
@@ -7618,7 +7654,8 @@ mod enderman_tests;
 
 #[test]
 fn use_equippable_publishes_inventory_equipment_and_durable_player_image() {
-    use crate::boundary::{Hand, PlayerChange};
+    use crate::boundary::PlayerChange;
+    use mc_domain::Hand;
     let (mut state, actor, _) = flat_player_fixture();
     let held = mc_data::ItemStack::new(
         state
@@ -7847,7 +7884,7 @@ fn placement_obstruction_bound_follows_wide_body_dimension_transfer() {
 /// publishes the grave to that package only.
 #[test]
 fn grave_custody_buries_drops_keeps_experience_and_publishes_the_grave() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -7933,7 +7970,7 @@ fn grave_custody_buries_drops_keeps_experience_and_publishes_the_grave() {
 /// vanilla drop: the inventory never leaves the player and no container appears.
 #[test]
 fn keep_inventory_bypasses_grave_custody() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8037,7 +8074,7 @@ fn hopper_at(state: &mut TickState, cell: (i32, i32, i32)) -> u32 {
 /// inventory stays empty across the pull cycles that follow.
 #[test]
 fn grave_placement_avoids_an_existing_hopper_below_the_death_cell() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8129,7 +8166,7 @@ fn grave_placement_avoids_an_existing_hopper_below_the_death_cell() {
 /// so the grave moves to the first fully grounded ring cell.
 #[test]
 fn grave_placement_avoids_a_partial_block_below_the_death_cell() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8203,7 +8240,7 @@ fn grave_placement_avoids_a_partial_block_below_the_death_cell() {
 /// ring cell that does, and the cart's own inventory stays empty while it tries.
 #[test]
 fn grave_placement_avoids_a_cell_a_hopper_minecart_occupies() {
-    use crate::survival::DamageKind;
+    use mc_survival::DamageKind;
     let (mut state, player, pos) = flat_player_fixture();
     state
         .gamerules
@@ -8303,7 +8340,7 @@ fn grave_placement_avoids_a_cell_a_hopper_minecart_occupies() {
 fn same_tick_slot_swap_attack_uses_previous_tick_held_attributes() {
     // MC-28289 at the tick level: SelectSlot + Attack in one input batch
     // must resolve attack_damage from the pre-tick held stack.
-    use crate::boundary::ConnectionId;
+    use mc_domain::ConnectionId;
     use crate::boundary::PlayerInput;
     let (mut state, player, pos) = flat_player_fixture();
     state.tick = 20;

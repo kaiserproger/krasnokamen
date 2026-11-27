@@ -166,7 +166,8 @@ fn shutdown_releases_database_while_backup_admission_is_paused() {
 
 #[test]
 fn shutdown_drains_queued_ticks_and_restores_two_players_and_block() {
-    use crate::boundary::{BlockPos, ChunkPos, ConnectionId, PlayerChange, PlayerInput};
+    use crate::boundary::{BlockPos, ChunkPos, PlayerChange, PlayerInput};
+    use mc_domain::ConnectionId;
     use std::sync::{Arc, mpsc};
 
     // The write rendezvous holds a process-global test hook. Keep it out of

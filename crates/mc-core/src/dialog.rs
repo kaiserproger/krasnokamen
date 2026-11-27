@@ -15,8 +15,9 @@
 //!
 //! Action ids are `krasnokamen:<owner>/<action>`; [`route_click`] dispatches on `<owner>`.
 //! New owners add one arm there.
-use crate::boundary::{ChangeSet, ConnectionId, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::tick::TickState;
+use mc_domain::ConnectionId;
 use mc_nbt::{ListTag, Tag};
 
 /// Why a dialog could not be built; vanilla clients disconnect on a malformed dialog,

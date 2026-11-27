@@ -30,7 +30,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
-use crate::boundary::{ConnectionId, PlayerChange};
+use crate::boundary::PlayerChange;
+use mc_domain::ConnectionId;
 
 pub(crate) type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
 pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);

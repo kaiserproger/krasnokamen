@@ -88,9 +88,9 @@ pub(super) fn execute(
             ..
         } => {
             let hand = if *equipment_slot == 0 {
-                crate::boundary::Hand::Main
+                mc_domain::Hand::Main
             } else {
-                crate::boundary::Hand::Off
+                mc_domain::Hand::Off
             };
             if !crate::physical_defense::set_item_use(state, slot, hand, *active) {
                 return Err(ScriptOperationFailure::Forbidden);

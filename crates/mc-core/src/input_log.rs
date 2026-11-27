@@ -33,9 +33,10 @@ use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_cha
 
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::config::CoreError;
 use crate::core::SpawnRequest;
+use mc_domain::ConnectionId;
 
 /// Current line format version.
 pub(crate) const FORMAT: u32 = 1;

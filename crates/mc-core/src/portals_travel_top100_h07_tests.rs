@@ -2,7 +2,7 @@
 use super::*;
 use crate::contact_hazards;
 use crate::intent::{Intent, IntentKind};
-use crate::survival::DamageKind;
+use mc_survival::DamageKind;
 use std::sync::{Arc, LazyLock};
 
 static REGISTRY: LazyLock<Arc<crate::registry::CoreRegistry>> =

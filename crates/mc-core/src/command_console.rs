@@ -1,9 +1,9 @@
 //! Server command source: permission level four, without a player entity.
 use std::sync::{Arc, Mutex};
 
-use crate::boundary::{ChangeSet, ConnectionId};
+use crate::boundary::ChangeSet;
 use crate::tick::TickState;
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
 
 /// Reserved server source; edge connection allocation starts at one.
 pub const CONNECTION: ConnectionId = ConnectionId(0);

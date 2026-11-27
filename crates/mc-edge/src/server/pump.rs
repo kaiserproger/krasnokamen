@@ -978,7 +978,7 @@ pub(super) async fn wait_for_join(
     recorder: bool,
     client_view_distance: i8,
     client_language: &str,
-    chat_visibility: mc_core::boundary::ChatVisibility,
+    chat_visibility: mc_domain::ChatVisibility,
 ) -> anyhow::Result<JoinedSpawn> {
     {
         let mut inner = server.connections.inner.lock();

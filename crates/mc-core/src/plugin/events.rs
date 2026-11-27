@@ -656,7 +656,7 @@ pub(crate) fn entity_interaction(
     state: &mut TickState,
     actor: mc_domain::EntityId,
     target: mc_domain::EntityId,
-    hand: crate::boundary::Hand,
+    hand: mc_domain::Hand,
     secondary: bool,
     intent: Option<&crate::intent::Intent>,
 ) {
@@ -679,8 +679,8 @@ pub(crate) fn entity_interaction(
         };
         let entity_type = state.registry.entity_type_name(type_id)?;
         let hand = match hand {
-            crate::boundary::Hand::Main => mc_script::ScriptInteractionHand::MainHand,
-            crate::boundary::Hand::Off => mc_script::ScriptInteractionHand::OffHand,
+            mc_domain::Hand::Main => mc_script::ScriptInteractionHand::MainHand,
+            mc_domain::Hand::Off => mc_script::ScriptInteractionHand::OffHand,
         };
         mc_script::ScriptEvent::try_player_entity_interacted_with_context(
             mc_script::ScriptPlayerId::new(connection.0),

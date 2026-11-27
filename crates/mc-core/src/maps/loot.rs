@@ -1,10 +1,11 @@
 //! First-open loot resolves on the existing locate worker; only tick completion
 //! can publish maps and inventory. No map ids are allocated by pending requests.
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::dimensions::Dimension;
 use crate::tick::{BlockEntityState, TickState};
 use mc_data::loot::chest_26_1_2::{ChestLootContext, ChestRng, ExplorationMap};
 use mc_data::{Identifier, ItemStack};
+use mc_domain::ConnectionId;
 use mc_world::{BlockPos, ChunkPos};
 use std::sync::Arc;
 

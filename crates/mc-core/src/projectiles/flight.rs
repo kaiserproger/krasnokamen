@@ -14,10 +14,10 @@ use uuid::Uuid;
 use super::{ARROW_IN_GROUND_INDEX, ProjectileKind, ProjectileState};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{DamageSource, Footprint, Intent, IntentKind};
-use crate::survival::DamageKind;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
+use mc_survival::DamageKind;
 
 #[cfg(test)]
 #[path = "flight_top100_h02_tests.rs"]

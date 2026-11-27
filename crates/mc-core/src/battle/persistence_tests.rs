@@ -142,7 +142,7 @@ fn battle_resume_capture_prunes_only_proven_ground_tombstones() {
         slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,
@@ -264,7 +264,7 @@ fn battle_resume_still_refuses_an_unknown_windup_target_or_block_attacker() {
             horse,
             crate::tick::DamagePiece {
                 amount: 1000.0,
-                kind: crate::survival::DamageKind::GenericKill,
+                kind: mc_survival::DamageKind::GenericKill,
                 source: None,
                 physical: None,
                 custom_armor: false,
@@ -467,7 +467,7 @@ fn kill(state: &mut crate::tick::TickState, slot: crate::entities::EntitySlot) {
         slot,
         crate::tick::DamagePiece {
             amount: 1000.0,
-            kind: crate::survival::DamageKind::GenericKill,
+            kind: mc_survival::DamageKind::GenericKill,
             source: None,
             physical: None,
             custom_armor: false,

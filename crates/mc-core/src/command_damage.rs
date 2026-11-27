@@ -1,12 +1,12 @@
 //! Vanilla `/damage` syntax feeding the existing native damage merge.
-use crate::boundary::{ChangeSet, ConnectionId};
+use crate::boundary::ChangeSet;
 use crate::command_args::{CommandError, Coord};
 use crate::commands::{SelectorKind, Target};
 use crate::entities::EntityKind;
 use crate::intent::DamageSource;
-use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
-use mc_domain::EntityId;
+use mc_domain::{ConnectionId, EntityId};
+use mc_survival::DamageKind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DamageCommand {

@@ -107,8 +107,8 @@ fn hand_use(state: &mut crate::tick::TickState, position: BlockPos) {
     let _ = crate::tick::run_tick(
         state,
         &[crate::boundary::PlayerInput::UseItemOn {
-            connection: crate::boundary::ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            connection: mc_domain::ConnectionId(1),
+            hand: mc_domain::Hand::Main,
             position,
             face: 1,
             cursor: [0.5, 0.5, 0.5],

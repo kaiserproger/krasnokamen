@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChunkPos, ConnectionId, PlayerInput};
+use crate::boundary::{ChunkPos, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 fn state(dir: Option<std::path::PathBuf>) -> TickState {
@@ -688,7 +689,7 @@ fn fix_mobs_trial_egg_use_on_overrides_spawn_through_tick() {
         &mut state,
         &[PlayerInput::UseItemOn {
             connection: ConnectionId(1),
-            hand: crate::boundary::Hand::Main,
+            hand: mc_domain::Hand::Main,
             position: POS,
             face: 1,
             cursor: [0.5, 1.0, 0.5],

@@ -39,8 +39,8 @@ fn storage(state: &TickState, id: SettlementId) -> Vec<inventory::Image> {
         .collect()
 }
 
-fn swing() -> crate::combat::Swing {
-    crate::combat::Swing {
+fn swing() -> mc_survival::combat::Swing {
+    mc_survival::combat::Swing {
         ticks_since_reset: 100,
         falling: false,
         on_ground: true,
@@ -59,7 +59,7 @@ fn equipment_rank(state: &TickState, stack: &ItemStack, index: usize) -> Option<
     if index == 0 {
         let name = state.registry.items.name_of(stack.item_id)?.path();
         return (name.ends_with("_sword") || name.ends_with("_axe"))
-            .then(|| crate::combat::melee_hit(&rules, stack, swing()).damage);
+            .then(|| mc_survival::combat::melee_hit(&rules, stack, swing()).damage);
     }
     let facts = state
         .registry

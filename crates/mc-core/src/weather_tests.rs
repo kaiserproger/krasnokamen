@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::PlayerInput;
 use crate::journal::{CheckpointManifest, JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::native_checkpoint::tests::{read_manifest, write_manifest};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 
 fn fixture() -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
@@ -803,7 +804,7 @@ fn lightning_ignites_supported_air_and_channels_through_exposed_rods() {
     state
         .gamerules
         .insert("fire_spread_radius_around_player".into(), "-1".into());
-    state.difficulty = crate::survival::Difficulty::Normal;
+    state.difficulty = mc_survival::Difficulty::Normal;
     lightning::strike_blocks(&mut state, [8.5, 65.0, 8.5]);
     let fire = state.world.block_at(8, 65, 8).unwrap();
     assert_eq!(

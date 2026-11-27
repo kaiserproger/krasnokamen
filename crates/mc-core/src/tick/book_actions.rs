@@ -1,7 +1,7 @@
 //! Player session checks and authoritative book inventory commits.
 use super::TickState;
-use crate::boundary::{ConnectionId, Hand, PlayerChange};
-use mc_domain::EntityId;
+use crate::boundary::PlayerChange;
+use mc_domain::{ConnectionId, EntityId, Hand};
 
 pub(crate) fn use_item(state: &mut TickState, actor: EntityId, hand: Hand) -> bool {
     let Some(player) = state.players.get(&actor) else {

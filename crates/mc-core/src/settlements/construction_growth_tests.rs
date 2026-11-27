@@ -1797,7 +1797,7 @@ fn retained_identical_player_beam_refuses_upgrade_outside_the_territory_only() {
 fn disabled_history_with_live_player_refuses_upgrade_outside_the_territory_only() {
     let (mut state, id, slot, project, beam) = upgrade_beam();
     let entity = state.entities.body(slot).id;
-    let connection = crate::boundary::ConnectionId(999);
+    let connection = mc_domain::ConnectionId(999);
     state
         .entities
         .set_kind(slot, crate::entities::EntityKind::Player { connection });

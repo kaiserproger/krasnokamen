@@ -1,7 +1,8 @@
 //! Boss bars are snapshot baselines, not one-shot events: coalesced ticks and
 //! returning viewers cannot strand an old progress value or a dead boss bar.
 use crate::plan::{PlannedPacket, push_reliable};
-use mc_core::boundary::{ConnectionId, EntityView};
+use mc_core::boundary::EntityView;
+use mc_domain::ConnectionId;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_protocol::packets::play::{BossOperation, ClientboundBossEvent};
 use rustc_hash::FxHashMap;

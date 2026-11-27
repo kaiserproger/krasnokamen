@@ -425,8 +425,8 @@ fn owned_settlement_keeps_soldier_dismissed_after_automatic_staffing_cycles() {
 
 #[test]
 fn recruited_soldier_gear_drops_on_death_and_dismissal_restores_default_chance() {
-    use crate::survival::DamageKind;
     use crate::tick::DamagePiece;
+    use mc_survival::DamageKind;
     let (mut state, id, slot) = fixture();
     let sword = item(&state, "diamond_sword");
     let helmet = item(&state, "iron_helmet");
