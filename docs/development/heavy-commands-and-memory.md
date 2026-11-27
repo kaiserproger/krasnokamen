@@ -1,6 +1,6 @@
 # Heavy commands, memory and disk on the shared machine
 
-[AGENTS.md](../../AGENTS.md#build-and-validation) sets agent policy;
+[CONTRIBUTING](../../CONTRIBUTING.md#validation) and the [owner rules](../RULES.md#agents-and-the-owner-host) set agent policy;
 this page owns runner behavior and diagnosis. Harness-only cgroups:
 [resource bounds](../AGENT_TOOLING.md#resource-bounds). Installation:
 [`tools/dev/README.md`](../../tools/dev/README.md) (systemd user scopes, cgroup v2,

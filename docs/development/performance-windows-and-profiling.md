@@ -170,7 +170,7 @@ failure a server bug.
 Durable optimization boundaries:
 
 - Quiescence caches prove geometric absence, never suppress live burn/fire/
-  portal timers. [Tick-anchor projection](lessons.md) replaces journaled
+  portal timers. [Tick-anchor projection](../PITFALLS.md#code) replaces journaled
   per-tick counters. Transparent huge pages had no measurable gain (2026-10-18).
 - Contact work classifies on pool; serial owner receives only live burn,
   feet-cauldron or real-hazard rows. Section palettes are coarse, so pool checks

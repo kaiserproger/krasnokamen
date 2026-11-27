@@ -1,6 +1,6 @@
 # Releases and tags
 
-[AGENTS](../../AGENTS.md) grants Main small commits/pushes to `main`; workers
+The [owner rules](../RULES.md#commits-reviews-and-publication) grant Main small commits/pushes to `main`; workers
 stay on their own worktree branches and do not push.
 Tags/releases/other publication need explicit owner authorization. Before every
 tag: [two independent reviewers](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)
@@ -43,7 +43,7 @@ review rejections were claim errors).
 
 **Authorized publication, only after reviews:** no local-only `.analysis/`,
 `data/vanilla/`, `versions/`, `libraries/`, `perf.data` or stray targets in staging.
-One Conventional Commit with owner identity from AGENTS;
+One Conventional Commit with the owner identity (`kaiserproger <kaisergrobe@gmail.com>`);
 `git merge-base --is-ancestor origin/main HEAD`; annotated `git tag -a <tag>`;
 push main and tag as separate commands with separate statuses. CI prereleases
 `v0.*` and tags containing `-` (including `-rc.N`). Watch asynchronously:

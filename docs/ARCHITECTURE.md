@@ -18,9 +18,16 @@ retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
   Live and offline generation share `chunk_loader`'s immutable source and worker
   pool, not a callback into a shared tick state.
 - `crates/mc-protocol`, `mc-data`, `mc-world`, `mc-physics` and `mc-worldgen`:
-  protocol, content and shared world/physics implementation.
+  protocol, content and shared world/physics implementation. `mc-nbt` is the
+  shared NBT codec; `mc-domain` holds protocol-independent gameplay
+  value types (no transport, persistence or runtime dependency);
+  `mc-melee-range` is vanilla melee-reach geometry, dependency-free so the
+  server and the replay scanner judge contact with the same code.
 - `mc-plugin-host` and `mc-script`: isolated component execution and bounded
   admission; `mc-loader` owns the Loader wire contract.
+- `mc-vanilla`: vanilla-jar process control and registry capture for content
+  import and the harness; `mc-test-harness`: wire-probe, replay validation and
+  other differential test tools; `xtask`: code-health and generated navigation.
 - `workspace-features`: compile-time third-party feature unification for the
   server build and core tests ([ADR 0021](decisions/0021-build-time-and-crate-split.md)).
   Only mc-edge's normal dependencies and mc-core's dev dependencies activate it;
@@ -44,6 +51,6 @@ authoritative.
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
 - [Horizon `horizon:lod` far-terrain acceptance](development/horizon-lod-acceptance.md)
 - [Plugins](PLUGINS.md), [Loader](KRASNOKAMEN_LOADER.md),
-  [operations](OPERATING.md), [decisions](decisions/README.md)
+  [operations](OPERATING.md), [decisions](../DECISIONS.md)
 
 Generated indexes navigate code; they are not a second source of semantics.
