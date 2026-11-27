@@ -24,21 +24,32 @@ Omitted hunks:
 | `ee71ee684` `command_summon.rs` `prepare` mount-cargo block | **(c)** a later commit (`9edc3c3ac`) removed the block; `from_record` does the same work, so there is no HEAD equivalent to carry |
 | `ee71ee684` `command_summon_tests.rs` | a test hunk; `_split_non_test` drops it (the tests stay and are the row's cargo refs) |
 
-## Control (measured on the 2026-11-27 tree)
+## Control (measured 2026-11-28 on `ca7a6bda1`, promotion `20261127T183842-ledger-promote-7_6xdy1p`)
 
-- `cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo` red at
-  `crates/mc-core/src/command_summon_tests.rs:26`.
-- `harness:entities:native-v2-ledger-summon-horse-cargo` red at `summoned_cargo_mount_appears`
-  (BASE's `973e6e60e` turned the fixture wait into `call_checked`), with the client still in play
-  (`in_play: true`). The control scenario's own report carries
-  `summon_feedback: ["Unknown or unsupported summon NBT field ChestedHorse", …]`, so the red is the
-  server refusing the mount's field — the row's symptom — not a bare MCP timeout; the fixture
-  command is recorded in `fixture_commands`.
+Reversed-tree pin `pins/ca7a6bda19d4-54118974-server-…` (`control_tree_sha256`
+`54118974…`, the reversed `command_summon.rs` hunk); restore green on all three
+refs.
 
-Both refs are green on the restore; the candidate receipt's `summon_feedback` reads
-`Summoned new Donkey` and the menu assertions (`cargo_menu_has_53_slots`,
-`summoned_items_land_in_the_first_cargo_slot`, `summoned_items_land_in_the_last_cargo_column`,
-`cargo_summon_does_not_fill_the_saddle_slot`) are true.
+- `cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo`
+  red at `crates/mc-core/src/command_summon_tests.rs:27` (the `summon` helper's
+  assert). The server's own answer is in the cargo control log
+  (`20261127T182736-ledger-promote-4pwi5o28/ledger-5-run.log:248`):
+  `Chat { message: "Unknown or unsupported summon NBT field ChestedHorse" }`.
+- `cargo:mc-core:command_summon::tests::summon_mule_accepts_items_without_a_chest_and_keeps_no_cargo`
+  red at the same line, and its log line (`:268-269`) names the field the split
+  was made for: `Entity does not support summon NBT field Items`.
+- `harness:entities:native-v2-ledger-summon-horse-cargo` red at
+  `summoned_cargo_mount_appears`. The graphical artifact
+  (`20261127T183804-native-v2-ledger-summon-horse-cargo-236km3_i/result.json:189-195`)
+  records exactly `in_play: true` and `summoned_cargo_mount_appears: false` plus
+  the scenario error — it carries **no** server chat line. The refusal text
+  belongs to the cargo control above, not to this artifact.
+
+The candidate receipt (`20261127T182714-native-v2-ledger-summon-horse-cargo-xbtvj91v`,
+tree `ca7a6bda1`, server pin `010df1cf…`) is green on the same ref and its menu
+assertions (`cargo_menu_has_53_slots`, `summoned_items_land_in_the_first_cargo_slot`,
+`summoned_items_land_in_the_last_cargo_column`, `cargo_summon_does_not_fill_the_saddle_slot`)
+are true.
 
 ## New in this lane
 
@@ -46,7 +57,6 @@ Both refs are green on the restore; the candidate receipt's `summon_feedback` re
 (`crates/mc-core/src/command_summon_tests.rs:1698`) keeps the chest-free `mule`
 `{Tame:1b,Items:[…]}` case out of the chested suite, so a tree that refuses `Items`
 fails naming the field instead of stopping earlier at `ChestedHorse`. Its control
-is the same patch: reverse it and this test's `summon` call panics with
-`Unknown or unsupported summon NBT field Items` printed from `state.outbox`.
-That control is **not yet run** on this head; it belongs to the re-promotion and
-its `proving_assertions` entry is `crates/mc-core/src/command_summon_tests.rs:27`.
+is the same patch, measured above: the reversed tree panics with
+`Entity does not support summon NBT field Items` from `state.outbox`, and its
+`proving_assertions` entry is `crates/mc-core/src/command_summon_tests.rs:27`.

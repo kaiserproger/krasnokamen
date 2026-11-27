@@ -1,54 +1,96 @@
 {
   "id": "SUMMON-ITEMS-HORSE-CARGO",
   "verdict": "promoted",
-  "fix_commit": "ee71ee684",
-  "fix_commit_full": "ee71ee68435863c87542e8dcae430fd42b1145af",
-  "promoted_at": "2026-11-25T07:26:01+00:00",
-  "tree_head": "b9d3b4a45379b23f90a011173a3211cfeac6e4f4",
+  "fix_commit": "patch:089fd1039796720221490f84e3ca93cca354d4aaf742567dab9c02c945136e86",
+  "fix_commit_full": "patch:089fd1039796720221490f84e3ca93cca354d4aaf742567dab9c02c945136e86",
+  "promoted_at": "2026-11-27T18:46:33+00:00",
+  "tree_head": "ca7a6bda19d4c4e7c60ee1ded8ffeff60e382e13",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "control_tree": "fix_commit",
+  "control_tree": "head",
+  "control_tree_sha256": "54118974b998bd89dad35acb0a9e81e23bfc5aaf7570deb93a1a83ca24334b64",
+  "control_tree_head": "ca7a6bda19d4c4e7c60ee1ded8ffeff60e382e13",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": null,
+  "fix_patch_sha256": "089fd1039796720221490f84e3ca93cca354d4aaf742567dab9c02c945136e86",
   "reversed_files": [
     "crates/mc-core/src/command_summon.rs"
   ],
-  "kept_test_files": [
-    "crates/mc-core/src/command_summon_tests.rs"
-  ],
+  "kept_test_files": [],
   "negative_control": {
     "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo": {
       "state": "red",
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/command_summon_tests.rs",
-        "line": 26,
+        "line": 27,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_summon::tests::summon_mule_accepts_items_without_a_chest_and_keeps_no_cargo": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_tests.rs",
+        "line": 27,
         "error": "panic",
         "class": "assertion"
       }
     },
     "harness:entities:native-v2-ledger-summon-horse-cargo": {
-      "state": "unrunnable",
-      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-fix` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-ledger-summon-horse-cargo --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D139SummonItems/.analysis/validation/20261127T183842-ledger-promote-7_6xdy1p/regressions-client-6.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D139SummonItems/.analysis/validation/20261127T183842-ledger-promote-7_6xdy1p/client-artifacts/20261127T184337-native-v2-ledger-summon-horse-cargo-xx0hmo6z/result.json",
+      "assertion": {
+        "name": "summoned_cargo_mount_appears"
+      }
     }
   },
   "restored": {
     "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo": {
       "state": "green",
       "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::summon_mule_accepts_items_without_a_chest_and_keeps_no_cargo": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-ledger-summon-horse-cargo": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D139SummonItems/.analysis/validation/20261127T183842-ledger-promote-7_6xdy1p/client-artifacts/20261127T184616-native-v2-ledger-summon-horse-cargo-p352bspn/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T071112-native-v2-ledger-summon-horse-cargo-l8po83cn/result.json",
-    "tree_head": "b9d3b4a45379b23f90a011173a3211cfeac6e4f4",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D139SummonItems/.analysis/validation/20261127T182714-native-v2-ledger-summon-horse-cargo-xbtvj91v/result.json",
+    "tree_head": "ca7a6bda19d4c4e7c60ee1ded8ffeff60e382e13",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "aa150265625cd28b04d00c3dcb4cf477fa1aae6f6b0960dc8655cdf752b2c908",
+    "server_binary_sha256": "010df1cf682427f4215c6d56bfdf0378c865d133f3c186c770f7d8c67bb44c94",
     "covers": [
       "harness:entities:native-v2-ledger-summon-horse-cargo"
     ],
     "profile": "entities"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T071232-ledger-promote-fd92u87v"
+  "test_guard": {
+    "packages": [
+      "mc-core"
+    ],
+    "tests": {
+      "baseline": 11002,
+      "after": 11002,
+      "lost": [],
+      "newly_ignored": [],
+      "added": []
+    },
+    "lock": {
+      "removed": [],
+      "rerecorded": [],
+      "added_cases": []
+    },
+    "verdict": "pass",
+    "problems": []
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D139SummonItems/.analysis/validation/20261127T183842-ledger-promote-7_6xdy1p"
 }
