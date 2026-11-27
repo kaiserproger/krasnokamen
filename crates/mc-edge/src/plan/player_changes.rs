@@ -282,55 +282,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         }
         PlayerChange::Roster {
             players, removed, ..
-        } => {
-            if !removed.is_empty() {
-                viewer
-                    .player_profiles
-                    .retain(|_, uuid| !removed.contains(uuid));
-            }
-            for player in players.iter() {
-                let previous = viewer.player_profiles.insert(player.entity, player.uuid);
-                if previous != Some(player.uuid)
-                    && player.entity != viewer.entity_id
-                    && viewer.tracked_entities.contains_key(&player.entity)
-                {
-                    // Invalidate pairing on the world FIFO, where camera release,
-                    // removal and re-add stay ordered even behind a queue backlog.
-                    viewer.entity_unsent(player.entity);
-                }
-            }
-            if !removed.is_empty() {
-                push_reliable(
-                    out,
-                    conn,
-                    &PlayerInfoRemove {
-                        profile_ids: removed.to_vec(),
-                    },
-                );
-            }
-            if !players.is_empty() {
-                push_reliable(
-                    out,
-                    conn,
-                    &PlayerInfoUpdate {
-                        actions: PlayerInfoActions::minimal_add_player(),
-                        entries: players
-                            .iter()
-                            .map(|player| PlayerInfoEntry {
-                                profile_id: player.uuid,
-                                name: player.name.clone(),
-                                properties: Vec::new(),
-                                listed: true,
-                                latency: 0,
-                                game_mode: i32::from(player.game_mode),
-                                list_order: 0,
-                                show_hat: true,
-                            })
-                            .collect(),
-                    },
-                );
-            }
-        }
+        } => plan_roster(viewer, out, players, removed),
         PlayerChange::TextBurst { lines } => {
             let start = out.len();
             for line in lines {
@@ -408,45 +360,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             yaw,
             pitch,
             ..
-        } => {
-            // The pump created this viewer with an id invented from the
-            // connection; the core's entity id is authoritative.
-            viewer.entity_id = *entity;
-            viewer.dimension = *dimension;
-            // The initial join burst uses the connection's first teleport id.
-            push_reliable(out, conn, &position_sync(1, *position, *yaw, *pitch));
-            // Seed inventory/health surfaces; authoritative values arrive
-            // via MenuContents/Health changes. Window 0 (player inventory)
-            // is always 46 slots on the wire.
-            push_reliable(
-                out,
-                conn,
-                &ClientboundContainerSetContent {
-                    container_id: 0,
-                    state_id: 1,
-                    items: vec![ItemStack::EMPTY; 46],
-                    carried_item: ItemStack::EMPTY,
-                },
-            );
-            push_reliable(
-                out,
-                conn,
-                &ClientboundSetHealth {
-                    health: 20.0,
-                    food: 20,
-                    saturation: 5.0,
-                },
-            );
-            push_reliable(
-                out,
-                conn,
-                &ClientboundSetExperience {
-                    experience_progress: 0.0,
-                    total_experience: 0,
-                    experience_level: 0,
-                },
-            );
-        }
+        } => plan_joined(viewer, out, *entity, *dimension, *position, *yaw, *pitch),
         PlayerChange::PositionCorrected {
             teleport_id,
             position,
@@ -970,6 +884,113 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                 },
             },
         ),
+    }
+}
+
+/// Adopt the core's entity id and seed the client's first-view surfaces.
+/// Authoritative inventory/health values arrive later as MenuContents/Health
+/// changes; window 0 (the player inventory) is always 46 slots on the wire.
+fn plan_joined(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    entity: mc_domain::EntityId,
+    dimension: mc_core::dimensions::Dimension,
+    position: [f64; 3],
+    yaw: f32,
+    pitch: f32,
+) {
+    let conn = viewer.connection;
+    // The pump created this viewer with an id invented from the connection;
+    // the core's entity id is authoritative.
+    viewer.entity_id = entity;
+    viewer.dimension = dimension;
+    // The initial join burst uses the connection's first teleport id.
+    push_reliable(out, conn, &position_sync(1, position, yaw, pitch));
+    push_reliable(
+        out,
+        conn,
+        &ClientboundContainerSetContent {
+            container_id: 0,
+            state_id: 1,
+            items: vec![ItemStack::EMPTY; 46],
+            carried_item: ItemStack::EMPTY,
+        },
+    );
+    push_reliable(
+        out,
+        conn,
+        &ClientboundSetHealth {
+            health: 20.0,
+            food: 20,
+            saturation: 5.0,
+        },
+    );
+    push_reliable(
+        out,
+        conn,
+        &ClientboundSetExperience {
+            experience_progress: 0.0,
+            total_experience: 0,
+            experience_level: 0,
+        },
+    );
+}
+
+/// Refresh the cached profiles for the whole visible roster, invalidate the
+/// pairing of any tracked player whose UUID changed, then announce the diff.
+fn plan_roster(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    players: &[mc_core::dimensions::RosterPlayer],
+    removed: &[uuid::Uuid],
+) {
+    let conn = viewer.connection;
+    if !removed.is_empty() {
+        viewer
+            .player_profiles
+            .retain(|_, uuid| !removed.contains(uuid));
+    }
+    for player in players {
+        let previous = viewer.player_profiles.insert(player.entity, player.uuid);
+        if previous != Some(player.uuid)
+            && player.entity != viewer.entity_id
+            && viewer.tracked_entities.contains_key(&player.entity)
+        {
+            // Invalidate pairing on the world FIFO, where camera release,
+            // removal and re-add stay ordered even behind a queue backlog.
+            viewer.entity_unsent(player.entity);
+        }
+    }
+    if !removed.is_empty() {
+        push_reliable(
+            out,
+            conn,
+            &PlayerInfoRemove {
+                profile_ids: removed.to_vec(),
+            },
+        );
+    }
+    if !players.is_empty() {
+        push_reliable(
+            out,
+            conn,
+            &PlayerInfoUpdate {
+                actions: PlayerInfoActions::minimal_add_player(),
+                entries: players
+                    .iter()
+                    .map(|player| PlayerInfoEntry {
+                        profile_id: player.uuid,
+                        name: player.name.clone(),
+                        properties: Vec::new(),
+                        listed: true,
+                        latency: 0,
+                        game_mode: i32::from(player.game_mode),
+                        list_order: 0,
+                        show_hat: true,
+                    })
+                    .collect(),
+            },
+        );
     }
 }
 
