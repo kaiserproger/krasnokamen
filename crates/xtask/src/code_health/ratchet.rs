@@ -40,7 +40,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // container for `boundary::EntityView` records with a single out-edge back
     // to `boundary` and no algorithm of its own; as `boundary::views` it stops
     // being a false top-level cycle node: 186 modules.
-    cycle_modules: 186,
+    // D128 cut 2 (mc-placement, 2026-11-27): placement, placement_shapes and
+    // chests leave core as the pure `&BlockRegistry` placement-state owner,
+    // together with the copper family tables and the concrete rule. Measured
+    // 184 modules / 246,658 production lines / 197 top-level modules on the
+    // cut tree: 184 modules.
+    cycle_modules: 184,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
