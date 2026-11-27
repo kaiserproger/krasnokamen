@@ -9,9 +9,9 @@ use mc_data::statistics::StatType;
 
 use super::{ProjectileKind, ProjectileState};
 use crate::boundary::PlayerChange;
-use mc_domain::{Hand, EntityId};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::{EntityId, Hand};
 use mc_inventory::OFF_HAND;
 use mc_inventory::enchanting::level;
 

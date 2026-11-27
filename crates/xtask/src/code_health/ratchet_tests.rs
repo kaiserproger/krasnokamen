@@ -348,7 +348,10 @@ fn split_crate_code_keeps_counting_toward_the_ceilings() {
         "split-crate",
         &[
             ("lib.rs", "mod a;\n"),
-            ("a.rs", "pub fn f() -> &'static str {\n    \"minecraft:stone\"\n}\n"),
+            (
+                "a.rs",
+                "pub fn f() -> &'static str {\n    \"minecraft:stone\"\n}\n",
+            ),
         ],
     );
     let split = fixture.0.join("crates/mc-split/src");

@@ -2,9 +2,9 @@ use super::*;
 use crate::battle::combat::{Action, Weapon};
 use crate::battle::staging::{self, BattleCommand};
 use crate::boundary::{EntityEvent, PlayerInput};
-use mc_domain::{Hand, ConnectionId};
 use crate::tick::run_tick;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::{ConnectionId, Hand};
 
 const ORIGIN: [f64; 3] = [8.5, 64.0, 8.5];
 

@@ -2,8 +2,8 @@
 //! returning viewers cannot strand an old progress value or a dead boss bar.
 use crate::plan::{PlannedPacket, push_reliable};
 use mc_core::boundary::EntityView;
-use mc_domain::ConnectionId;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::ConnectionId;
 use mc_protocol::packets::play::{BossOperation, ClientboundBossEvent};
 use rustc_hash::FxHashMap;
 use uuid::Uuid;

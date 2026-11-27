@@ -18,10 +18,10 @@ use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::boundary::{BlockPos, ChunkPos};
-use mc_domain::{Hand, EntityId};
 use crate::config::CoreError;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
+use mc_domain::{EntityId, Hand};
 use mc_placement::Face;
 
 /// What a block state means to farming.

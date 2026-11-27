@@ -1,12 +1,12 @@
 //! Bee pollination, hive custody and harvesting on the native tick owner.
 //! Save keys and metadata verified against the 26.1.2 Bee/BeehiveBlockEntity bytecode.
 use crate::boundary::{BlockPos, ChangeSet};
-use mc_domain::{Hand, EntityId};
 use crate::config::CoreError;
 use crate::entities::EntitySlot;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_data::{Identifier, ItemStack};
+use mc_domain::{EntityId, Hand};
 use mc_nbt::{ListTag, Tag};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

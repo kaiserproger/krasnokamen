@@ -3,9 +3,9 @@
 //! block's inventory and all properties; paired copper chests always
 //! share one weathering image.
 use crate::boundary::BlockPos;
-use mc_domain::{Hand, EntityId};
 use crate::tick::TickState;
 use mc_data::Identifier;
+use mc_domain::{EntityId, Hand};
 use mc_placement::copper::{chest, family, transform};
 use mc_world::BlockStateId;
 

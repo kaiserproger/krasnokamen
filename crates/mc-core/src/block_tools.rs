@@ -15,9 +15,9 @@ use mc_data::{Identifier, ItemStack};
 use mc_world::{BlockRegistry, BlockState, BlockStateId};
 
 use crate::boundary::BlockPos;
-use mc_domain::{Hand, EntityId};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
+use mc_domain::{EntityId, Hand};
 use mc_placement::Face;
 
 const FACES: [Face; 6] = [

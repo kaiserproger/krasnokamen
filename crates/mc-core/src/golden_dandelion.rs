@@ -1,8 +1,8 @@
 //! Golden dandelions toggle the baby age lock (26.1.2 AgeableMob bytecode).
-use mc_domain::{Hand, EntityId};
 use crate::entities::{ColdRow, EntityKind};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::{EntityId, Hand};
 use mc_nbt::Tag;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

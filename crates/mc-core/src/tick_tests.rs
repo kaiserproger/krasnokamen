@@ -6,13 +6,13 @@ use std::sync::Arc;
 use mc_world::ChunkPos;
 
 use crate::boundary::PlayerInput;
-use mc_domain::{DigAction, ConnectionId};
 use crate::config::CoreConfig;
 use crate::core::Core;
 use crate::horde_bench::flat_world;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::{ConnectionId, DigAction};
 #[path = "tick/cohort_tests.rs"]
 mod cohort_tests;
 #[path = "tick/combat_parity_tests.rs"]
@@ -1319,9 +1319,9 @@ fn published_batches(journal_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 #[test]
 fn checkpoint_round_trip_through_real_core() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     // Child mode: selected by env flag (re-exec of this test binary). The
     // parent spawns `current_exe` with a filter that ALSO matches this very
     // test inside the child runner — libtest runs the parent body again in
@@ -1985,9 +1985,9 @@ fn player_air_is_initialized_on_join_and_reset_on_respawn() {
 #[test]
 fn shutdown_joins_and_reopen_restores_inventory() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!("mc-core-shut-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let uuid = uuid::Uuid::new_v4();
@@ -2074,9 +2074,9 @@ fn shutdown_joins_and_reopen_restores_inventory() {
 #[test]
 fn checkpoint_holds_full_durable_state() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!("mc-core-full-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let uuid = uuid::Uuid::new_v4();
@@ -2361,8 +2361,8 @@ fn use_item_on_empty_hand_is_noop() {
 /// young piglet cannot breed until adulthood.
 #[test]
 fn feeding_gates_breeding_and_takes_one_food() {
-    use mc_domain::Hand;
     use crate::entities::EntityKind;
+    use mc_domain::Hand;
     let registry = test_registry();
     let mut state = test_state();
     let id = |name: &str| mc_data::Identifier::parse(name).expect("id");
@@ -2666,9 +2666,9 @@ fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
 #[test]
 fn torn_checkpoint_publishes_nothing() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::{Core, FAIL_CHECKPOINT_AFTER_REGIONS};
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!("mc-core-torn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let uuid = uuid::Uuid::new_v4();
@@ -2760,9 +2760,9 @@ fn torn_checkpoint_publishes_nothing() {
 #[test]
 fn shutdown_checkpoint_prunes_all_covered_batches() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!("mc-core-prune-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let uuid = uuid::Uuid::new_v4();
@@ -2814,9 +2814,9 @@ fn shutdown_checkpoint_prunes_all_covered_batches() {
 #[test]
 fn custody_survives_checkpoint_crash() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     use mc_inventory::ClickMode;
     use std::io::{BufRead as _, Write as _};
 
@@ -4328,9 +4328,9 @@ fn furnace_result_pickup_and_shift_click_award_experience_once() {
 #[test]
 fn breaking_filled_chest_drops_contents_and_clears_storage() {
     use crate::boundary::{BlockPos, PlayerInput};
+    use mc_domain::ConnectionId;
     use mc_domain::DigAction;
     use mc_domain::Hand;
-    use mc_domain::ConnectionId;
     let mut state = test_state();
     let registry = test_registry();
     let chest_block = registry
@@ -4454,8 +4454,8 @@ fn breaking_filled_chest_drops_contents_and_clears_storage() {
 fn shared_chest_second_viewer_syncs_and_stale_click_resyncs() {
     use crate::boundary::PlayerChange;
     use crate::boundary::{BlockPos, PlayerInput};
-    use mc_domain::Hand;
     use mc_domain::ConnectionId;
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     let mut state = test_state();
     let registry = test_registry();
@@ -4585,9 +4585,9 @@ fn shared_chest_second_viewer_syncs_and_stale_click_resyncs() {
 #[test]
 fn leave_checkpoint_reopen_rejoin_restores_state() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!(
         "mc-core-leaveckpt-{}-{:?}",
         std::process::id(),
@@ -4681,9 +4681,9 @@ fn death_after_checkpoint_no_dupe_after_reopen() {
 
 fn death_no_dupe_after_reopen(checkpoint_every_ticks: u64) {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!(
         "mc-core-deathjournal-{}-{:?}-{checkpoint_every_ticks}",
         std::process::id(),
@@ -4827,10 +4827,10 @@ fn death_no_dupe_after_reopen(checkpoint_every_ticks: u64) {
 #[test]
 fn journal_append_failure_poisons_and_blocks_checkpoint() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::{Core, FAIL_JOURNAL_APPEND};
     use crate::native_checkpoint::tests::fixture_store;
+    use mc_domain::ConnectionId;
     // Unique dir per test invocation (parallel libtest runs share the pid;
     // the poison hook is process-global, so never leave it armed).
     let dir = std::env::temp_dir().join(format!(
@@ -4920,9 +4920,9 @@ fn journal_append_failure_poisons_and_blocks_checkpoint() {
 #[test]
 fn chat_delivered_via_reliable_outbox() {
     use crate::boundary::PlayerInput;
-    use mc_domain::ConnectionId;
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
     let dir = std::env::temp_dir().join(format!(
         "mc-core-chat-{}-{:?}",
         std::process::id(),
@@ -5006,12 +5006,12 @@ fn settle(
 #[test]
 fn container_break_drops_survive_restart_without_resurrection() {
     use crate::boundary::{BlockPos, PlayerInput};
-    use mc_domain::DigAction;
-    use mc_domain::Hand;
-    use mc_domain::ConnectionId;
     use crate::boundary::{PlayerChange, TickOutput};
     use crate::config::CoreConfig;
     use crate::core::Core;
+    use mc_domain::ConnectionId;
+    use mc_domain::DigAction;
+    use mc_domain::Hand;
     use mc_inventory::ClickMode;
     let dir = std::env::temp_dir().join(format!(
         "mc-core-chestbreak-{}-{:?}",
@@ -6611,9 +6611,9 @@ fn shield_raise_delay_front_arc_and_durability_gate_zombie_hits() {
 #[test]
 fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damage() {
     use crate::boundary::EntityEvent;
-    use mc_domain::Hand;
     use crate::intent::DamageSource;
     use crate::tick::DamagePiece;
+    use mc_domain::Hand;
     use mc_survival::DamageKind;
     for (kind, velocity, blocked) in [
         (DamageKind::Projectile, [0.0, -1.0], true),
@@ -6674,9 +6674,9 @@ fn raised_shield_blocks_incoming_projectiles_but_not_rear_or_environmental_damag
 #[test]
 fn shield_break_stops_use_and_axe_disables_both_hands_for_one_hundred_ticks() {
     use crate::boundary::{EntityEvent, PlayerChange};
-    use mc_domain::Hand;
     use crate::intent::DamageSource;
     use crate::tick::DamagePiece;
+    use mc_domain::Hand;
     use mc_survival::DamageKind;
     for breaks in [false, true] {
         let (mut state, player, pos) = flat_player_fixture();
@@ -8340,8 +8340,8 @@ fn grave_placement_avoids_a_cell_a_hopper_minecart_occupies() {
 fn same_tick_slot_swap_attack_uses_previous_tick_held_attributes() {
     // MC-28289 at the tick level: SelectSlot + Attack in one input batch
     // must resolve attack_damage from the pre-tick held stack.
-    use mc_domain::ConnectionId;
     use crate::boundary::PlayerInput;
+    use mc_domain::ConnectionId;
     let (mut state, player, pos) = flat_player_fixture();
     state.tick = 20;
     state.last_swing.insert(player, 0);

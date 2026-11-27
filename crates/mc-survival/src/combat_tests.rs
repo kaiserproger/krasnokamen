@@ -232,4 +232,3 @@ fn same_tick_swap_keeps_old_attributes_but_live_enchantments() {
     let enchanted_swap = melee_hit_with_attributes(&data.rules(), &sharp_stick, &sword, swing(20));
     assert_eq!(enchanted_swap.damage, 6.0 + 3.0);
 }
-

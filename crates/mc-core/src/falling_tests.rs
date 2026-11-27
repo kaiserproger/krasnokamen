@@ -1,8 +1,8 @@
 use super::*;
 use crate::boundary::PlayerInput;
-use mc_domain::ConnectionId;
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_domain::ConnectionId;
 use mc_placement::concrete;
 fn setup() -> (TickState, BlockPos) {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");

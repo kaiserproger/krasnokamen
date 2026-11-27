@@ -1,8 +1,8 @@
 use super::{SavedMap, decoration_id};
 use crate::boundary::PlayerChange;
-use mc_domain::ConnectionId;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
+use mc_domain::ConnectionId;
 use mc_inventory::cartography::map_id;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;

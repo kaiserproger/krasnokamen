@@ -1,6 +1,5 @@
 use super::*;
 use crate::boundary::{ChunkPos, PlayerInput};
-use mc_domain::{Hand, ConnectionId};
 use crate::core::{checkpoint_data_for, restore_entity};
 use crate::journal::{
     EntityStateImage, JournalEntry, JournalWriter, Replay, ReplayEntity, replay_batches,
@@ -10,6 +9,7 @@ use crate::special_mobs::Retained;
 use crate::tick::{BlockEntityState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::ItemStack;
+use mc_domain::{ConnectionId, Hand};
 use mc_nbt::Tag;
 use mc_placement::copper::name;
 use std::sync::{Arc, LazyLock};
@@ -703,8 +703,8 @@ fn copper_build_pattern_replaces_body_with_matching_chest_exactly_once() {
 #[test]
 fn breaking_other_chest_half_finishes_native_golem_interaction_in_commit() {
     use crate::boundary::PlayerChange;
-    use mc_domain::DigAction;
     use mc_data::entity_data_value::EntityDataValue;
+    use mc_domain::DigAction;
 
     let mut state = fixture(None);
     let player = join(&mut state);
