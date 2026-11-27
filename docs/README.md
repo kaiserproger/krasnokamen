@@ -43,7 +43,7 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
 - [Vanilla compatibility matrix](COMPATIBILITY.md),
   [quirk and farm parity gate](QUIRK_PARITY.md), [physics oracles](physics-oracles.md).
 - Performance: [reproducible profiles](performance/PROFILES.md),
-  [benchmarks](performance/BENCHMARKS.md), [player capacity](performance/PLAYER_CAPACITY.md).
+  [benchmarks and the player-capacity ladder](performance/BENCHMARKS.md).
 - Tool inputs: [playable scenarios](playable/README.md),
   [real-client regression manifests](real-client-regression/README.md),
   [worldgen evidence](evidence/worldgen-diff/README.md).

@@ -1,17 +1,18 @@
 # Reproducible performance profiles
 
-**Draft prerelease:** these hardware/workload measurements prove neither capacity,
-vanilla parity nor survival/gameplay acceptance. Protocol bots are TCP clients,
+These numbers describe one workload, binary and host. They prove neither
+capacity, vanilla parity nor gameplay acceptance. Protocol bots are TCP clients,
 not graphical clients or humans.
 
 ## Publication status
 
-**Measured 2026-11-13** on the reference host below, tree `74aed9fc`, with
-release pins from `tools/dev/pin-release --no-incremental`. The runs used the
-exclusive measurement lane (`tools/dev/mem-run.sh -x -p`, scope `CPUQuota=600%`):
-seed 42, 30 s warmup, 120 s measured, 6 GiB server cgroup. All four receipts
-are complete (`status: measured`, `publication_evidence: true`) and are kept on
-the reference host under `receipts/PerfReference/74aed9fc/`.
+**Measured 2026-11-13** (00:10 +07) on the reference laptop below, tree
+`74aed9fcb616`, with release pins from `tools/dev/pin-release --no-incremental`.
+The runs used the exclusive measurement lane (`tools/dev/mem-run.sh -x -p -m 6G`,
+scope `CPUQuota=600%`): seed 42, 30 s warmup, 120 s measured, 6 GiB server
+cgroup, nothing else running. All four receipts are complete
+(`status: measured`, `publication_evidence: true`); summary, logs and run
+directories are in `<work>/receipts/PerfReference/74aed9fc/` on the owner host.
 
 | Profile | Server RSS peak / steady (MiB) | MSPT p50 / p95 / p99 / max (ms) | TPS | Generated chunks/s |
 |---|---|---|---|---|
@@ -37,29 +38,30 @@ benchmark below cannot.
 
 ## Reference hardware and build
 
-- **CPU:** AMD Ryzen 5 7535HS with Radeon Graphics, 1 socket, 6 physical cores /
-  12 SMT threads. Server affinity is logical CPUs 0–7 (four whole physical
-  cores, both SMT siblings); protocol bots use 8–11 (the other two cores).
-- **RAM:** 32 GB installed class; Linux `MemTotal=31,551,464 KiB`
-  (30.09 GiB usable). Each invocation is bounded by a 6 GiB memory cgroup;
-  that cap is not the reported process RSS.
-- **World/artifact disk:** Samsung SSD 980 500GB, NVMe, ext4 on
-  `/dev/nvme1n1p1`. The OS/root disk is a separate Samsung SSD 970 EVO Plus
-  500GB. Worlds are not on tmpfs.
-- **OS/kernel:** Ubuntu 26.04.1 LTS (x86-64), Linux `7.0.0-38-generic`.
-- **Server source:** `0a86cfffc173d9fe13e9d0795a6c5494fc33a222` plus Main's
-  operator chat-spam parity fix in `crates/mc-core/src/tick/input/social.rs`:
-  operators still accumulate the saturating counter but are not kicked. The
-  original baseline rejected fixture preparation with `disconnect.spam`.
-- **Build:** `cargo build --release --bin krasnokamen --bin player-scale-bots
-  -j 2`; rustc 1.99.1 (`58cf8f9c3`, LLVM 23.1.1). Cargo release defaults:
-  optimization level 3, debug information off, LTO off, 16 codegen units,
-  incremental off. Repository target flags are
-  `-C link-arg=-fuse-ld=mold`, linker `clang`. No additional `RUSTFLAGS`,
-  frame-pointer, native-CPU, PGO or BOLT transformation.
-- **Binary identity:** the retained build receipt records SHA-256 hashes of both
-  the server and protocol-bot executables. The runner rejects mismatched hashes;
-  use the receipt accompanying each run, not a hash from an earlier build.
+- **Host:** the owner's laptop, AMD Ryzen 5 7535HS with Radeon Graphics,
+  1 socket, 6 physical cores / 12 SMT threads. Server affinity is logical CPUs
+  0–7 (four whole physical cores, both SMT siblings); protocol bots use 8–11
+  (the other two cores).
+- **RAM:** 32 GB class; Linux `MemTotal` about 30 GiB (the run summary records
+  28 GiB). Each invocation is bounded by a 6 GiB memory cgroup; that cap is not
+  the reported process RSS.
+- **World/artifact disk:** Samsung SSD 980 500GB, NVMe, ext4. The OS/root disk
+  is a separate Samsung SSD 970 EVO Plus 500GB. Worlds are not on tmpfs.
+- **OS/kernel:** Ubuntu 26.04.1 LTS (x86-64), Linux `7.0.0-43-generic`.
+- **Server source:** `74aed9fcb616` (main before the rebrand, binary then named
+  `solaris-v2`), including the kelp-wash fix and the villager-heavy region fix.
+- **Build:** `pin-release --no-incremental` of that tree for the server and the
+  bots (pin logs beside the summary); toolchain 1.99 from `rust-toolchain.toml`;
+  Cargo release defaults (optimization level 3, no debug information, no LTO,
+  16 codegen units, incremental off); linker `clang` with
+  `-C link-arg=-fuse-ld=mold`. No additional `RUSTFLAGS`, frame pointers,
+  native-CPU, PGO or BOLT.
+- **Binary identity:** the pin manifests record SHA-256 hashes of both
+  executables, and the runner rejects mismatched hashes; use the manifest
+  accompanying each run, not a hash from an earlier build.
+
+The current owner host (AMD Ryzen 7 7700, 8 cores / 16 threads, 90 GiB) has not
+measured these profiles; numbers from it are not comparable with the table.
 
 ## Profiles and conditions
 
@@ -396,7 +398,7 @@ For a lifecycle-only check outside an exclusive window, add `--smoke`: the same
 full population runs for 2 seconds warmup and 5 seconds observation. Its status
 is `smoke`, with `publication_evidence=false`; even a successful smoke is not
 an approved performance measurement. Use the ordinary memory-capped lane, not
-`-x -p`, while Main's quiet windows are suspended.
+`-x -p`.
 
 ### Evidence retained by each invocation
 
@@ -413,37 +415,13 @@ an approved performance measurement. Use the ordinary memory-capped lane, not
   runs retain evidence and return nonzero; do not publish their partial summary
   as a successful profile.
 
-## Historical results
+## Older figures
 
-Historical claims are kept so later documentation cleanups do not lose them.
-They are **not** current publication evidence and cannot fill the pending table above.
-
-| Release | Workload | Result | Build | Host |
-|---|---|---|---|---|
-| v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS; earlier runs below 10 TPS | frame-pointer build | reference host; exact CPU for this run unverified |
-
-Source: [v0.0.8 notes at the tag](https://github.com/kaiserproger/krasnokamen/blob/57b95ae9/docs/releases/v0.0.8.md#performance).
-They mention compact entity layout and removal of whole-row hot scans, without
-causal attribution. CPU for that run, original `result.json`, MSPT percentiles
-and full stages remain unverified/unlocated. The reference host is a Ryzen 5
-7535HS; separate 100k-mob figures (~2.3 GiB RSS/~8 GB cgroup including cache,
-[profiling notes](../development/performance-windows-and-profiling.md#load-harness-and-the-frozen-old-core))
-are not tied to that run. A new comparable result needs a quiet-window
-`native-100` release-candidate run.
-
-Pre-tag rounds appear in [working notes at `1ada2ceb`](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb/docs/MEMORY.md),
-lines 38–42. Referenced ignored `.analysis/` receipts were not found in searched
-paths; per-run hosts were not named.
-
-| Date | Change | Frame-pointer steady TPS | Other figures |
-|---|---|---:|---|
-| 2026-10-17 | r7 baseline | 8.98 | |
-| 2026-10-17 | r9–r10: single-lookup contact revision, page-batched parallel `EntityViews::publish`, parallel read-row prep, villager targets from index | 11.42 | release build 11.91 / 11.56 / 12.72 TPS steady / burst / recovery, p50 83 ms |
-| 2026-10-18 | entity layout (rare components boxed, sorted lanes instead of six `slots_where` scans, dense `Body` columns) | 14.52 → 15.87 | entity phase 29.6 → 24.8 ms, RSS −415 MiB |
-
-The notes attribute 14.52→15.87 TPS to grouped layout work; it is compatible
-with rounded “about 16”, but neither identical-run provenance nor individual
-contributions are established without the missing report.
+The v0.0.8 release notes' "about 16 TPS" for a `native-100`-shaped run and the
+October 2026 frame-pointer rounds have no retained receipts, host or MSPT
+percentiles, so they are not repeated here; they remain in Git history (for
+example `git show 57b95ae9:docs/releases/v0.0.8.md`). A comparable result needs
+a quiet-window `native-100` run of the build in question.
 
 ## In-process chunk generation
 
