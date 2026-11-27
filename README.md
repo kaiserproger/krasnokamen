@@ -45,8 +45,8 @@ Krasnokamen is an independent Minecraft: Java Edition server written from scratc
 Rust. It is a full server, not a framework: it reimplements the game itself, from
 world generation, mobs and redstone to villages, combat and inventories. Players
 join with a **normal, unmodified Minecraft Java client**: every release from
-**26.1.2 through 26.3** (775, 776, 777), canonical 26.3. `content import`
-installs the data of every supported version
+**26.1.2 through 26.3** (775, 776, 777), canonical 26.3. `content import`, or
+the first start when no cache exists, installs the data of every supported version
 ([details](docs/OPERATING.md#client-protocol-compatibility)), and a version bump
 adds a translation step without dropping older clients.
 

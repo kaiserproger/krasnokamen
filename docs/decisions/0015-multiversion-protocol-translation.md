@@ -136,9 +136,10 @@ Adding an up step changes edge codecs/profiles, not core authority.
 
 `mc_data::protocol_versions::SUPPORTED` owns the release window. `content import`
 installs every endpoint using the existing verified Mojang download, datagen and
-vanilla RegistryData capture path; startup only discovers and validates and
-never downloads ([ADR 0001](0001-vanilla-data-as-runtime-input.md),
-`crates/mc-edge/src/server.rs:1906`). This does **not** depend on the proposed
+vanilla RegistryData capture path, and a first start with no cache runs the same
+importer; an existing cache is only discovered and validated
+([ADR 0001](0001-vanilla-data-as-runtime-input.md),
+`crates/mc-edge/src/content_cache.rs` `prepare_startup`). This does **not** depend on the proposed
 native importer in [ADR 0022](0022-content-without-java.md). Only canonical
 content needs the gameplay extractors; other endpoints need reports, their own
 definitions/tags and exact captured registry payloads.

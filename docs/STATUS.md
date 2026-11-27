@@ -243,7 +243,7 @@ sunset would make one):
   canonical 26.3. [ADR 0015](decisions/0015-multiversion-protocol-translation.md)
   owns the adjacent chain in `crates/mc-edge/src/translation/`; `content import`
   installs every endpoint cache and the independently owned step snapshots
-  (startup never downloads; [operations](OPERATING.md#client-protocol-compatibility)).
+  (a first start with no cache runs the same import; [operations](OPERATING.md#client-protocol-compatibility)).
   A version bump adds a step and never drops existing clients. Backfill to 1.7
   is a future constraint, not a compatibility claim.
 - Loader ([ADR 0010](decisions/0010-krasnokamen-loader-contract.md), accepted,
