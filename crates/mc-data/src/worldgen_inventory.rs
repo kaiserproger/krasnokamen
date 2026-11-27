@@ -1,8 +1,9 @@
 //! Inventory of local vanilla worldgen sidecar data.
 //!
 //! This module records which declarative data files are present under the
-//! ADR 0001 sidecar. It intentionally does not interpret vanilla worldgen
-//! algorithms; concrete loaders decide which facts Krasnokamen can consume.
+//! sidecar described by decision C1 of `DECISIONS.md`. It intentionally does
+//! not interpret vanilla worldgen algorithms; concrete loaders decide which
+//! facts Krasnokamen can consume.
 
 use std::path::{Path, PathBuf};
 

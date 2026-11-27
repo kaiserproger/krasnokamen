@@ -21,8 +21,9 @@ design needs more than a row; each is linked from its row.
 
 Retired records (0003–0009, 0011, 0012, 0014) are in Git history, for example
 `git show 973e6e60e:docs/decisions/0012-earth-worldplan-and-native-overlay.md`;
-their binding content is in the table. 0001 and 0002 were folded into rows C1
-and C2: a code comment citing "ADR 0001" or "ADR 0002" means that row.
+their binding content is in the table. 0001 and 0002 were folded into
+[rows C1 and C2](../../DECISIONS.md#content-and-protocol): surviving code
+comments citing "ADR 0001" or "ADR 0002" refer to those rows, respectively.
 
 A change to authority, threading, waiting, persistence ordering or module
 policy updates the row and, where one exists, the record in the same change.
