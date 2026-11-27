@@ -25,8 +25,7 @@ the required artifacts (`manifest.json`, `client.log`, `server.log`,
 - [`worldgen-seed-712816-preflight.json`](worldgen-seed-712816-preflight.json):
   seed-712816 graphical worldgen preflight input.
 
-Do not treat these packs as shorthand for readiness, M100 progress, or the
-VALIDATION_LEDGER numerator. Keep run evidence in ignored
+Do not treat these packs as shorthand for readiness. Keep run evidence in ignored
 `.analysis/real-client-runs/<run_id>/` directories, not in tracked docs.
 
 ## Target loop

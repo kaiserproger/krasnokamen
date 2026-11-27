@@ -17,10 +17,6 @@ name = "wire-probe"
 path = "src/bin/wire_probe.rs"
 
 [[bin]]
-name = "coverage-audit"
-path = "src/bin/coverage_audit.rs"
-
-[[bin]]
 name = "core-replay-validate"
 path = "src/bin/core_replay_validate.rs"
 
