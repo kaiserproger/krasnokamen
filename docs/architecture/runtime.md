@@ -97,6 +97,55 @@ recipient as above. A pump that stops for good still halts the core through
 the outbox stall watch. Policy and limits:
 [ADR 0013](../decisions/0013-core-model-v2.md#threads-and-backpressure).
 
+### Reliable delivery and backpressure
+
+Journal admission is a bounded FIFO that waits under pressure; accepted batches
+are neither dropped nor reordered, and a dead journal stops the core
+([persistence](persistence.md#wal)). Reliable per-player results are ordered and
+bounded; exhaustion disconnects (`reliable-queue-full`) rather than silently
+discarding results. Bulk producers such as the scoreboard join snapshot and one
+scoreboard publication send one ordered batch per connection, and the edge
+queues its frames as one item, so a large scoreboard does not hit the bound.
+Chat and system-message lines are bounded at their source (the sender's spam
+budget, the command sequence budget), so a connection's trailing run of them
+compacts into one `TextBurst` entry at the cap instead of disconnecting a
+recipient. The knockback counts above are aliased, not copied: the publisher
+holds the output's canonical map `Arc` under a write guard through the
+synchronous broadcast and the scalar getter takes its read guard, so queue
+registration is ordered wholly before or after a publication without another
+count writer. Entity ids stay stable through dimension travel; the observer
+resolves the recipient across current worlds after travel commits.
+
+Durable plugin events have their own bounded queue, and one slow guest callback
+stalls every plugin's delivery. The core therefore refuses new plugin commands
+and drops plugin-menu clicks while a quarter of the queue capacity is waiting;
+the world halts fail closed only when events that admission cannot refuse
+(graves, guest command results) pass the full capacity, and the halt log counts
+the backlog by event kind.
+
+Input-ordered chat proves native input handling, not geometry delivery: reliable
+traffic can overtake the world queue. The operator-only
+`krasnokamen:setup_world_fence` request keeps one transient nonce per
+connection; the edge appends the nonce response to the same world FIFO only once
+a publication has the viewer's current dimension and complete geometry window
+with no block or chunk-repair debt. The setup client dispatches all preceding
+frames before using the marker. Disconnect drops the fence; gameplay authority
+and durability are unchanged.
+
+Operator changes reserve the whole authoritative input batch before changing
+edge-owned operator state. An async mutex serializes admission and changes; the
+initiator's live permission and lock status are rechecked after reservation.
+The operator snapshot and a permission update for every registered session of
+the target UUID are sent without an intervening await; queue saturation waits
+for capacity rather than polling or publishing out of order, and a core stop
+while waiting applies nothing. Moderation commands re-acquire the same fence
+after selector resolution and recheck the initiator before any kick, ban or
+pardon, holding it through those effects.
+
+Pickup publishes changed slots in the active menu. Player inventory slots hidden
+by that menu use the dedicated player-inventory packet rather than a window-0
+contents image, so another menu's cursor and crafting slots are not overwritten.
+
 ### Connection liveness
 
 Play keepalive follows vanilla and lives in the connection's writer task
@@ -110,7 +159,7 @@ forwards echoes to the writer directly, also while an administrative command
 holds the remaining input (`await_play_operation`), so a large outbound backlog
 or a slow owner reply does not starve the echo. Before Play, Configuration and
 Login use their own read deadlines; the Loader exchange sends its own
-Configuration keepalive every 10 s (`plugin_loader.rs`).
+Configuration keepalive every 10 s (`crates/mc-edge/src/plugin_loader.rs`).
 
 ### Tick cost accounting
 

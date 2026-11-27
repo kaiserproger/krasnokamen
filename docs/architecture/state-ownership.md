@@ -265,6 +265,75 @@ battle columns, sparse roster indexing and battle arrow lifetime use this
 marker, not an enemy predicate. Neither changes the persisted faction format.
 
 
+## Spectator cameras
+
+Spectator cameras are transient native bindings, published with the immutable
+world snapshot. `/spectate` and battle named-follow use that same authority;
+the native tick follows the target position for residency and ignores viewer
+movement while bound. Binding changes synchronize the viewer once, not on every
+follow tick. Death or disconnect releases the current camera; only battle's
+named intent retries a returning target or a respawned viewer on the same
+connection. Explicit stop, sneak, viewer disconnect or leaving spectator mode
+clears that intent. Entity-ID bindings are transient; battle history persists
+only the named follow intent and resolves it through this same authority.
+Restored names remain pending while their viewers are offline; a real Leave
+input cancels intent before removing the connection. Re-arm completion is
+recorded only after equipment replacement, not when an identity is observed or
+a placement is attempted. Refused re-arm retries on the same connection;
+successful respawn equipment prevents an extra reconnect re-arm.
+
+The edge binds only a paired target, with camera release, removal, pairing and
+rebind ordered on the entity world FIFO; credit loss retains delivery debt.
+Shared command resolution finds named/UUID targets across worlds and transfers
+the viewer through existing dimension custody before publishing a binding.
+When a bound target changes dimensions, its viewers move with it and then
+release, rather than retaining a dimension-local entity reference. Explicit
+player teleport also releases the player's camera; refused teleports do not.
+The effects appearance owner projects spectator invisibility and suppresses
+effect particles without deleting the player's potion state.
+The snapshot shares the global roster allocation for current player modes.
+Entity interest uses that roster and camera ownership for vanilla player
+tracking eligibility, not a second mode store: ordinary viewers never receive
+spectator bodies; spectator viewers receive only self-camera player bodies.
+Retained interest revisits player rows when either immutable input changes,
+including already paired and previously hidden players, without scanning mobs.
+
+## Mount custody
+
+Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
+first rider with a live body controls motion; absent recovery claims are skipped
+and reserve no attachment position for live passengers. A passenger's reverse
+link and published passenger entity IDs are derived, never separate
+authorities. Removing one passenger preserves the other seats. Native images
+retain the list; offline animal NBT uses `krasnokamen:Riders`. The shared image
+reader validates duplicate UUIDs and the vehicle's seat capacity; replay also
+rejects one UUID claimed by multiple vehicles. Before adding a rider, live Ride
+removes that UUID from every other vehicle in the dimension and removes absent
+claims (and an existing claim for that actor) from its target. Only the camel
+(3, `Camel.canAddPassenger`) and happy ghast (4) seat more than one rider. The
+earlier scalar `krasnokamen:Rider` NBT key and WAL `rider` field are refused
+outright, so an old image fails the load instead of silently unseating its rider.
+
+A recovered absent UUID is a pending claim, not an occupied seat: it survives
+idle ticks until its passenger reconnects or another live Ride takes that
+vehicle. No rider kind is persisted, so an absent mob UUID follows the same rule.
+`mounts::live_riders` resolves those UUIDs against live bodies and is the single
+gameplay occupancy source for control, AI, leash follow, breeding, despawn,
+portals and battle projections; there is no cached mounted flag to go stale, and
+the durable rider index intentionally keeps absent claims. Explicit
+leave/dismount, death, or a known dead or invalid passenger clears its relation.
+Plain Join and successful plugin-login unlock both call `mounts::join`; the
+active vehicle tick also rebuilds the reverse link and passenger projection.
+Re-seating has no distance or chunk-activity check within the dimension:
+bringing the returning player to the vehicle is accepted policy, not vanilla
+parity. Dimension travel ejects seats and ends pending absent claims but keeps
+the vehicle's chest and cargo; a later claimant joins at their saved position.
+Death ejects seats and drops that custody. WAL recovery regression:
+`happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`
+(`crates/mc-core/src/mounts_persistence_tests.rs`); native tests also cover
+reclaimed seats, first-live steering, plugin unlock, competing claims and a
+clean `Core::shutdown` with a still-seated player.
+
 ## Container openers
 
 Each dimension's `redstone::custody::OpenContainers` owns menu and temporary
@@ -311,35 +380,11 @@ Only the writer's WAL-gated commit may advance the manifest and prune covered
 frames; stale ACKs cannot erase newer inventory custody. Player and container
 post-images retain that same durable fence in Overworld, Nether and End.
 
-### CAF-04 capture ladder
-
-One BASE run followed by one AFTER run in the same Main-authorized exclusive
-window, release-test pins `53e3a2cae5f7-d3518158` and
-`53e3a2cae5f7-3ecc759c`, with phase logging disabled. The unchanged audit fixture
-loads 2,000 empty native chunks and places live owners outside the dirty chunks.
-Cells below are medians of three capture samples, in milliseconds.
-
-| Dirty chunks | Disjoint live owners | BASE | Grouped |
-| ---: | ---: | ---: | ---: |
-| 100 | 0 | 0.003 | 0.002 |
-| 100 | 100 | 0.013 | 0.003 |
-| 100 | 1,000 | 0.114 | 0.012 |
-| 100 | 10,000 | 1.089 | 0.107 |
-| 500 | 0 | 0.008 | 0.008 |
-| 500 | 100 | 0.059 | 0.009 |
-| 500 | 1,000 | 0.556 | 0.018 |
-| 500 | 10,000 | 5.497 | 0.109 |
-| 2,000 | 0 | 0.034 | 0.042 |
-| 2,000 | 100 | 0.247 | 0.037 |
-| 2,000 | 1,000 | 2.205 | 0.042 |
-| 2,000 | 10,000 | 21.759 | 0.130 |
-
-The largest cell is 167.38 times faster in this pair. The empty-owner
-2,000-chunk cell is 0.008 ms slower; this single pair does not establish
-statistical significance. These numbers isolate chunk capture, not the writer,
-fsync, end-to-end checkpoint latency or battle TPS. CAF-05/06/08 are unchanged.
-Raw command, pin provenance and logs are retained in the executor's
-`.analysis/codex-logs/stage2core/caf04-result.json` receipt.
+Measured effect (one BASE/AFTER pair, release-test pins `53e3a2cae5f7-d3518158`
+and `53e3a2cae5f7-3ecc759c`, medians of three samples, chunk capture only, not
+the writer, fsync or end-to-end checkpoint latency): 2,000 dirty chunks with
+10,000 disjoint live owners took 21.759 ms before and 0.130 ms grouped; with no
+live owners the grouped path was 0.008 ms slower, within noise.
 
 ## Rules
 
@@ -396,15 +441,10 @@ Raw command, pin provenance and logs are retained in the executor's
 
 ## Entity wire publication optimization
 
-The wire projection uses dense copy-on-write pages and mutation-owned candidate
-IDs instead of persistent-tree updates. Equal candidates do not advance the
-revision; the ordered chunk/ID index preserves publication order. Snapshot and
-ordering parity are the correctness fence. Revert the collection together if
-that fence fails.
-
-Historical isolated 100k-row microbenchmarks reported 8.65–8.92 ms versus
-57.48–58.53 ms for moving-row publication; this excludes gameplay, edge and
-other server work and is not a TPS claim.
+Effect of the dense pages of rule 3: historical isolated 100k-row
+microbenchmarks reported 8.65–8.92 ms versus 57.48–58.53 ms for moving-row
+publication; this excludes gameplay, edge and other server work and is not a
+TPS claim. The fence is snapshot and ordering parity (rule 3).
 
 `target_grid.rs` addresses repeated linear scans by building a non-authoritative
 per-class nearest-target index only above its consumer and table thresholds.
