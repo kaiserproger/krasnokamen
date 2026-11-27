@@ -1,5 +1,4 @@
 //! Per-command subtrees (settlement, team, scoreboard, locate, tick, text).
-//! Moved verbatim from `command_tree.rs`.
 
 use super::*;
 
