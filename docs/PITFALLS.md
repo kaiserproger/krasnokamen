@@ -137,6 +137,22 @@ override `RUSTC_WRAPPER`: the runner starts the cache wrapper itself. Check:
 `systemctl --user list-units 'krasnokamen-mem-run-*'` shows no scope of yours
 after the command ends.
 
+**An OOM killed the agent with every child.** On 2026-10-02 the laptop ran out
+of memory and the kernel killed the 15 GiB agent process and all its children
+(the worktrees survived). Agent hosts and language servers live outside the
+heavy slice, so their memory has to be counted beside it; heavy commands run
+only through `mem-run.sh`, whose per-scope `MemoryMax` and watchdog keep them
+inside the slice. Check: the `mem-run: scope` line shows the command's cap
+([heavy commands](development/heavy-commands-and-memory.md#the-machine)).
+
+**Taking the exclusive lock before the scene slot deadlocked the host.** Gates
+hold a scene slot while they wait for the `-x` lock (shared), so a `-x` window
+that then waits for a scene slot blocks every build and gate; on 2026-11-14 one
+did so for about 50 minutes. Take the scene slot first: `scene-slot.sh mem-run.sh -x COMMAND`.
+Check: inside `KRASNOKAMEN_EXCLUSIVE_WINDOW`, `scene-slot.sh` reuses the
+ancestor's slot or refuses with exit 75
+([locks and lanes](development/heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28)).
+
 **Numbers taken on a loaded host were wrong.** Graphical gates failed with
 `stale-revision` while a Cargo matrix ran (2026-10-07), and an unpinned server
 was CFS-throttled at 23 threads under a 6-core quota while its tick tails were
