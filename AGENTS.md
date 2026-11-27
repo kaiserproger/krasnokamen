@@ -84,7 +84,7 @@ override general fleet defaults; bug-queue reporting still applies.
 | Work | Owning guide |
 |---|---|
 | build/run/configure/backup | [README](README.md#build-from-source), [operating](docs/OPERATING.md), [prerequisites](CONTRIBUTING.md), [migration](docs/MIGRATION.md) |
-| gameplay | [adding a feature](docs/development/adding-a-feature.md), [mutations](docs/architecture/mutations.md), [state ownership](docs/architecture/state-ownership.md), [compatibility](docs/COMPATIBILITY.md) |
+| gameplay | [adding a feature](docs/development/adding-a-feature.md), [mutations](docs/architecture/mutations.md), [state ownership](docs/architecture/state-ownership.md), [status and coverage](docs/STATUS.md#feature-areas) |
 | replacements in progress | [open transitions](docs/STATUS.md#open-transitions), [transition rule](docs/development/adding-a-feature.md#open-transitions) |
 | packets/protocol | [protocol changes](docs/development/protocol-changes.md), ADRs [0002](docs/decisions/0002-vanilla-protocol-metadata-as-reference.md)/[0015](docs/decisions/0015-multiversion-protocol-translation.md) |
 | saves/WAL/recovery | [persistence](docs/architecture/persistence.md), [residency](docs/architecture/residency.md), [ADR 0013](docs/decisions/0013-core-model-v2.md) |

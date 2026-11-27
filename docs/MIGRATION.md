@@ -5,7 +5,7 @@ replacement. This guide moves a stopped, ordinary Minecraft Java world (26.1.2,
 or a native 26.3 world) into Krasnokamen's native store and describes how to convert
 it back. Test on copies before changing the public endpoint. A successful
 conversion receipt proves conversion, not complete gameplay compatibility:
-consult [COMPATIBILITY.md](COMPATIBILITY.md). Everyday commands and
+consult [STATUS.md](STATUS.md#feature-areas). Everyday commands and
 configuration are in [OPERATING.md](OPERATING.md); this page owns the migration
 procedure and rollback.
 
@@ -293,7 +293,7 @@ lossless migration because an unknown field is kept in an opaque record.
 | Scheduled ticks | Native queues keep identity, priority and remaining delay; no-ops and duplicates are normalized and counted; delays outside the Anvil integer range fail export. |
 | POI, structure starts | POI files stay byte-exact opaque files, not native POI authority. Full-chunk structure metadata is retained. |
 | Other `data/*.dat` and auxiliary files | Explicit allowlist only: `icon.png`, `level.dat_old`, `resourcepacks/resources.zip`, `advancements/`, `stats/`, `data/`, `players/`, and dimension `poi/` and `data/`. Unknown active saved-data `.dat` semantics refuse import; opaque retained files share a 16 MiB aggregate record budget. Everything else in the source tree (including `datapacks/`) is **not carried**. |
-| Datapacks, custom dimensions | Not migrated. Copy directory datapacks to `<native-world>/datapacks/` yourself ([supported subset](OPERATING.md#datapacks-and-command-blocks)); ZIP packs, worldgen packs and custom dimensions are unsupported, so do not migrate a pack-dependent world unless losing that function is acceptable. |
+| Datapacks, custom dimensions | Not migrated. Copy directory or ZIP datapacks to `<native-world>/datapacks/` yourself ([supported subset](OPERATING.md#datapacks-and-command-blocks)); worldgen beyond the experimental jigsaw inputs and custom dimensions are refused, so do not migrate a pack-dependent world unless losing that function is acceptable. |
 | Resource packs | The world's `resourcepacks/resources.zip` is retained; server-offered packs are configured through `[resource_pack]`. |
 | Bukkit/Paper plugin data | Not interpreted. External SQL stores, plugin folders, claims, economy, permissions and custom items need a separately validated migration; keep the originals for rollback. |
 | Krasnokamen-native plugin, settlement and block-log state on export | Vanilla cannot run or interpret it, and Anvil is not a backup format for these domains. Keep a native backup. |

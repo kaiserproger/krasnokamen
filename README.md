@@ -130,9 +130,9 @@ import and export, with compatibility still partial. Gameplay aims to feel like
 vanilla, not to be bit-identical: exact AI timing and vanilla bugs are not
 reproduced. Map-making support is partial: directory `/function` datapacks,
 command blocks, `/clone`, storage `/data` and `/execute` work within
-[documented limits](docs/OPERATING.md#datapacks-and-command-blocks); ZIP and worldgen
-datapacks do not load yet. The per-feature picture is in
-[compatibility](docs/COMPATIBILITY.md).
+[documented limits](docs/OPERATING.md#datapacks-and-command-blocks); datapack
+worldgen beyond the experimental jigsaw inputs is refused. What works, how it
+was last checked and which client supports what: [status](docs/STATUS.md).
 
 ### Settlements
 

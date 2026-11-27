@@ -40,7 +40,7 @@ the translation chain ([operating guide](OPERATING.md)). Start with the
 - [Agent Constitution](AGENT_CONSTITUTION.md) (binding for every agent),
   [definition of done](DEFINITION_OF_DONE.md), [bug ledger](bugs/README.md) and
   [break-it QA protocol](QA_AGENT_PROTOCOL.md).
-- [Vanilla compatibility matrix](COMPATIBILITY.md),
+- [Status and client coverage](STATUS.md),
   [quirk and farm parity gate](QUIRK_PARITY.md), [physics oracles](physics-oracles.md).
 - Performance: [reproducible profiles](performance/PROFILES.md),
   [benchmarks](performance/BENCHMARKS.md), [player capacity](performance/PLAYER_CAPACITY.md).
