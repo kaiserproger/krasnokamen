@@ -1,7 +1,7 @@
 # ADR 0013 — Native core model v2
 
 **Status:** Accepted; implemented; the governing core model.
-[ADR 0014](0014-v1-core-retirement.md) retired v1. Checked against the code on
+v1 is retired ([decision P8](../../DECISIONS.md#product)). Checked against the code on
 2026-11-27: serial deterministic merge `crates/mc-core/src/tick/merge.rs:593`,
 one stop order `crates/mc-core/src/core.rs:1828`, edge publish budget
 `crates/mc-edge/src/server/pump.rs:55`.
@@ -106,7 +106,7 @@ explicit offline interchange, not a fallback or dual write. Binding rules
   Compatibility targets are vanilla protocol and Anvil.
 - Generated chunk baselines become durable before dependent WAL publishes;
   generators do not hot-swap. World identity fences generator revision, seed and
-  effective worldgen inputs ([ADR 0008](0008-overworld-density-router.md)).
+  effective worldgen inputs ([decisions G2–G3](../../DECISIONS.md#world-generation)).
 - Explicit shutdown and a plain drop share one stop order; the world lease is
   released only after the tick and journal owners are joined.
 

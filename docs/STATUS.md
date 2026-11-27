@@ -81,7 +81,7 @@ decides it):
   run once from the entity phase). The ADR is not approval to migrate the rest of
   the tick; each later step needs the owner's approval and a measured benefit.
   The existing tick is the current path, not an old side.
-- Earth WorldPlan ([ADR 0012](decisions/0012-earth-worldplan-and-native-overlay.md)):
+- Earth WorldPlan ([decision G4](../DECISIONS.md#world-generation)):
   proposed, not ported. `crates/mc-worldgen/src/earth.rs` and `earth/` (15.8k
   lines with tests) still compile into `mc-worldgen`; only `mosaic.rs` and
   `bin/worldgen_mosaic.rs` use them. Port or delete is the owner's call.

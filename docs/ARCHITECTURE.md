@@ -51,6 +51,6 @@ authoritative.
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
 - [Horizon `horizon:lod` far-terrain acceptance](development/horizon-lod-acceptance.md)
 - [Plugins](PLUGINS.md), [Loader](KRASNOKAMEN_LOADER.md),
-  [operations](OPERATING.md), [decisions](decisions/README.md)
+  [operations](OPERATING.md), [decisions](../DECISIONS.md)
 
 Generated indexes navigate code; they are not a second source of semantics.

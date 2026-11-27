@@ -102,7 +102,7 @@ Use `KRASNOKAMEN_LOADER_ROOT`, `KRASNOKAMEN_CLIENT_ROOT` or
    `../solaris-default-plugins/tools/build_standard_pack.py`.
 3. Announce path/SHA/manifest; all gates cite them. Never relabel preflight as
    final. Server identity is `mc-edge`'s `krasnokamen`, never retired `mc-server`
-   ([ADR 0014](../decisions/0014-v1-core-retirement.md)); use the [release procedure](release-and-tags.md).
+   ([decision P8](../../DECISIONS.md#product)); use the [release procedure](release-and-tags.md).
 
 ## Background jobs
 
