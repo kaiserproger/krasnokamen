@@ -21,28 +21,23 @@ Wrap heavy Cargo, harness and Gradle commands in Main's absolute
 `<work>/solaris/tools/dev/mem-run.sh`, never a worktree's or sibling repo's copy.
 Use one heavy command per agent and one source tree per invocation:
 `mem-run.sh [-x] [-p] [-m SIZE] COMMAND ...` (that flag order).
-The one-token-per-agent rule and priority gate below remain laptop proposals
-of 2026-11-18, pending owner confirmation; see the
-[brief limits](agent-fleet.md#briefs). Pass actual build argv, not a build
-hidden inside `sh -c`/`bash -c`: classification is not a security boundary.
+There is no admission queue and no build token (owner D127, 2026-11-27): every
+command starts at once, CPU is shared by the jobserver and memory is bounded per
+scope. The only refusal is the last-resort exhaustion guard below 20 GiB free
+(see [Disk](#disk)); scene slots still serialize graphical gates.
+Pass actual build argv, not a build
+hidden inside `sh -c`/`bash -c`; the runner does not classify commands any more.
 
 | Mechanism | Contract |
 |---|---|
 | Memory | No memory slots. Per-command default 8G, non-`-x` requests capped at 12G; agent policy normally selects 6G/12G. Slice `MemoryMax` is the lower of host RAM−16 GiB and, if set, parent `MemoryHigh`−8 GiB. Slice `MemoryHigh` is cleared. Effective parent limits still apply. |
 | Scope | `MemorySwapMax=1G`, CPU quota = physical cores ×100%, `CPUWeight=50`, nice 19. Preemptible builds get weight 10; scene-slot commands 500. `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` keeps harness children in this scope rather than escaping into another. |
-| Build tokens | Three host-wide tokens; compiles wait without polling via `slot-lock.py` on `tokens/token-{1,2,3}.lock`. Built binaries/gates/servers need none. `fleet-status` shows holders/waiters. |
-| Priority | `KRASNOKAMEN_BUILD_LANE=background` may take any token but yields to normal-lane waiters on `tokens/priority.gate`. Main's priority slice and battle takes/render/pins keep normal lane (proposal status above). D27 p.6 authorized the four-token trial; it ended on 2026-11-18 after 15-minute load stayed >20. D27 p.7 removed token-3 reserve; restore it only for a starved live-take window. |
-| Token lifetime | Runner fd 9 and independent scope guardian hold it, never the command. Release only when scope is empty, including kill/OOM. `KRASNOKAMEN_BUILD_TOKEN{,_PID}` permits ancestor-verified reuse by nested compiles, avoiding three-holder deadlock. Scope line says `<n>`, `<n>(reused)` or `none`. |
-| Jobserver | Watchdog owns `/tmp/solaris-mem-slots/jobserver`, a make-style FIFO with one token per logical CPU, passed by `CARGO_MAKEFLAGS`; concurrent Cargo builds share roughly `nproc` compilers. |
+| Admission | None (owner D127, 2026-11-27): every command starts at once; no build token, priority lane, disk floor or per-agent cap queues it. `fleet-status` lists what is running. |
+| Jobserver | Watchdog owns `/tmp/solaris-mem-slots/jobserver`, a make-style FIFO with one token per logical CPU, passed by `CARGO_MAKEFLAGS`; concurrent Cargo builds share roughly `nproc` compilers. It shares cores and never queues a run. |
 | Peak estimate | Successful scope `memory.peak` goes to `/tmp/solaris-mem-slots/peaks`, keyed by argv without paths/leading env. Next estimate = 1.25× largest of last five, unknown 4 GiB, bounded by cap. |
 
-Compile classification strips leading env/nice/ionice/timeout wrappers:
-Cargo except noncompiling commands (`fmt`, `fetch`, `tree`, `metadata`, `clean`,
-`update`, etc.), gradle(w), pin-release, harness
-`run build|clippy|code-health|correctness|test|regressions|regressions-client|java|standard-pack`
-and `ledger probe|promote`. Nested wrappers recognized by the live script remain
-authoritative. Token is acquired before `-x`; queued compiles cannot block a
-quiet window. A `-p` compile would hold its token while queued: **do not build in `-p`**.
+The scope line reports properties, lane, target, peak and signature. Do not build
+in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
 
 **Locks and lanes**
 
@@ -70,14 +65,14 @@ quiet window. A `-p` compile would hold its token while queued: **do not build i
   harness still writing `result.json` at that deadline is cut with its scope.
   If the guardian fifo is unwritable the runner says so on stderr and the
   `TERM` pass still applies.
-- Exit 75 is admission refusal (named cgroup/watchdog/window/target cause), not
-  an executed gate. Token, scene, exclusive and perf waits have different owners;
-  waiting is not death. Consume completion, never poll or bypass another lane.
+- Exit 75 is admission refusal (named cgroup/watchdog/window/target/exhaustion
+  cause), not an executed gate. Scene, exclusive and perf waits have different
+  owners; waiting is not death. Consume completion, never poll or bypass another lane.
 
 **Release and build identity**
 
 - Ad-hoc `cargo build|test|run --release`/`--profile release*` is refused before
-  token/slot admission. `pin-release`, harness/ledger candidate-control tooling,
+  slot selection. `pin-release`, harness/ledger candidate-control tooling,
   or Main's explicit `KRASNOKAMEN_RELEASE_BUILD_ALLOW=1` may request it.
   Reuse the immutable pin only for identical source/repo/kind/target/incremental/
   codegen inputs. Each reverted control or branch gets its own pin. Gates consume
@@ -88,9 +83,9 @@ quiet window. A `-p` compile would hold its token while queued: **do not build i
   runner build changes inputs and can rebuild unnecessarily.
 - Explicit `CARGO_TARGET_DIR` is retained; otherwise select
   `<work>/targets/slot-a..slot-z` (`KRASNOKAMEN_SLOT_TARGETS` override):
-  that tree's last free slot, another existing free slot, then a new one only
-  above `KRASNOKAMEN_SLOT_MIN_FREE_GB` (250 GiB default, rounded up).
-  This reserves no space and does not cap existing-slot growth.
+  that tree's last free slot, another existing free slot, then a new one when no
+  slot is free (owner D127 removed the free-space gate; the a..zz names bound
+  proliferation). This reserves no space and does not cap existing-slot growth.
 - `.krasnokamen-tree` records the starting cwd's Git toplevel; switching trees
   touches tracked files to defeat Cargo mtime/relative-dep-info false freshness.
   Never `cd` to a second worktree inside the command: it can run the first
@@ -110,9 +105,9 @@ so timeouts remain honest.
 Room = min(`MemAvailable`, slice cap−unreclaimable memory)−4 GiB; tmpfs/dirty/
 writeback count, reclaimable clean cache does not. On exit, thaw oldest-first
 while expected growth fits. Restart preserves the shared jobserver.
-Relevant regression sources: `tools/dev/test_build_tokens.py`,
-`test_scene_slot.py`, `test_mem_run_release_policy.py`,
-`test_measurement_window.py`, `test_heavy_watchdog.py`.
+Relevant regression sources: `tools/dev/test_disk_guard.py`,
+`test_build_tokens.py` (no token admission), `test_scene_slot.py`,
+`test_mem_run_release_policy.py`, `test_measurement_window.py`, `test_heavy_watchdog.py`.
 
 ## Diagnosing "are they stuck?"
 
@@ -120,7 +115,7 @@ One bounded `/proc`/cgroup observation, never a polling loop:
 
 | State | Evidence |
 |---|---|
-| Before start | `fleet-status` token/scene holders/waiters; runner's child `flock` for exclusive/perf lock, `slot-lock.py` for build admission. Never kill a legitimately queued `-p` run. |
+| Before start | `fleet-status` scene holders/waiters and running scopes; runner's child `flock` for the exclusive/perf lock. There is no build admission to wait on. Never kill a legitimately queued `-p` run. |
 | Frozen | `systemctl --user show solaris-heavy.slice -p ControlGroup --value`; scope `cgroup.freeze` requests freeze, `cgroup.events` `frozen 1` confirms. Read `memory.current`, `cgroup.procs`; reasons: `journalctl --user -u solaris-heavy-watchdog -o cat -n 20`. |
 | CPU throttled | Slice `cpu.max`, `cpu.stat` `nr_throttled/nr_periods`; owner quota comes from `/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`) and is reapplied each call. Other quotas are cleared. Runtime drop-ins: `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`. Never remove an owner cap without authorization. High CPU pressure with >40% idle suggests quota/pinning, not load. |
 | Pinned | Cargo/rustc `Cpus_allowed_list`; authorized live widening must cover every `/proc/<pid>/task/*` via `os.sched_setaffinity`. |
@@ -210,34 +205,48 @@ Nothing new on root disk: worktrees `<work>/wt/`, targets `<work>/targets/`,
 sccache on games disk; `/tmp` is root disk. Cross-device worktree moves need
 rsync, not `git worktree move`. `/dev/shm` per-user quota can be below `df` free.
 
-**Keep ≥250 GiB free** (owner 2026-11-13): DRAM-less Samsung 980 write cache
-shrinks near full. Below floor+10 GiB (default 260), ordinary runner calls invoke
-`slot-gc --delete`, report errors without failing the command; not in `-p`/`-x`.
-It removes attributable dead artifacts/superseded finalized incremental sessions,
-then rotates idle slots LRU (incremental first, other output except `tmp/` next).
-Pool/use locks and live `CARGO_TARGET_DIR` users protect slots, including explicit
-targets; bare Cargo racing the scan is not protected. Slots ignore in-use marks,
-so idle live-tree caches can be rotated
-([slot-gc details](../../tools/dev/README.md#slot-gc---delete--v-slot)).
+**Keep ≥280 GiB free** (owner D127, 2026-11-27): the DRAM-less Samsung 980 write
+cache slows near full, so 280 GiB is the floor — kept by *cleaning*, never by
+blocking runs. Below `KRASNOKAMEN_DISK_GC_BELOW_GB` (default 300) an ordinary
+runner call runs `slot-gc --delete` first and reports what it freed; it never
+fails the command and is not run in `-p`/`-x`. It removes attributable dead
+artifacts and superseded finalized incremental sessions, then rotates idle slots
+LRU (incremental first, other output except `tmp/` next) until the 300 GiB
+threshold is met. Pool/use locks and live `CARGO_TARGET_DIR` users protect slots,
+including explicit targets; bare Cargo racing the scan is not protected. Slots
+ignore in-use marks, so idle live-tree caches can be rotated
+([slot-gc details](../../tools/dev/README.md#slot-gc---delete--v-slot)). A new
+pooled slot is created whenever no slot is free: free space never refuses a launch,
+so only real slot ownership conflicts can.
 
-Below floor, standing owner approval (2026-11-17) allows **reproducible build
-caches only**, in this order; check `df` after each:
+The runner refuses a command only at true exhaustion, below
+`KRASNOKAMEN_DISK_REFUSE_BELOW_GB` (default 20 GiB, exit 75), where world/WAL
+writes would fail. Nothing else gates a launch on disk space.
+
+Above the threshold, plain GC only removes safe dead classes; zero reclaimed does
+not mean no incremental caches exist. To reclaim on demand (same ownership rules,
+check `df` after each):
 
 1. Idle incremental caches: dry-run, then
    `slot-gc --delete --incremental-only --min-free-gb <target>`.
 2. Named finished/merged `targets/<Agent>` dirs with zero users; if they also
    hold inputs/worlds/jars/tool checkouts, remove only Cargo output.
 3. Idle-slot full rotation: `slot-gc --delete --min-free-gb <target>`.
+4. Owned receipts/scenario data under the D127 scope: lossless gzip of old
+   text/json, provably reproducible copies whose source/pin is retained, and raw
+   bulk data of *passed, non-control* runs older than 72 h that no receipt lane,
+   tracked file or ledger row cites. Never failed, interrupted, no-result or
+   control run data.
 
-Above floor+10, plain GC only removes safe dead classes; zero reclaimed does not
-mean no incremental caches exist. Use step 1 rather than deleting run data.
+Use step 1 rather than deleting run data; unexpected repo changes or another
+agent's active work are never cleanup candidates.
 
 | Object | Retention and removal |
 |---|---|
 | Worktree | `wt-done` verifies `final.patch` and archives evidence before removal; obey [archive/restoration rules](worktrees-and-integration.md#creating-a-worktree). Mark dependent checkouts/pins using `in-use add/remove`; `wt-gc` displays marks. Manual removal requires finished owner, no tracked changes except stray `.pyc`, HEAD retained in a branch (`git branch --contains`), and no handoff/config path dependencies. First preserve `.analysis/` at `<work>/receipts/<wt>-analysis` and built outputs at `<work>/release-artifacts/` (not “published”); only then `git worktree remove --force <absolute-worktree>` and `git worktree prune`. |
 | Target dir | Recheck zero users in `/proc` cwd/exe/fds/environ immediately before removal. Pooled deletion requires its lock (`flock -n /tmp/solaris-mem-slots/<l> rm -rf <work>/targets/slot-<l>`). Preserve active-task dirs and binaries other agents run. |
 | Receipts/scenarios | Active or next-task-needed runs stay whole. Finished runs retain reports (`md/yaml/json/txt`), logs, `result.json`, patches and screenshots. Only provably reproducible copied client roots/binaries/jars/wasm may go when their source/pin is retained. |
-| Run data | Crash copies, WAL, worlds, journal, client run state, `perf.data` and archives require explicit owner deletion approval; failing runs and negative controls stay whole even then. A WAL hash never replaces its bytes. |
+| Run data | Failed, interrupted, no-result and control runs stay whole: crash copies, WAL, worlds and journals are evidence. Owner D127 authorizes removing raw bulk data only for *passed, non-control* runs older than 72 h that no receipt lane, tracked file or ledger row cites (keep logs, reports, `result.json`, patches, screenshots). A WAL hash never replaces its bytes. |
 | Other | Never touch owner's main checkouts/targets, sccache, or other projects' `/tmp` caches. |
 
 Past disk fills came from parallel slots, copied wasm/client content and nested
@@ -246,8 +255,10 @@ and evidence, not reproducible bulk.
 
 ## Superseded runner designs (do not follow old skills)
 
-The October fixed-memory-slot, 3×5G, CPU-2/3 and Main-GO recipes are retired.
-Current design is the watchdog/shared jobserver (2026-10-28), tree-marked pooled
-targets (11-04) and three nested-reusable compile tokens (11-11; D27's four-token
-trial ended 11-18). Exit 75 is a named admission refusal, not the old memory-slot
-rule. Follow this page and the live runner, not historical skills.
+The October fixed-memory-slot, 3×5G, CPU-2/3 and Main-GO recipes are retired, and
+so are the 2026-11 build tokens and token priority/background lanes (owner D127,
+2026-11-27): there is no build admission. Current design is the watchdog/shared
+jobserver (2026-10-28), tree-marked pooled targets (11-04) and the last-resort
+exhaustion guard below 20 GiB free. Exit 75 is a named refusal (scene/window/
+exhaustion), not an admission queue. Follow this page and the live runner, not
+historical skills.
