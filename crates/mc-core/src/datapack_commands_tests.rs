@@ -968,29 +968,7 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     assert_eq!(state.registry.recipes.len(), recipes_before);
 }
 
-/// Measure worker-side registry preparation with the default registry.
-#[test]
-#[ignore = "microbenchmark; prints the median reload install time"]
-fn datapack_reload_install_microbench() {
-    let world = tempfile::tempdir().unwrap();
-    let root = world.path().join("datapacks");
-    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
-    let state = fixture(&root);
-    let packs = PackSet::load(&root, Selection::default()).unwrap();
-    let mut samples = Vec::new();
-    for _ in 0..7 {
-        let start = std::time::Instant::now();
-        let mut registry = state.registry.prepare_content();
-        packs.install_content(&mut registry).unwrap();
-        samples.push(start.elapsed().as_micros());
-    }
-    samples.sort_unstable();
-    eprintln!(
-        "reload install us: median={} samples={samples:?}",
-        samples[3]
-    );
-}
-
+/// A reload whose recipe cannot be installed keeps the old registry and selection.
 #[test]
 fn a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection() {
     let world = tempfile::tempdir().unwrap();

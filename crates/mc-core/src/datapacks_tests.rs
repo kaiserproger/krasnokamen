@@ -624,39 +624,6 @@ fn metadata_and_data_root_symlinks_are_rejected() {
     assert!(PackSet::load(directory.path(), Selection::default()).is_err());
 }
 
-#[test]
-#[ignore = "release microbenchmark; ordinary lane, approximate contended-machine measurement"]
-fn datapack_idle_and_execute_microbench() {
-    let mut state = fixture(PackSet::default());
-    let mut changes = ChangeSet::default();
-    let mut idle = Vec::new();
-    let mut execute = Vec::new();
-    for _ in 0..7 {
-        let start = std::time::Instant::now();
-        for _ in 0..10_000 {
-            state.tick += 1;
-            tick(std::hint::black_box(&mut state), &mut changes);
-        }
-        idle.push(start.elapsed().as_nanos() / 10_000);
-        let start = std::time::Instant::now();
-        for _ in 0..10_000 {
-            state.tick += 1;
-            run(
-                std::hint::black_box(&mut state),
-                "execute positioned 8 60 8 rotated 0 0 unless entity @s run time add 1",
-            );
-            state.outbox.clear();
-        }
-        execute.push(start.elapsed().as_nanos() / 10_000);
-    }
-    idle.sort_unstable();
-    execute.sort_unstable();
-    eprintln!(
-        "approximate, contended machine: idle datapack ns/call median={} samples={idle:?}; execute ns/call median={} samples={execute:?}",
-        idle[3], execute[3]
-    );
-}
-
 /// One function that tells 600 chat lines to two online players in one tick
 /// must reach both of them: the per-connection reliable cap protects the server
 /// from a sender flood, never from an operator's own datapack.
