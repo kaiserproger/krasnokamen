@@ -1,87 +1,63 @@
 # Contributing to Krasnokamen
 
-Krasnokamen is an independent Minecraft: Java Edition server written from
-scratch in Rust: parallel ticks, deterministic outcomes, WAL-backed saves and
-sandboxed Wasm plugins. Players join with an unmodified client (releases
-26.1.2–26.3, canonical 26.3). Read the [project README](README.md) first, then
-the [documentation index](docs/README.md) for the guide that owns your area.
-Coding agents should also read [docs/development/outside-agents.md](docs/development/outside-agents.md),
-a distilled version of the in-repo agent guide without any private-host
-tooling.
+Krasnokamen is a Minecraft: Java Edition server written from scratch in Rust:
+parallel ticks, deterministic outcomes, WAL-backed saves and sandboxed Wasm
+plugins. Players join with an unmodified client (releases 26.1.2–26.3, canonical
+26.3). Read the [project README](README.md), then the
+[documentation index](docs/README.md) for the page that owns your area.
 
-Contributions welcome: bug reports with a reproduction, focused fixes,
-documentation improvements, and plugins (see [docs/PLUGINS.md](docs/PLUGINS.md)
-and the `krasnokamen-default-plugins` repository). Keep changes focused;
-discuss material scope or design choices in an issue before expanding.
-Core production builds must not require sibling repositories.
+Welcome: bug reports with a reproduction, focused fixes, documentation and
+[plugins](docs/PLUGINS.md) (see the `krasnokamen-default-plugins` repository).
+Discuss material scope or design changes in an issue first. Core production
+builds must not require sibling repositories.
 
 ## Prerequisites
 
-On a clean Linux, macOS or Windows machine you need:
-
-- **Rust** via rustup: the version pinned in [`rust-toolchain.toml`](rust-toolchain.toml)
-  (channel 1.99, with the `rustfmt` and `clippy` components) is installed
-  automatically on first use.
-- **Clang and mold** on Linux x86-64 only: [`.cargo/config.toml`](.cargo/config.toml)
-  selects them as the linker for that target. Other platforms and
-  architectures use their default linker and need nothing extra.
-- **JDK 25** (`java`/`javac` on `PATH`) — only for `content import` (deriving
-  the game-data cache) and the Java-backed harness profiles. Plain builds and
-  Rust tests do not need Java.
-- **Python 3** — runs the validation harness (`python3 -m tools.harness`).
-- **cargo-nextest** — the test runner behind `run test`/`correctness`:
-  `cargo install cargo-nextest --locked`.
-- **Xvfb** — only for the graphical real-client harness profiles, which also
-  need JDK 25 and client jars; see
-  [docs/AGENT_TOOLING.md](docs/AGENT_TOOLING.md#prerequisites). Ordinary
-  development does not need it.
+| Need | Used for |
+|---|---|
+| rustup | installs the toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml) (1.99 with rustfmt and Clippy) on first use |
+| Clang and mold | Linux x86-64 only: [`.cargo/config.toml`](.cargo/config.toml) selects them as linker; other targets use the default linker |
+| JDK 25 (`java`, `javac`) | `content import` and the Java-backed harness profiles; plain builds and Rust tests do not need it |
+| Python 3 | the validation harness, `python3 -m tools.harness` |
+| cargo-nextest | the test runner behind `run test` and `correctness`: `cargo install cargo-nextest --locked` |
+| Xvfb, client jars | graphical real-client profiles only; see [harness prerequisites](docs/AGENT_TOOLING.md#prerequisites) |
 
 ## Build
 
-From the repository root:
+From the repository root on Linux, macOS or Windows:
 
 ```sh
 cargo build -p mc-edge --bin krasnokamen
 ```
 
-This produces the `krasnokamen` server binary (debug profile by default;
-use `--release` only when a gate or release requires it).
+Debug is the default; build `--release` only when a gate or a release needs it.
 
 ## Content import (once per checkout)
 
-Krasnokamen does not ship Mojang files. Derive the game-data cache from the
-official server bundles into the checkout's `data/vanilla/` — either let the
-server download them (needs JDK 25 and network access to Mojang):
+Krasnokamen ships no Mojang files. Tests read the derived game-data cache at
+these **checkout paths, never through a symlink**: `data/vanilla/` (canonical
+26.3) plus `data/vanilla-26.1.2`, `data/vanilla-26.2` and `data/vanilla-steps`.
+One import installs all of them:
 
 ```sh
+# downloads the official server bundles (needs JDK 25 and network access to Mojang)
 cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download --cache data/vanilla
-```
-
-or from server jars you already own (licensed copies; `--download` cannot be
-combined with `--from`):
-
-```sh
+# or from server jars you own; --from and --download cannot be combined
 cargo run -p mc-edge --bin krasnokamen -- content import --cache data/vanilla \
   --from /path/to/26.3/server.jar --gameplay-from /path/to/26.1.2/server.jar
 ```
 
-The command installs the canonical 26.3 cache in `data/vanilla/` and, beside
-it, the 26.1.2/26.2 endpoint caches and both adjacent mapping snapshots
-(`data/vanilla-26.1.2`, `data/vanilla-26.2`, `data/vanilla-steps`). **The
-tests read exactly these checkout paths**: not the per-user cache, and not
-through a symlink (a symlinked `data/vanilla` is refused). The server also
-searches the checkout, but a complete per-user cache takes precedence. The
-Run command below selects the checkout cache explicitly; a configured
-`[data].vanilla_data_dir` overrides that selection. Without `--cache` the
-import goes to the operator default `$XDG_DATA_HOME/krasnokamen/content/26.3`
-(otherwise `~/.local/share/krasnokamen/content/26.3`), which tests never read;
-selection order and `--cache` are documented in
-[the operating guide](docs/OPERATING.md#vanilla-content-cache), which also
-covers `content verify`. **Mojang bytes never enter Git**: `data/vanilla/`,
-`data/vanilla-*` and `.analysis/` are ignored — never stage them, and never
-commit decompiled or extracted Mojang content. Packet IDs and layouts come
-from local `wire-probe`/`javap` runs against your own downloaded jars, never
-from memory ([protocol changes](docs/development/protocol-changes.md)).
+Without `--cache` the import goes to the operator default
+`$XDG_DATA_HOME/krasnokamen/content/26.3` (else
+`~/.local/share/krasnokamen/content/26.3`), which tests never read. The server
+prefers a complete per-user cache over the checkout; the run command below
+selects the checkout explicitly, and a configured `[data].vanilla_data_dir`
+overrides both ([cache selection and `content verify`](docs/OPERATING.md#vanilla-content-cache)).
+
+**Mojang bytes never enter Git**: `data/vanilla*` and `.analysis/` are ignored;
+never stage them or any decompiled or extracted content. Packet IDs and layouts
+come from local `wire-probe`/`javap` runs against your own jars, never from
+memory ([protocol changes](docs/development/protocol-changes.md)).
 
 ## Run
 
@@ -89,89 +65,85 @@ from memory ([protocol changes](docs/development/protocol-changes.md)).
 KRASNOKAMEN_CONTENT_CACHE="$PWD/data/vanilla" cargo run -p mc-edge --bin krasnokamen -- --config example.toml
 ```
 
-Then connect a Minecraft Java 26.3 client to `127.0.0.1:25565`.
-`example.toml` listens on all interfaces with **offline authentication** — for
-anything beyond local testing set `[auth].online_mode = true` and review
-`[network].bind_address` (see the [operating guide](docs/OPERATING.md)).
+Connect a Java 26.3 client to `127.0.0.1:25565`. `example.toml` listens on all
+interfaces with **offline authentication**: beyond local testing set
+`[auth].online_mode = true` and review `[network].bind_address`
+([operating guide](docs/OPERATING.md)).
 
 ## Validation
 
-Run the canonical harness from the repository root:
+Run the harness from the repository root; `python3 -m tools.harness list` names
+every profile and what it needs.
 
-```sh
-python3 -m tools.harness list                                  # profiles and what they need
-python3 -m tools.harness run test -p mc-core --lib command_summon   # L0: focused tests while editing
-python3 -m tools.harness run fmt                               # L1
-python3 -m tools.harness run code-health                       # L1
-python3 -m tools.harness run correctness                       # L2: regressions, fmt, code-health, strict Clippy, all tests
-```
+| Level | Command | When |
+|---|---|---|
+| L0 | `python3 -m tools.harness run test -p <crate> --lib <filter>` for the touched scope, plus diff/syntax checks of what you changed | while editing |
+| L1 | L0 + `python3 -m tools.harness run fmt` + `python3 -m tools.harness run code-health` | finishing a change |
+| L2 | `python3 -m tools.harness run correctness`: fmt, code-health, strict workspace Clippy, every nextest workspace/all-target test, then the registered bug regressions | before a code PR |
 
-- **L0** — the focused `run test -p <crate> --lib <filter>` for the scope you
-  touched, plus diff/syntax checks of what you changed. Loop here while editing.
-- **L1** — L0 plus `run fmt` and `run code-health`. Run when finishing a change.
-- **L2** — `run correctness`: bug regressions, formatting, code-health,
-  strict workspace Clippy and all nextest workspace/all-target tests. Run before
-  opening a code PR. It needs `cargo-nextest`, about 12 GiB of RAM, and on a
-  16-thread machine about 45 minutes with a warm target directory (a cold one
-  adds the full workspace build). Its real-client manifest tests also need a
+- L2 needs cargo-nextest, about 12 GiB of RAM and a
   [Krasnokamen Loader](https://github.com/kaiserproger/krasnokamen-loader)
-  checkout: clone it next to this one as `../solaris-loader`, or point
-  `KRASNOKAMEN_LOADER_ROOT` at your clone. If your machine cannot run it, open the PR
-  as a draft with your L1 receipts and say so: the PR's CI runs formatting,
-  Clippy, code-health, the bug regressions and a shortened test suite, and the
+  checkout for its real-client manifest tests: clone it beside this one as
+  `../solaris-loader` or set `KRASNOKAMEN_LOADER_ROOT`. A warm 16-thread machine
+  needs roughly 45 minutes; a cold target adds the full build. If you cannot run
+  it, open a draft PR with your L1 receipts and say so: PR CI runs fmt, Clippy,
+  code-health, the bug regressions and a sharded short test suite, and the
   maintainer runs L2 on the merge candidate.
-- Each run writes a receipt under
-  `.analysis/validation/<UTC>-<profile>-<unique>/result.json` (`status`,
-  `commands`, `exits`, `logs`, `details`, `error`). `prepared` or `--check`
-  output is not a pass; unknown or failing commands fail closed. Quote the
-  receipt path when you claim a check is green.
-- Documentation-only changes need `python3 tools/doclinks.py` (markdown links,
-  anchors and reachability), not a Cargo build.
-- `run regressions` executes every registered bug-ledger check and is part of
-  L2; run it alone only after an integration that skipped L2.
+- Every run writes `.analysis/validation/<UTC>-<profile>-<unique>/result.json`
+  (`status`, `commands`, `exits`, `logs`, `details`, `error`). Quote that path
+  when you call a check green. `prepared` or `--check` output is not a pass;
+  unknown, unlaunchable or failing commands fail closed.
+- Documentation-only changes need `python3 tools/doclinks.py` (links, anchors,
+  reachability from `AGENTS.md`), not Cargo.
+- `run regressions` alone is only for an integration that skipped L2.
 - Graphical, oracle and performance profiles prove only their named scope and
-  have extra prerequisites (Xvfb, JDK 25, client jars, a release server binary
-  as `KRASNOKAMEN_SERVER_BINARY`). Read
-  [docs/AGENT_TOOLING.md](docs/AGENT_TOOLING.md) and
-  [docs/development/real-client-gates.md](docs/development/real-client-gates.md)
-  before attempting them. Do not widen a bound, add retries or replace
-  real-client coverage with protocol bots to turn a failing gate green.
+  need more (Xvfb, JDK 25, client jars, a release server as
+  `KRASNOKAMEN_SERVER_BINARY`): read [agent tooling](docs/AGENT_TOOLING.md) and
+  [real-client gates](docs/development/real-client-gates.md) first. Never widen
+  a bound, add retries or substitute protocol bots to turn a failing
+  real-client gate green.
 
 ## Making a change
 
-1. Find the owning page in the [documentation index](docs/README.md) and read
-   it; check [open transitions](docs/STATUS.md#open-transitions) before
-   touching an area that is being replaced.
-2. Follow the project invariants: Mojang bytes never enter Git; the native
-   store plus the tick WAL is the only save format and fails closed; gameplay
-   authority stays in the native tick; no compatibility shims — migrate
-   callers and delete the old path; debug builds by default.
-3. Add focused regression coverage for behaviour changes: the test must go
-   **red when the fix hunks are reverted** (negative control). A unit test
-   cannot close a known client-visible failure — those need a real-client
-   check. Substantial tests go in focused sibling `*_tests.rs` modules.
-4. File or update a bug row at `docs/bugs/rows/<ID>.toml` for anything broken you
-   observed — `python3 -m tools.harness ledger show <ID>` reads one and
-   `ledger list --status open` names them; see
-   [the bug ledger](docs/bugs/README.md#filing-a-bug). A fix adds `regression`
-   refs. Leave `fix_commit` out of your PR: the maintainer records it after
-   merging, when the commit id is final. **Never set `status = "fixed"` by
-   hand**; the promotion tooling does that after running the negative control.
+1. Read the owning page from the [documentation index](docs/README.md) and check
+   [open transitions](docs/STATUS.md#open-transitions) for the area.
+2. Keep the [project invariants](AGENTS.md#project-invariants): the native store
+   plus tick WAL is the only save format and fails closed; gameplay authority
+   stays in the native tick; no compatibility shims (migrate callers, delete the
+   old path); debug builds by default.
+3. A behaviour change needs a regression that goes **red when only the fix hunks
+   are reverted** (negative control). A unit test cannot close a known
+   client-visible failure: that needs a real-client check. Substantial tests go
+   in a focused sibling `*_tests.rs`.
+4. Record anything broken you observed as `docs/bugs/rows/<ID>.toml`
+   ([filing a bug](docs/bugs/README.md#filing-a-bug));
+   `python3 -m tools.harness ledger show <ID>` reads one row and
+   `ledger list --status open` lists the open ones. A fix adds `regression` references. Leave
+   `fix_commit` out of a PR (the maintainer records it once the merged commit id
+   is final) and **never set `status = "fixed"` by hand**: only
+   `ledger promote` does, after running the negative control.
 
 ## Pull requests
 
-- Fork the repository, work on a branch, open a PR. The owner reviews and
-  merges; nothing lands on `main` without that review, and pushing, tagging and
-  publishing releases are owner actions.
-- Use one revertible **Conventional Commit** per completed checkpoint
-  (`fix(scope): …`, `docs: …`). Leave Git hooks and signing alone. Change
+- Fork, work on a branch, open a PR. The owner reviews and merges; pushing,
+  tagging and publishing are owner actions.
+- One revertible **Conventional Commit** per completed checkpoint
+  (`fix(scope): …`, `docs: …`). Leave Git hooks and signing alone; change
   `Cargo.lock` only for a concrete dependency reason.
-- Never stage ignored local state (`.analysis/`, `data/vanilla/`, runtime
-  worlds, logs, tool scratch dirs). Preserve unrelated local changes.
-- Review expects: L1/L2 green with harness receipts quoted, `doclinks.py` green
-  for doc changes, the invariants above respected, and a regression test that
-  fails without the fix. Docs-only and test-only changes still need doclinks
-  green and a description of what a player observes differently.
+- Never stage ignored local state (`.analysis/`, `data/vanilla*`, worlds, logs,
+  tool scratch directories); preserve unrelated local changes.
+- Review expects quoted L1/L2 receipts (or the draft note above), doclinks green
+  for documentation, the invariants kept, and a regression that fails without
+  the fix. Docs- and test-only PRs still say what a player observes differently.
+
+## Coding agents on a fork
+
+The [Agent Constitution](docs/AGENT_CONSTITUTION.md) and [AGENTS.md](AGENTS.md)
+apply to agents too. Rules marked *owner host* (the `mem-run.sh` runner,
+`pin-release`, `wt-new`, `<work>` paths) and Main's integration, queue and
+publication duties do not: run commands directly, work on a branch in your fork
+and leave upstream `main`, tags and releases to the maintainer. Missing harness
+inputs are not passing evidence; only `ledger promote` closes a bug row.
 
 ## Licence
 
