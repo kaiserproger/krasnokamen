@@ -13,13 +13,13 @@
 # file of the new tree is touched, so its workspace crates rebuild. The lock files
 # a-e are the old slot locks, so commands of the previous runner version never
 # share a dir with new ones. Existing dirs are reused before a new one is created;
-# a new dir is created only if `df` (whole GiB, rounded up) shows at least
-# KRASNOKAMEN_DISK_GC_BELOW_GB (default 300, the automatic-reclaim threshold) free at
-# selection time (after mem-run's exhaustion-guard slot-gc, if it ran). This only stops
-# slot proliferation (12 parallel slots filled the disk on 2026-11-07); it reserves
-# nothing, and existing dirs keep growing unchecked. The only refusal is mem-run's
-# last-resort guard below KRASNOKAMEN_DISK_REFUSE_BELOW_GB (default 20 GiB).
-# Never waits for a free slot: with no usable dir the command is refused.
+# a new dir is created only when no existing slot is free (owner D127 removed the
+# disk floor: free space never refuses a launch; the only refusal is mem-run's
+# last-resort exhaustion guard below 20 GiB). Bounds slot proliferation by the
+# a..zz names and by real ownership conflicts; it reserves nothing and existing
+# dirs keep growing unchecked.
+# Never waits for a free slot: with no usable dir the command is refused (slot
+# exhaustion, not disk).
 #
 # Ownership of a pooled slot (<slots>/slot-<l>; its tree is <slot>/.krasnokamen-tree):
 # - Pool lock <dir>/<l>, exclusive: the command owns the slot. A picked slot is
@@ -51,18 +51,15 @@ slot_refuse() {  # $1 = letter, $2 = slot dir
 }
 
 select_slot() {
-  local w l pass free_gb min_free picked= attempt real slots_real
+  local w l pass picked= attempt real slots_real
   target=${CARGO_TARGET_DIR:-}
   for w in "$@"; do [[ $w == CARGO_TARGET_DIR=* ]] && target=${w#CARGO_TARGET_DIR=}; done
   slots=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
   tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   mkdir -p "$dir"
   if [ -z "$target" ]; then
-    min_free=${KRASNOKAMEN_DISK_GC_BELOW_GB:-300}
-    free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
     for pass in own existing new; do
-      [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
-      for l in {a..z} {a..z}{a..z}; do  # 26 one-letter slots, then two-letter ones while disk allows
+      for l in {a..z} {a..z}{a..z}; do  # 26 one-letter slots, then two-letter ones
         case $pass in
           own) [ -f "$slots/slot-$l/.krasnokamen-tree" ] && [ "$(slot_tree "$slots/slot-$l")" = "$tree" ] || continue ;;
           existing) [ -d "$slots/slot-$l" ] || continue ;;
@@ -73,7 +70,10 @@ select_slot() {
         exec 7>&- 8>&-
       done
     done
-    [ -n "$picked" ] || { echo "mem-run: no free target dir (disk ${free_gb}G free, new dirs need ${min_free}G); finish or cancel another command (exit 75)" >&2; exit 75; }
+    # No free space test here: owner D127 removed the disk floor, so the runner never
+    # refuses a launch on free space (only real exhaustion below 20 GiB does, in mem-run).
+    # This is slot exhaustion: every pooled slot is owned by a running command.
+    [ -n "$picked" ] || { echo "mem-run: no free target dir (every pooled slot a..zz is owned); finish or cancel another command (exit 75)" >&2; exit 75; }
     export CARGO_TARGET_DIR="$slots/slot-$picked"
     target=$CARGO_TARGET_DIR
     slot_switch_tree "$target"

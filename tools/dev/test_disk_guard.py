@@ -86,6 +86,17 @@ class DiskGuard(unittest.TestCase):
         self.assertNotIn('exhaustion guard', done.stderr)
         self.assertIn('mem-run: scope', done.stderr)
 
+    def test_the_first_pooled_slot_is_created_below_the_reclaim_threshold(self) -> None:
+        # Advisor/D127: free space must never refuse a launch. An empty pool with the reclaim
+        # threshold far above this host's free space still gets slot-a.
+        empty = self.root / 'targets-empty'
+        empty.mkdir()
+        done = self.run_true(KRASNOKAMEN_SLOT_TARGETS=str(empty), CARGO_TARGET_DIR='',
+                             KRASNOKAMEN_DISK_GC_BELOW_GB='100000')
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((empty / 'slot-a' / '.krasnokamen-tree').is_file(), done.stderr)
+        self.assertIn(f'target={empty}/slot-a', done.stderr)
+
     def test_a_non_integer_threshold_is_refused_not_evaluated(self) -> None:
         done = self.run_true(KRASNOKAMEN_DISK_GC_BELOW_GB='lots')
         self.assertEqual(done.returncode, 75, done.stderr)

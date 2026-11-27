@@ -83,9 +83,9 @@ in `-p`: it pins the last four CPUs and would pollute the perf lane's numbers.
   runner build changes inputs and can rebuild unnecessarily.
 - Explicit `CARGO_TARGET_DIR` is retained; otherwise select
   `<work>/targets/slot-a..slot-z` (`KRASNOKAMEN_SLOT_TARGETS` override):
-  that tree's last free slot, another existing free slot, then a new one only
-  above `KRASNOKAMEN_DISK_GC_BELOW_GB` (300 GiB default, rounded up).
-  This reserves no space and does not cap existing-slot growth.
+  that tree's last free slot, another existing free slot, then a new one when no
+  slot is free (owner D127 removed the free-space gate; the a..zz names bound
+  proliferation). This reserves no space and does not cap existing-slot growth.
 - `.krasnokamen-tree` records the starting cwd's Git toplevel; switching trees
   touches tracked files to defeat Cargo mtime/relative-dep-info false freshness.
   Never `cd` to a second worktree inside the command: it can run the first
@@ -216,7 +216,8 @@ threshold is met. Pool/use locks and live `CARGO_TARGET_DIR` users protect slots
 including explicit targets; bare Cargo racing the scan is not protected. Slots
 ignore in-use marks, so idle live-tree caches can be rotated
 ([slot-gc details](../../tools/dev/README.md#slot-gc---delete--v-slot)). A new
-pooled slot is created only above the same 300 GiB threshold.
+pooled slot is created whenever no slot is free: free space never refuses a launch,
+so only real slot ownership conflicts can.
 
 The runner refuses a command only at true exhaustion, below
 `KRASNOKAMEN_DISK_REFUSE_BELOW_GB` (default 20 GiB, exit 75), where world/WAL
