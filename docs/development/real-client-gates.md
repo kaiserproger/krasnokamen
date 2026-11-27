@@ -1346,7 +1346,7 @@ Pillow, and follow the review rules below.
   from public visuals, with provenance notes kept outside Git. Tell agents not to
   open decompiled sources. (This rule is about client rendering assets. Packet ids
   and layouts for the server are read from local reports and `javap`, see
-  [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md).)
+  [decision C2](../../DECISIONS.md#content-and-protocol).)
 - The owner workstation cannot reach minecraft.wiki; reference files were fetched
   through the test server with `ssh "$KRASNOKAMEN_TEST_HOST" "curl ..."` into
   `/tmp/wiki-ref` there and rsynced back. That needs the owner's SSH access.
