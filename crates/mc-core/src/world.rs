@@ -14,9 +14,8 @@ use mc_light::sky_darken;
 use mc_world::native::{NativeChunkSnapshot, NativeStore};
 use mc_world::{BlockRegistry, BlockStateId, Chunk, ChunkGenerator, ChunkPos, ChunkSection};
 
-pub use crate::chunk_loader::ChunkLoadError;
-use crate::chunk_loader::{ChunkLoader, ChunkSource};
 use crate::config::CoreError;
+use mc_chunk_loader::{ChunkLoadError, ChunkLoader, ChunkSource, Population};
 mod capture;
 mod clocks;
 mod residency;
@@ -131,7 +130,7 @@ pub struct ChunkWorld {
     next_ticket: u64,
     /// Finished loads wait outside residency until a whole-chunk light solve
     /// fits this tick's admission batch. Tickets remain in `in_flight`.
-    ready: Vec<crate::chunk_loader::Ready>,
+    ready: Vec<mc_chunk_loader::Ready>,
     /// EWMA of measured admission microseconds per chunk, including its
     /// synchronous light fence. Start conservatively with one whole chunk.
     admission_us_per_chunk: u128,
@@ -365,6 +364,48 @@ pub(crate) fn take_physics_reader_count() -> usize {
     PHYSICS_READERS.swap(0, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Worker source built from the core registry: `mc-chunk-loader` takes the exact
+/// Arcs and worldgen inputs it reads and never sees `CoreRegistry` (D128 cut,
+/// ADR 0021). Live worlds, LOD, tests and offline pregeneration share this.
+pub fn worker_source(
+    seed: i64,
+    native: Option<Arc<NativeStore>>,
+    dimension: u32,
+    generator: Arc<dyn ChunkGenerator>,
+    registry: &crate::registry::CoreRegistry,
+    geometry: mc_world::ChunkGeometry,
+) -> Arc<ChunkSource> {
+    Arc::new(ChunkSource {
+        native,
+        dimension,
+        generator,
+        blocks: Arc::clone(&registry.blocks),
+        items: Arc::clone(&registry.items),
+        chest_loot: Arc::clone(&registry.chest_loot),
+        light: Arc::clone(&registry.light),
+        population: (dimension == 0).then(|| {
+            Population::new(
+                seed,
+                registry.biome_spawns.clone(),
+                Arc::clone(&registry.blocks),
+                registry.materials.clone(),
+                registry
+                    .blueprints
+                    .iter()
+                    .map(|(_, blueprint)| {
+                        (
+                            blueprint.name.clone(),
+                            (blueprint.half_width, blueprint.height),
+                        )
+                    })
+                    .collect(),
+            )
+        }),
+        geometry,
+        structure_catalog: registry.structure_catalog.clone(),
+    })
+}
+
 impl ChunkWorld {
     /// A single entirely missing, overlay-untouched column returns None for
     /// every block_at cell in this box. Missing data is not cached as terrain.
@@ -449,18 +490,7 @@ impl ChunkWorld {
     ) -> Self {
         Self::from_source(
             seed,
-            Arc::new(ChunkSource {
-                native: None,
-                dimension: 0,
-                generator,
-                registry: Arc::clone(&registry.blocks),
-                items: Arc::clone(&registry.items),
-                chest_loot: Arc::clone(&registry.chest_loot),
-                light: Arc::clone(&registry.light),
-                population: Some(crate::chunk_loader::Population::new(seed, registry)),
-                geometry,
-                structure_catalog: registry.structure_catalog.clone(),
-            }),
+            worker_source(seed, None, 0, generator, registry, geometry),
             air,
             world_spawn,
             Arc::clone(&registry.light),
@@ -483,9 +513,7 @@ impl ChunkWorld {
     ) -> Self {
         Self::from_source(
             seed,
-            Arc::new(ChunkSource::new_native(
-                seed, store, dimension, generator, registry, geometry,
-            )),
+            worker_source(seed, Some(store), dimension, generator, registry, geometry),
             air,
             world_spawn,
             Arc::clone(&registry.light),
@@ -602,7 +630,7 @@ impl ChunkWorld {
     /// Block registry (checkpoint encode use).
     #[must_use]
     pub fn registry(&self) -> &Arc<BlockRegistry> {
-        &self.source.registry
+        &self.source.blocks
     }
 
     /// New client-visible content, including load, block edits and baked light.
@@ -1193,8 +1221,8 @@ impl ChunkWorld {
             .copied()
             .unwrap_or(false)
             && previous
-                .and_then(|id| self.source.registry.by_id(BlockStateId(id)))
-                .zip(self.source.registry.by_id(BlockStateId(state)))
+                .and_then(|id| self.source.blocks.by_id(BlockStateId(id)))
+                .zip(self.source.blocks.by_id(BlockStateId(state)))
                 .is_some_and(|(before, after)| {
                     before.block.id == after.block.id
                         && before
@@ -1240,8 +1268,8 @@ impl ChunkWorld {
             return;
         }
         let same_family = previous
-            .and_then(|old| self.source.registry.by_id(BlockStateId(old)))
-            .zip(self.source.registry.by_id(BlockStateId(state)))
+            .and_then(|old| self.source.blocks.by_id(BlockStateId(old)))
+            .zip(self.source.blocks.by_id(BlockStateId(state)))
             .is_some_and(|(old, new)| {
                 old.block.id == new.block.id
                     || crate::copper::same_family(&old.block.id, &new.block.id)
@@ -1307,9 +1335,9 @@ impl ChunkWorld {
             let chunk = Arc::make_mut(chunk);
             let same_family = self
                 .source
-                .registry
+                .blocks
                 .by_id(previous)
-                .zip(self.source.registry.by_id(BlockStateId(state)))
+                .zip(self.source.blocks.by_id(BlockStateId(state)))
                 .is_some_and(|(old, new)| {
                     old.block.id == new.block.id
                         || crate::copper::same_family(&old.block.id, &new.block.id)
@@ -1544,7 +1572,7 @@ impl ChunkCapture {
     }
 
     pub fn registry(&self) -> &Arc<BlockRegistry> {
-        &self.source.registry
+        &self.source.blocks
     }
 
     pub fn items(&self) -> &Arc<mc_data::items::ItemRegistry> {
@@ -1662,7 +1690,7 @@ impl ChunkCapture {
             .fill_generated(
                 self.source.dimension,
                 &bases,
-                &self.source.registry,
+                &self.source.blocks,
                 &self.source.items,
             )
             .map_err(|error| CoreError::Storage(error.to_string()))

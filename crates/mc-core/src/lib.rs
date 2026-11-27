@@ -46,7 +46,6 @@ mod cauldron_wash_tests;
 mod chests;
 pub mod chiseled_shelf;
 mod chorus;
-pub mod chunk_loader;
 pub(crate) mod chunk_tickets;
 pub mod combat;
 pub mod command_args;
@@ -231,6 +230,8 @@ pub mod world;
 mod blueprint_tests;
 #[cfg(test)]
 mod chat_visibility_tests;
+#[cfg(test)]
+mod chunk_loader_world_tests;
 #[cfg(test)]
 mod core_tests;
 #[cfg(test)]

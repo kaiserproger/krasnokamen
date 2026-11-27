@@ -476,7 +476,7 @@ impl Cache {
             let spawn = std::thread::Builder::new()
                 .name("settlement-forest".into())
                 .spawn(move || {
-                    let tree_states = tree_states(&source.registry);
+                    let tree_states = tree_states(&source.blocks);
                     while let Ok(pos) = requests.recv() {
                         let started = std::time::Instant::now();
                         let trusted = source.native.as_ref().is_none_or(|store| {

@@ -428,7 +428,7 @@ fn search_structure(
 }
 
 struct StructureSnapshot {
-    source: Arc<crate::chunk_loader::ChunkSource>,
+    source: Arc<mc_chunk_loader::ChunkSource>,
     resident: Result<SavedStarts, String>,
 }
 

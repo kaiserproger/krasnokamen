@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use mc_world::native::NativeStore;
 use mc_world::{Chunk, ChunkPos};
 
-use mc_core::chunk_loader::{ChunkLoader, ChunkSource};
+use mc_chunk_loader::ChunkLoader;
 use mc_core::config::{CoreConfig, CoreError};
 use mc_core::core::Core;
 use mc_core::dimensions::Dimension;
@@ -193,14 +193,14 @@ pub fn pregenerate(
         return Ok(report);
     }
 
-    let source = Arc::new(ChunkSource::new_native(
+    let source = mc_core::world::worker_source(
         config.seed,
-        Arc::clone(&store),
+        Some(Arc::clone(&store)),
         dimension,
         generator,
         &registry,
         Dimension::Overworld.geometry(),
-    ));
+    );
     // Same pool sizing as the live world: half the cores, at least one.
     let workers = (mc_core::tick::worker_threads() / 2).max(1);
     let mut loader = ChunkLoader::spawn(source, workers);

@@ -153,7 +153,7 @@ pub(crate) struct PackSet {
     worldgen_base: Option<PathBuf>,
     worldgen_identity: Option<String>,
     worldgen_structures: Arc<[mc_data::Identifier]>,
-    structure_catalog: Option<Arc<worldgen::StructureCatalog>>,
+    structure_catalog: Option<Arc<mc_chunk_loader::StructureCatalog>>,
     dropped: Vec<String>,
     /// The pack that provided each recipe or loot resource, to name it in errors.
     origins: BTreeMap<String, String>,

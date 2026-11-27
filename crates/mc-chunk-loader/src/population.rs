@@ -5,7 +5,7 @@ use std::sync::Arc;
 use mc_physics::BlockMaterial;
 use mc_world::{Chunk, GeneratedEntityMarker};
 
-pub(crate) struct Population {
+pub struct Population {
     seed: i64,
     rules: mc_data::biomes::BiomeSpawnRules,
     blocks: Arc<mc_world::BlockRegistry>,
@@ -14,22 +14,20 @@ pub(crate) struct Population {
 }
 
 impl Population {
-    pub(crate) fn new(seed: i64, registry: &crate::registry::CoreRegistry) -> Self {
+    /// `dimensions` maps a blueprint name to its `(half_width, height)`.
+    pub fn new(
+        seed: i64,
+        rules: mc_data::biomes::BiomeSpawnRules,
+        blocks: Arc<mc_world::BlockRegistry>,
+        materials: mc_physics::BlockMaterialIds,
+        dimensions: HashMap<String, (f64, f64)>,
+    ) -> Self {
         Self {
             seed,
-            rules: registry.biome_spawns.clone(),
-            blocks: Arc::clone(&registry.blocks),
-            materials: registry.materials.clone(),
-            dimensions: registry
-                .blueprints
-                .iter()
-                .map(|(_, blueprint)| {
-                    (
-                        blueprint.name.clone(),
-                        (blueprint.half_width, blueprint.height),
-                    )
-                })
-                .collect(),
+            rules,
+            blocks,
+            materials,
+            dimensions,
         }
     }
 
@@ -262,26 +260,33 @@ mod tests {
 
     #[test]
     fn creature_positions_reject_wrong_ground_darkness_and_obstructions() {
-        let registry = crate::registry::CoreRegistry::load(None).unwrap();
-        let population = Population::new(42, &registry);
-        let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
-        let mut chunk = Chunk::empty(
-            mc_world::ChunkPos { x: 0, z: 0 },
-            mc_world::BlockStateId(registry.states.air),
-            biome,
+        let report = mc_data::blocks::krasnokamen_required_blocks_report();
+        let blocks = Arc::new(mc_world::BlockRegistry::from_report(&report).unwrap());
+        let state = |name: &str| {
+            blocks
+                .block(&mc_data::Identifier::parse(name).unwrap())
+                .unwrap()
+                .default
+        };
+        let air = state("minecraft:air");
+        let grass_block = state("minecraft:grass_block");
+        let stone = state("minecraft:stone");
+        let population = Population::new(
+            42,
+            mc_data::biomes::krasnokamen_required_biome_spawn_rules(),
+            Arc::clone(&blocks),
+            mc_physics::BlockMaterialIds::new(air.0, None, None),
+            HashMap::new(),
         );
+        let biome = mc_data::Identifier::parse("minecraft:plains").unwrap();
+        let mut chunk = Chunk::empty(mc_world::ChunkPos { x: 0, z: 0 }, air, biome);
         let mut height = mc_world::chunk::Heightmap::zeroed();
         height.set(8, 8, 129);
         chunk
             .heightmaps
             .insert("MOTION_BLOCKING".into(), height.clone());
         chunk.highest_opaque = height;
-        chunk.set_block(
-            8,
-            64,
-            8,
-            mc_world::BlockStateId(registry.states.grass_block),
-        );
+        chunk.set_block(8, 64, 8, grass_block);
         assert_eq!(
             population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3),
             Some(65)
@@ -296,7 +301,7 @@ mod tests {
             None
         );
         chunk.highest_opaque.set(8, 8, 129);
-        chunk.set_block(8, 66, 8, mc_world::BlockStateId(registry.states.stone));
+        chunk.set_block(8, 66, 8, stone);
         assert_eq!(
             population.surface(&chunk, 8, 8, "minecraft:sheep", 0.45, 1.3),
             None

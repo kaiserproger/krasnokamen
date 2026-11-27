@@ -1,0 +1,21 @@
+[package]
+name = "mc-chunk-loader"
+description = "Off-tick chunk load/generate workers and worldgen population (Krasnokamen)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mc-data = { path = "../mc-data" }
+mc-light = { path = "../mc-light" }
+mc-physics = { path = "../mc-physics" }
+mc-world = { path = "../mc-world" }
+parking_lot = { workspace = true }
+tokio.workspace = true
+tracing.workspace = true

@@ -45,7 +45,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // D128 cut 3 (mc-light), 2026-11-27: the light module left mc-core; its only
     // out-edge was the `TickState::{brightness, raw_brightness}` impl, which now
     // lives in `world.rs` (already in the cycle): 184 modules with both cuts.
-    cycle_modules: 184,
+    // D128 wave 2 (mc-chunk-loader), 2026-11-27: the loader module left mc-core
+    // and the modules that only reached the cycle through it left with it: 182.
+    // Its moved `minecraft:` literals (population ground rules) stay counted
+    // against the literal ceiling until cut 1's `split_crates` lands (CUT-MAP
+    // rule 6), so the literal ceiling is deliberately NOT lowered here.
+    cycle_modules: 182,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.

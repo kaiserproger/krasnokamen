@@ -584,25 +584,21 @@ fn probe_source(
     registry: &crate::registry::CoreRegistry,
     dimension: u32,
     generator: Arc<dyn mc_world::ChunkGenerator>,
-) -> Arc<crate::chunk_loader::ChunkSource> {
-    Arc::new(crate::chunk_loader::ChunkSource {
-        native: None,
+) -> Arc<mc_chunk_loader::ChunkSource> {
+    crate::world::worker_source(
+        42,
+        None,
         dimension,
         generator,
-        registry: Arc::clone(&registry.blocks),
-        items: Arc::clone(&registry.items),
-        chest_loot: Arc::clone(&registry.chest_loot),
-        light: Arc::clone(&registry.light),
-        population: (dimension == 0).then(|| crate::chunk_loader::Population::new(42, registry)),
-        geometry: mc_world::OVERWORLD_GEOMETRY,
-        structure_catalog: registry.structure_catalog.clone(),
-    })
+        registry,
+        mc_world::OVERWORLD_GEOMETRY,
+    )
 }
 
 fn empty_source(
     registry: &crate::registry::CoreRegistry,
     dimension: u32,
-) -> Arc<crate::chunk_loader::ChunkSource> {
+) -> Arc<mc_chunk_loader::ChunkSource> {
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(EmptyGenerator {
         air: BlockStateId(registry.states.air),
         biome: mc_data::Identifier::parse("minecraft:plains").expect("plains parses"),

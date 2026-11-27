@@ -1790,12 +1790,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-chunk-loader"
+version = "1.0.0-rc.5"
+dependencies = [
+ "mc-data",
+ "mc-light",
+ "mc-physics",
+ "mc-world",
+ "parking_lot",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mc-core"
 version = "1.0.0-rc.5"
 dependencies = [
  "crc32fast",
  "flate2",
  "im",
+ "mc-chunk-loader",
  "mc-data",
  "mc-domain",
  "mc-light",
@@ -2082,6 +2096,7 @@ dependencies = [
 name = "mc-world-tools"
 version = "1.0.0-rc.5"
 dependencies = [
+ "mc-chunk-loader",
  "mc-core",
  "mc-world",
  "mc-worldgen",
