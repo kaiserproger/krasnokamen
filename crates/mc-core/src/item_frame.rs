@@ -29,6 +29,26 @@ fn cell(state: &TickState, slot: EntitySlot) -> BlockPos {
         z: pos[2].floor() as i32,
     }
 }
+/// Slot of a frame entity, or `None` when `target` is not a frame.
+fn frame_slot(state: &TickState, target: EntityId) -> Option<EntitySlot> {
+    state
+        .entities
+        .slot_of(target)
+        .filter(|slot| name(state, *slot).is_some())
+}
+/// Take one held item and deliver the resulting changes to the holder.
+fn consume_held(state: &mut TickState, actor: EntityId, hand: Hand) {
+    let effects = state
+        .players
+        .get_mut(&actor)
+        .expect("frame holder")
+        .consume_held(hand, 1);
+    if let Some(connection) = state.connections.entity_connection(actor) {
+        for change in effects.changes {
+            state.push_player(connection, change);
+        }
+    }
+}
 fn displayed(state: &TickState, slot: EntitySlot) -> Option<&ItemStack> {
     state
         .entities
@@ -318,16 +338,7 @@ pub(crate) fn use_on(
     if spawn(state, position, face, glow, ItemStack::EMPTY).is_none() {
         return true;
     }
-    let effects = state
-        .players
-        .get_mut(&actor)
-        .expect("frame placer")
-        .consume_held(hand, 1);
-    if let Some(connection) = state.connections.entity_connection(actor) {
-        for change in effects.changes {
-            state.push_player(connection, change);
-        }
-    }
+    consume_held(state, actor, hand);
     true
 }
 
@@ -337,11 +348,7 @@ pub(crate) fn interact(
     target: EntityId,
     hand: Hand,
 ) -> bool {
-    let Some(slot) = state
-        .entities
-        .slot_of(target)
-        .filter(|slot| name(state, *slot).is_some())
-    else {
+    let Some(slot) = frame_slot(state, target) else {
         return false;
     };
     let Some(player) = state.players.get(&actor) else {
@@ -368,16 +375,7 @@ pub(crate) fn interact(
         appearance
             .extra
             .push((ITEM, EntityDataValue::Item(Some(held))));
-        let effects = state
-            .players
-            .get_mut(&actor)
-            .expect("frame user")
-            .consume_held(hand, 1);
-        if let Some(connection) = state.connections.entity_connection(actor) {
-            for change in effects.changes {
-                state.push_player(connection, change);
-            }
-        }
+        consume_held(state, actor, hand);
     }
     state.appearance_changed.push(target);
     crate::redstone::wake(state, cell(state, slot));
@@ -442,7 +440,6 @@ fn break_frame(state: &mut TickState, slot: EntitySlot, drop: bool, spawned: &mu
             ItemStack::new(item, 1),
         ));
     }
-    let position = cell(state, slot);
     state.hostile.removed.push(state.entities.body(slot).id);
     state.remove_entity(slot);
     crate::redstone::wake(state, position);
@@ -455,11 +452,7 @@ pub(crate) fn eject_on_projectile(
     target: EntityId,
     owner: Option<EntityId>,
 ) -> bool {
-    let Some(slot) = state
-        .entities
-        .slot_of(target)
-        .filter(|slot| name(state, *slot).is_some())
-    else {
+    let Some(slot) = frame_slot(state, target) else {
         return false;
     };
     if crate::entity_controls::blocks_damage(
@@ -487,11 +480,7 @@ pub(crate) fn attack(
     target: EntityId,
     changes: &mut ChangeSet,
 ) -> bool {
-    let Some(slot) = state
-        .entities
-        .slot_of(target)
-        .filter(|slot| name(state, *slot).is_some())
-    else {
+    let Some(slot) = frame_slot(state, target) else {
         return false;
     };
     let Some(player) = state.players.get(&actor) else {
