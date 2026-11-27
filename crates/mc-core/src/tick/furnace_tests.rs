@@ -12,7 +12,7 @@ fn install(state: &mut TickState) {
         KEY,
         BlockEntityState {
             slots: vec![mc_data::ItemStack::EMPTY; 3],
-            furnace: Some(crate::inventory::furnace::FurnaceState {
+            furnace: Some(mc_inventory::furnace::FurnaceState {
                 recipes_used: Arc::new([(RECIPE.into(), 10)].into_iter().collect()),
                 ..Default::default()
             }),
@@ -149,7 +149,7 @@ fn furnace_recipe_book_places_input_and_preserves_fuel_output() {
     let slots = state.block_entities[&KEY].slots.clone();
     state.players.get_mut(&actor).unwrap().open_menu(
         &registry.item_rules(),
-        crate::inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Furnace),
+        mc_inventory::MenuKind::Furnace(mc_data::recipes::CookingKind::Furnace),
         "Furnace".into(),
         &slots,
     );

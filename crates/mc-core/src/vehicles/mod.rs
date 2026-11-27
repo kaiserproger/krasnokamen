@@ -222,7 +222,7 @@ pub(crate) fn use_on(
         return false;
     };
     let index = if hand == Hand::Off {
-        crate::inventory::OFF_HAND
+        mc_inventory::OFF_HAND
     } else {
         usize::from(player.inventory.selected.min(8))
     };
@@ -340,7 +340,7 @@ pub(crate) fn interact(
     if name == "minecraft:furnace_minecart" {
         let p = &state.players[&actor];
         let index = if hand == Hand::Off {
-            crate::inventory::OFF_HAND
+            mc_inventory::OFF_HAND
         } else {
             usize::from(p.inventory.selected.min(8))
         };
@@ -393,7 +393,7 @@ pub(crate) fn interact(
     if name == "minecraft:tnt_minecart" {
         let p = &state.players[&actor];
         let index = if hand == Hand::Off {
-            crate::inventory::OFF_HAND
+            mc_inventory::OFF_HAND
         } else {
             usize::from(p.inventory.selected.min(8))
         };

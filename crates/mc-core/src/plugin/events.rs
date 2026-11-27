@@ -613,7 +613,7 @@ pub(crate) fn craft_event(
     entity: mc_domain::EntityId,
     item: u32,
     count: i32,
-    menu: crate::inventory::MenuKind,
+    menu: mc_inventory::MenuKind,
 ) {
     if state.plugin_runtime.is_none() || count <= 0 {
         return;
@@ -627,10 +627,8 @@ pub(crate) fn craft_event(
         )?;
         let item = state.registry.items.name_of(item)?;
         let source = match menu {
-            crate::inventory::MenuKind::Player => mc_script::ScriptCraftingSource::Inventory,
-            crate::inventory::MenuKind::CraftingTable => {
-                mc_script::ScriptCraftingSource::CraftingTable
-            }
+            mc_inventory::MenuKind::Player => mc_script::ScriptCraftingSource::Inventory,
+            mc_inventory::MenuKind::CraftingTable => mc_script::ScriptCraftingSource::CraftingTable,
             _ => return None,
         };
         mc_script::ScriptEvent::try_player_item_crafted_with_context(

@@ -213,7 +213,7 @@ fn caps(state: &TickState, id: SettlementId, record: &SettlementRecord, images: 
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:raw_iron").expect("identifier"));
     let is_fuel = |stack: &mc_data::ItemStack| {
-        crate::inventory::furnace::is_fuel(
+        mc_inventory::furnace::is_fuel(
             &state.registry.item_rules(),
             mc_data::recipes::CookingKind::Furnace,
             stack,

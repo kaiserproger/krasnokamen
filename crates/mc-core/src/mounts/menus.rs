@@ -1,10 +1,11 @@
 //! Mount menus borrow equipment and cargo from the entity, never from a menu snapshot.
-use crate::boundary::{ChangeSet, ClickMode, PlayerChange};
+use crate::boundary::{ChangeSet, PlayerChange};
 use crate::entities::EntitySlot;
-use crate::inventory::{MenuKind, MountArmor};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::{MenuKind, MountArmor};
 use std::sync::Arc;
 
 pub(crate) fn kind(state: &TickState, slot: EntitySlot) -> Option<MenuKind> {
@@ -80,7 +81,7 @@ pub(crate) fn select_bundle_item(
         _ => row.entity_life.mount.cargo.get_mut(index - 2),
     };
     if let Some(stack) = stack {
-        crate::inventory::bundle::select(&registry.item_rules(), stack, selected);
+        mc_inventory::bundle::select(&registry.item_rules(), stack, selected);
     }
 }
 
@@ -208,13 +209,13 @@ pub(crate) fn click(
     } else {
         let row = state.entities.row_mut(slot);
         if let Some(stack) = row.loot.saddle.as_deref_mut() {
-            crate::inventory::bundle::copy_selection(stack, &contents[0]);
+            mc_inventory::bundle::copy_selection(stack, &contents[0]);
         }
         if let Some(stack) = row.loot.body_armor.as_deref_mut() {
-            crate::inventory::bundle::copy_selection(stack, &contents[1]);
+            mc_inventory::bundle::copy_selection(stack, &contents[1]);
         }
         for (stack, source) in row.entity_life.mount.cargo.iter_mut().zip(&contents[2..]) {
-            crate::inventory::bundle::copy_selection(stack, source);
+            mc_inventory::bundle::copy_selection(stack, source);
         }
     }
     crate::tick::apply_player_effects(state, connection, actor, effects, changes);

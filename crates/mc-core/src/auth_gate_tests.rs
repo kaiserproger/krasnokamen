@@ -1,6 +1,6 @@
 //! Session authentication is enforced before native or plugin gameplay dispatch.
 use super::*;
-use crate::boundary::ClickMode;
+use mc_inventory::ClickMode;
 
 const SESSION: ConnectionId = ConnectionId(1);
 
@@ -117,7 +117,7 @@ fn bundle_selection_input_uses_current_menu_slot_and_right_click_custody() {
     let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
     let newest = mc_data::ItemStack::new(id("diamond"), 1);
     let older = mc_data::ItemStack::new(id("apple"), 3).with_custom_name("older");
-    assert!(crate::inventory::bundle::write(
+    assert!(mc_inventory::bundle::write(
         &state.registry.item_rules(),
         &mut bundle,
         &[newest.clone(), older.clone()]
@@ -147,7 +147,7 @@ fn bundle_selection_input_uses_current_menu_slot_and_right_click_custody() {
     let player = &state.players[&entity];
     assert_eq!(player.inventory_menu.carried, older);
     assert_eq!(
-        crate::inventory::bundle::read(&state.registry.item_rules(), &player.inventory.slots[0])
+        mc_inventory::bundle::read(&state.registry.item_rules(), &player.inventory.slots[0])
             .unwrap(),
         vec![newest]
     );
@@ -169,7 +169,7 @@ fn bundle_selection_input_does_not_survive_primary_pickup_or_replacement() {
     let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
     let newest = mc_data::ItemStack::new(id("diamond"), 1);
     let older = mc_data::ItemStack::new(id("apple"), 1);
-    assert!(crate::inventory::bundle::write(
+    assert!(mc_inventory::bundle::write(
         &state.registry.item_rules(),
         &mut bundle,
         &[newest.clone(), older.clone()]
@@ -243,7 +243,7 @@ fn bundle_selection_input_uses_open_menu_mapping_and_invalid_clears() {
             .unwrap()
     };
     let mut bundle = mc_data::ItemStack::new(id("bundle"), 1);
-    assert!(crate::inventory::bundle::write(
+    assert!(mc_inventory::bundle::write(
         &state.registry.item_rules(),
         &mut bundle,
         &[
@@ -253,9 +253,9 @@ fn bundle_selection_input_uses_open_menu_mapping_and_invalid_clears() {
     ));
     let player = state.players.get_mut(&entity).unwrap();
     player.inventory.slots[0] = bundle;
-    player.open = Some(crate::inventory::Menu::new(
+    player.open = Some(mc_inventory::Menu::new(
         1,
-        crate::inventory::MenuKind::CraftingTable,
+        mc_inventory::MenuKind::CraftingTable,
     ));
     let select = |slot, selected_index| PlayerInput::SelectBundleItem {
         connection: SESSION,

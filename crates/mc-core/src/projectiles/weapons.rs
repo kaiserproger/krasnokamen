@@ -9,11 +9,11 @@ use mc_data::statistics::StatType;
 
 use super::{ProjectileKind, ProjectileState};
 use crate::boundary::{Hand, PlayerChange};
-use crate::enchantments::level;
-use crate::inventory::OFF_HAND;
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
 use mc_domain::EntityId;
+use mc_inventory::OFF_HAND;
+use mc_inventory::enchanting::level;
 
 #[cfg(test)]
 #[path = "weapons_charge_tests.rs"]
@@ -605,8 +605,8 @@ fn bow(state: &mut TickState, actor: EntityId, using: &WeaponUse, elapsed: u64) 
     if level > 0 {
         record.damage += level as f32 * 0.5 + 0.5;
     }
-    record.punch = crate::enchantments::level(&using.stack, "punch");
-    record.flame = crate::enchantments::level(&using.stack, "flame") > 0;
+    record.punch = mc_inventory::enchanting::level(&using.stack, "punch");
+    record.flame = mc_inventory::enchanting::level(&using.stack, "flame") > 0;
     if super::launch(state, record, origin, velocity).is_none() {
         return true;
     }

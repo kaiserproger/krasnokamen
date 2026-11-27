@@ -11,12 +11,13 @@ use mc_script::{
 };
 
 use super::{PlayerEffects, PlayerState};
-use crate::boundary::{BlockPos, ClickMode, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
 use crate::commands::GameMode;
-use crate::inventory::{ItemRules, MenuKind};
 use crate::plugin_inventories as inventories;
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::{ItemRules, MenuKind};
 
 fn state() -> (TickState, EntityId) {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
@@ -624,7 +625,7 @@ fn creative_and_spectator_tool_wear_preserve_stack_and_skip_unbreaking_rng() {
         let player = state.players.get_mut(&entity).unwrap();
         player.game_mode = mode;
         player.inventory.slots[0] = sword.clone();
-        player.inventory.slots[crate::inventory::OFF_HAND] = sword.clone();
+        player.inventory.slots[mc_inventory::OFF_HAND] = sword.clone();
         for hand in [Hand::Main, Hand::Off] {
             let before = player.clone();
             let plan = player.plan_tool_wear(&registry.item_rules(), hand, 1000);
@@ -636,7 +637,7 @@ fn creative_and_spectator_tool_wear_preserve_stack_and_skip_unbreaking_rng() {
         // A preceding combat draw remains committed, but exempt durability
         // must neither advance it again nor mutate the worn weapon.
         let mut expected = player.clone();
-        let seed = crate::inventory::enchanting::next_seed(player.enchantment_seed);
+        let seed = mc_inventory::enchanting::next_seed(player.enchantment_seed);
         expected.enchantment_seed = seed;
         let plan = player.plan_held_tool_wear_from_seed(&registry.item_rules(), 1000, seed);
         assert_eq!(plan.broken_slot(), None);
@@ -809,7 +810,7 @@ fn denied_unbreaking_break_retains_real_rng_seed_and_native_component_stack() {
     );
     let registry = Arc::clone(&state.registry);
     let before = state.players[&entity].clone();
-    let prior_draw_seed = crate::inventory::enchanting::next_seed(before.enchantment_seed);
+    let prior_draw_seed = mc_inventory::enchanting::next_seed(before.enchantment_seed);
     let plan = before.plan_held_tool_wear_from_seed(&registry.item_rules(), 1000, prior_draw_seed);
     assert_eq!(plan.broken_slot(), Some(0));
     assert!(inventories::below_player_debit_floors(

@@ -28,7 +28,7 @@ pub(super) fn rescue(
         .expect("death protection is in the canonical component catalogue");
     for (hand, slot) in [
         (Hand::Main, usize::from(player.inventory.selected)),
-        (Hand::Off, crate::inventory::OFF_HAND),
+        (Hand::Off, mc_inventory::OFF_HAND),
     ] {
         let stack = &player.inventory.slots[slot];
         if stack.is_empty()

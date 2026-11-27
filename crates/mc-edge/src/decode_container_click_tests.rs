@@ -4,7 +4,6 @@ use crate::plan::{ViewerState, plan_player_changes};
 use mc_core::boundary::{BlockPos, ConnectionId, Hand, PlayerChange, PlayerInput};
 use mc_core::commands::GameMode;
 use mc_core::config::CoreConfig;
-use mc_core::inventory::{MenuKind, SlotRef};
 use mc_core::player::PlayerState;
 use mc_core::registry::CoreRegistry;
 use mc_core::tick::{TickState, run_tick};
@@ -13,6 +12,7 @@ use mc_core::world::ChunkWorld;
 use mc_data::recipes::CookingKind;
 use mc_data::{Identifier, ItemStack};
 use mc_domain::EntityId;
+use mc_inventory::{MenuKind, SlotRef};
 use mc_protocol::frame::Compression;
 use mc_protocol::packets::Packet;
 use mc_protocol::packets::play::{

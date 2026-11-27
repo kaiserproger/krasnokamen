@@ -221,7 +221,7 @@ pub(crate) fn player_drops(
             .registry
             .blocks
             .by_id(BlockStateId(block))
-            .is_some_and(|block| crate::shulker::is_block(block.block.id.path()))
+            .is_some_and(|block| mc_inventory::shulker::is_block(block.block.id.path()))
             && state
                 .block_entities
                 .get(&(pos.x, pos.y, pos.z))

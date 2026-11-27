@@ -2,8 +2,9 @@
 //! Counts detect loss/duplication; frozen owner/slot maps detect a missing or
 //! partially recovered operation even when its global item count is unchanged.
 use super::*;
-use crate::boundary::{BlockPos, ClickMode, ConnectionId, DigAction, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, Hand, PlayerInput};
 use crate::native_checkpoint::tests::{fixture_store, read_manifest, read_player};
+use mc_inventory::ClickMode;
 use std::collections::BTreeMap;
 use std::sync::{Arc, mpsc};
 

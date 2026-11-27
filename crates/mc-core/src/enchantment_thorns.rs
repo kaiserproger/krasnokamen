@@ -1,7 +1,8 @@
-use crate::enchantments::{durability_damage, level, random};
+use crate::enchantments::{durability_damage, random};
 use crate::intent::DamageSource;
 use crate::survival::DamageKind;
 use crate::tick::{DamagePiece, TickState};
+use mc_inventory::enchanting::level;
 
 fn trigger(stack: &mc_data::ItemStack, seed: &mut i32) -> f32 {
     let level = level(stack, "thorns");
@@ -12,7 +13,7 @@ fn trigger(stack: &mc_data::ItemStack, seed: &mut i32) -> f32 {
 }
 
 fn wear(
-    rules: &crate::inventory::ItemRules<'_>,
+    rules: &mc_inventory::ItemRules<'_>,
     stack: &mut mc_data::ItemStack,
     seed: &mut i32,
 ) -> bool {

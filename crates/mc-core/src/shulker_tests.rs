@@ -1,9 +1,11 @@
 use super::*;
-use crate::boundary::{ChangeSet, ClickMode, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{ChangeSet, ConnectionId, Hand, PlayerInput};
 use crate::crafter::tests::{fixture, stack};
-use crate::inventory::MenuKind;
 use crate::tick::run_tick;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::MenuKind;
+use mc_inventory::shulker::is_item;
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 const KEY: (i32, i32, i32) = (8, 201, 8);
 fn command(state: &mut TickState, actor: EntityId, text: &str) {

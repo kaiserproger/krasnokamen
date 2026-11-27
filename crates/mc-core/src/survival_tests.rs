@@ -7,7 +7,7 @@ use mc_data::{Identifier, ItemEnchantment, ItemStack};
 use super::{
     DamageKind, Difficulty, Experience, MAX_AIR, Vitals, armor_wear, fall_damage, reduce_damage,
 };
-use crate::inventory::ItemRules;
+use mc_inventory::ItemRules;
 
 fn ticks(vitals: &mut Vitals, count: usize, difficulty: Difficulty) -> Vec<(DamageKind, f32)> {
     let mut damage = Vec::new();

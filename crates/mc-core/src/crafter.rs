@@ -1,9 +1,9 @@
 //! Merge-owned nine-slot crafter; native NBT post-images and scheduled rising edges.
 use crate::boundary::{BlockPos, PlayerChange};
-use crate::inventory::MenuKind;
 use crate::tick::{BlockEntityState, TickState, spawn_item_entity};
 use mc_data::{ItemStack, storage_blocks::CrafterSettings};
 use mc_domain::EntityId;
+use mc_inventory::MenuKind;
 use mc_nbt::Tag;
 use std::collections::BTreeMap;
 

@@ -139,7 +139,8 @@ pub(crate) mod input_log;
 #[cfg(test)]
 mod input_log_tests;
 pub mod intent;
-pub mod inventory;
+#[cfg(test)]
+mod inventory_conservation_tests;
 pub(crate) mod item_frame;
 pub(crate) mod item_hazards;
 pub(crate) mod item_motion;

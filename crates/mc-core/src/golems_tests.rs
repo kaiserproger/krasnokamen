@@ -378,7 +378,7 @@ fn iron_ingot_repairs_golem_from_either_hand_without_overhealing() {
         let index = if hand == Hand::Main {
             0
         } else {
-            crate::inventory::OFF_HAND
+            mc_inventory::OFF_HAND
         };
         let player = state.players.get_mut(&actor).unwrap();
         if creative {

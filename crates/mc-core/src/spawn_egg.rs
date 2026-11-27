@@ -157,7 +157,7 @@ pub(crate) fn use_on(
         let index = if hand == Hand::Main {
             usize::from(player.inventory.selected)
         } else {
-            crate::inventory::OFF_HAND
+            mc_inventory::OFF_HAND
         };
         let stack = &player.inventory.slots[index];
         if stack.is_empty() {

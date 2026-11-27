@@ -45,7 +45,7 @@ pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: BrewingStat
         let Some(menu) = player
             .open
             .as_ref()
-            .filter(|menu| menu.kind == crate::inventory::MenuKind::BrewingStand)
+            .filter(|menu| menu.kind == mc_inventory::MenuKind::BrewingStand)
         else {
             continue;
         };
@@ -560,7 +560,7 @@ fn run_inner(
                 let Some(menu) = player.open.as_mut() else {
                     continue;
                 };
-                if menu.kind != crate::inventory::MenuKind::BrewingStand {
+                if menu.kind != mc_inventory::MenuKind::BrewingStand {
                     continue;
                 }
                 let window = menu.window;

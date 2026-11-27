@@ -1,7 +1,7 @@
 use super::bundle;
 use super::click_tests::{BUCKET, BUNDLE, STONE, Session, WATER_BUCKET, stack};
 use super::{ItemRules, MenuKind};
-use crate::boundary::ClickMode;
+use crate::ClickMode;
 use mc_data::ItemStack;
 
 fn contents(s: &Session, bundle_stack: &ItemStack) -> Vec<ItemStack> {
@@ -28,30 +28,6 @@ fn primary_pickup_clears_bundle_selection_before_cursor_removal() {
     assert_eq!(s.slot(10), stack(STONE, 5));
     assert_eq!(contents(&s, &s.menu.carried), vec![older]);
     assert_eq!(s.menu.carried.extended().bundle_selection.0, None);
-}
-
-#[test]
-fn selected_held_bundle_drops_selected_then_default() {
-    use crate::boundary::{ConnectionId, Hand};
-    use crate::commands::GameMode;
-    use crate::player::PlayerState;
-    let s = Session::new(MenuKind::Player);
-    let rules = s.data.rules();
-    let mut player = PlayerState::new(ConnectionId(1), GameMode::Survival);
-    let mut held = stack(BUNDLE, 1);
-    assert!(bundle::write(
-        &rules,
-        &mut held,
-        &[stack(STONE, 5), stack(BUCKET, 2)]
-    ));
-    bundle::select(&rules, &mut held, 1);
-    player.inventory.slots[0] = held;
-    player.use_item(&rules, Hand::Main);
-    assert_eq!(player.tick_item_use(&rules).dropped, vec![stack(BUCKET, 2)]);
-    for _ in 0..11 {
-        assert!(player.tick_item_use(&rules).dropped.is_empty());
-    }
-    assert_eq!(player.tick_item_use(&rules).dropped, vec![stack(STONE, 5)]);
 }
 
 #[test]
@@ -93,50 +69,6 @@ fn selection_does_not_enter_item_nbt() {
         mc_data::item_nbt::stack_to_fields(rules.items, &bundle).unwrap(),
         before
     );
-}
-
-#[test]
-fn held_bundle_drops_stacks_then_repeats_without_losing_custody() {
-    use crate::boundary::{ConnectionId, Hand};
-    use crate::commands::GameMode;
-    use crate::player::PlayerState;
-
-    let s = Session::new(MenuKind::Player);
-    let rules = s.data.rules();
-    for (mode, hand, slot) in [
-        (GameMode::Survival, Hand::Main, 0),
-        (GameMode::Creative, Hand::Off, super::OFF_HAND),
-    ] {
-        let mut player = PlayerState::new(ConnectionId(1), mode);
-        let mut held = stack(BUNDLE, 1);
-        assert!(bundle::write(
-            &rules,
-            &mut held,
-            &[stack(STONE, 5), stack(BUCKET, 2)]
-        ));
-        player.inventory.slots[slot] = held;
-        player.use_item(&rules, hand);
-        let first = player.tick_item_use(&rules);
-        assert_eq!(first.dropped, vec![stack(STONE, 5)]);
-        assert_eq!(
-            bundle::read(&rules, &player.inventory.slots[slot]).unwrap(),
-            vec![stack(BUCKET, 2)]
-        );
-        for _ in 0..11 {
-            assert!(player.tick_item_use(&rules).dropped.is_empty());
-        }
-        let second = player.tick_item_use(&rules);
-        assert_eq!(second.dropped, vec![stack(BUCKET, 2)]);
-        assert!(
-            bundle::read(&rules, &player.inventory.slots[slot])
-                .unwrap()
-                .is_empty()
-        );
-        for _ in 0..200 {
-            assert!(player.tick_item_use(&rules).dropped.is_empty());
-        }
-        assert_eq!(player.inventory.slots[slot], stack(BUNDLE, 1));
-    }
 }
 
 #[test]

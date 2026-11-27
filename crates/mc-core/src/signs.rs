@@ -246,7 +246,7 @@ pub(crate) fn intercepts_placement(
     if sneaking.unwrap_or_else(|| {
         state.entities.row(slot).appearance.shared_flags & crate::tick::SNEAKING_FLAG != 0
     }) && (!player.inventory.slots[crate::tick::held_slot_index(player, Hand::Main)].is_empty()
-        || !player.inventory.slots[crate::inventory::OFF_HAND].is_empty())
+        || !player.inventory.slots[mc_inventory::OFF_HAND].is_empty())
     {
         return false;
     }
@@ -323,7 +323,7 @@ pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand, pos: Bl
     let held = &player.inventory.slots[crate::tick::held_slot_index(player, hand)];
     if state.entities.row(slot).appearance.shared_flags & crate::tick::SNEAKING_FLAG != 0
         && (!player.inventory.slots[crate::tick::held_slot_index(player, Hand::Main)].is_empty()
-            || !player.inventory.slots[crate::inventory::OFF_HAND].is_empty())
+            || !player.inventory.slots[mc_inventory::OFF_HAND].is_empty())
     {
         return false;
     }

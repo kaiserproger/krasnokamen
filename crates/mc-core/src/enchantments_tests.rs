@@ -50,7 +50,7 @@ fn unbreaking_existing_player_tool_wear_skips_and_breaks_only_on_admitted_damage
     let items = mc_data::items::krasnokamen_required_items();
     let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
-    let rules = crate::inventory::ItemRules {
+    let rules = mc_inventory::ItemRules {
         items: &items,
         facts: &facts,
         tags: &tags,
@@ -95,7 +95,7 @@ fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
     let items = mc_data::items::krasnokamen_required_items();
     let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
-    let rules = crate::inventory::ItemRules {
+    let rules = mc_inventory::ItemRules {
         items: &items,
         facts: &facts,
         tags: &tags,
@@ -106,10 +106,10 @@ fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
         .unwrap();
     for creative in [false, true] {
         for mode in [
-            crate::boundary::ClickMode::Pickup,
-            crate::boundary::ClickMode::QuickMove,
-            crate::boundary::ClickMode::Swap,
-            crate::boundary::ClickMode::Throw,
+            mc_inventory::ClickMode::Pickup,
+            mc_inventory::ClickMode::QuickMove,
+            mc_inventory::ClickMode::Swap,
+            mc_inventory::ClickMode::Throw,
         ] {
             let mut player = crate::player::PlayerState::new(
                 crate::boundary::ConnectionId(4),
@@ -139,7 +139,7 @@ fn vanishing_curse_destroys_inventory_and_full_inventory_cursor_on_death() {
     let items = mc_data::items::krasnokamen_required_items();
     let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
-    let rules = crate::inventory::ItemRules {
+    let rules = mc_inventory::ItemRules {
         items: &items,
         facts: &facts,
         tags: &tags,
@@ -179,7 +179,7 @@ fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage()
     let items = mc_data::items::krasnokamen_required_items();
     let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
-    let rules = crate::inventory::ItemRules {
+    let rules = mc_inventory::ItemRules {
         items: &items,
         facts: &facts,
         tags: &tags,

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use super::{TickState, apply_player_effects};
 use crate::boundary::{BlockChange, BlockPos, ChangeSet, ConnectionId, PlayerChange};
-use crate::inventory::MenuKind;
 use mc_domain::EntityId;
+use mc_inventory::MenuKind;
 
 pub(super) fn craft_menu_for_block(name: &str) -> Option<(MenuKind, String, usize)> {
     let (kind, title) = match name {
@@ -170,7 +170,7 @@ pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mu
     salt = (salt ^ (salt >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
     salt = (salt ^ (salt >> 27)).wrapping_mul(0x94d049bb133111eb);
     let salt = salt ^ (salt >> 31);
-    if crate::inventory::enchanting::LegacyRandom::new(salt as i64).next_float() >= 0.12 {
+    if mc_inventory::enchanting::LegacyRandom::new(salt as i64).next_float() >= 0.12 {
         return;
     }
     let next = match next_name {

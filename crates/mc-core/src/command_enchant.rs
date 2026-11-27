@@ -21,9 +21,9 @@ use crate::command_execution::{
 };
 use crate::command_feedback::translated;
 use crate::commands::{Command, Target, target_of};
-use crate::inventory::{ItemRules, PlayerInventory};
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_inventory::{ItemRules, PlayerInventory};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnchantCommand {

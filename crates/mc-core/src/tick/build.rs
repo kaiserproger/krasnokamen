@@ -704,7 +704,7 @@ pub(crate) fn held_slot_index(
 ) -> usize {
     match hand {
         crate::boundary::Hand::Main => usize::from(player.inventory.selected.min(8)),
-        crate::boundary::Hand::Off => crate::inventory::OFF_HAND,
+        crate::boundary::Hand::Off => mc_inventory::OFF_HAND,
     }
 }
 

@@ -402,14 +402,14 @@ fn copper_paired_weathering_wax_and_offhand_scrape_keep_inventory() {
     assert!(at(&state, A).block.id.path().starts_with("waxed_"));
     assert!(at(&state, B).block.id.path().starts_with("waxed_"));
     assert!(random_tick(&state, A, at(&state, A).id.0, 0, 0).is_none());
-    state.players.get_mut(&player).unwrap().inventory.slots[crate::inventory::OFF_HAND] =
+    state.players.get_mut(&player).unwrap().inventory.slots[mc_inventory::OFF_HAND] =
         stack("iron_axe", 1);
     assert!(use_on(&mut state, player, Hand::Off, A));
     assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 3);
     assert!(use_on(&mut state, player, Hand::Off, B));
     assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 2);
     assert_eq!(
-        state.players[&player].inventory.slots[crate::inventory::OFF_HAND].damage,
+        state.players[&player].inventory.slots[mc_inventory::OFF_HAND].damage,
         Some(2)
     );
     assert_eq!(state.players[&player].inventory.slots[0].damage, None);
@@ -1132,7 +1132,7 @@ fn copper_antenna_shear_offhand_and_spawn_egg_have_single_custody() {
         1
     );
     assert_eq!(state.players[&player].inventory.slots[0].count, 1);
-    state.players.get_mut(&player).unwrap().inventory.slots[crate::inventory::OFF_HAND] =
+    state.players.get_mut(&player).unwrap().inventory.slots[mc_inventory::OFF_HAND] =
         stack("shears", 1);
     assert!(crate::copper_golem::interact(
         &mut state,
@@ -1151,7 +1151,7 @@ fn copper_antenna_shear_offhand_and_spawn_egg_have_single_custody() {
         1
     );
     assert_eq!(
-        state.players[&player].inventory.slots[crate::inventory::OFF_HAND].damage,
+        state.players[&player].inventory.slots[mc_inventory::OFF_HAND].damage,
         Some(1)
     );
     state.players.get_mut(&player).unwrap().inventory.slots[0] = stack("copper_golem_spawn_egg", 2);

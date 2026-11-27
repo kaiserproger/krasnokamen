@@ -2,7 +2,8 @@
 //! invalid-chat and unknown-id rejection.
 
 use super::*;
-use mc_core::boundary::{ClickMode, ConnectionId, DigAction, Hand, PlayerInput};
+use mc_core::boundary::{ConnectionId, DigAction, Hand, PlayerInput};
+use mc_inventory::ClickMode;
 use mc_protocol::codec::WriteMc;
 use mc_protocol::packets::play::{
     ClientCommandAction, ContainerInput, Direction, InteractionHand, MovePlayerFlags,

@@ -8,7 +8,7 @@ use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemStack};
 
 use super::{ItemRules, Menu, MenuKind, PlayerInventory, SlotRef};
-use crate::boundary::ClickMode;
+use crate::ClickMode;
 
 pub(super) const LOG: u32 = 1;
 pub(super) const PLANKS: u32 = 2;

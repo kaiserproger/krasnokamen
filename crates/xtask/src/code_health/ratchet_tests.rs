@@ -300,6 +300,7 @@ fn a_ratchet_above_its_ceiling_fails() {
         merge_block_write_pushes: 0,
         construction_field_accesses: 0,
         hot_files: &[],
+        split_crates: &[],
     };
     let mut findings = Vec::new();
     check(&fixture.0, &measured, &mut findings);
@@ -339,6 +340,68 @@ fn a_ratchet_above_its_ceiling_fails() {
             findings[0].message
         );
     }
+}
+
+#[test]
+fn split_crate_code_keeps_counting_toward_the_ceilings() {
+    let fixture = Fixture::new(
+        "split-crate",
+        &[
+            ("lib.rs", "mod a;\n"),
+            ("a.rs", "pub fn f() -> &'static str {\n    \"minecraft:stone\"\n}\n"),
+        ],
+    );
+    let split = fixture.0.join("crates/mc-split/src");
+    fs::create_dir_all(&split).unwrap();
+    fs::write(split.join("lib.rs"), "mod b;\n").unwrap();
+    fs::write(
+        split.join("b.rs"),
+        "pub fn g() -> &'static str {\n    \"minecraft:dirt\"\n}\n",
+    )
+    .unwrap();
+    let ceilings = Ceilings {
+        cycle_modules: 1,
+        vanilla_id_literals: 2,
+        path_equality: 0,
+        panics: 0,
+        merge_block_write_pushes: 0,
+        construction_field_accesses: 0,
+        hot_files: &[],
+        split_crates: &["mc-split"],
+    };
+    let mut findings = Vec::new();
+    check(&fixture.0, &ceilings, &mut findings);
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Negative control: a literal added in the split crate fails mc-core's ceiling.
+    fs::write(
+        split.join("b.rs"),
+        "pub fn g() -> [&'static str; 2] {\n    [\"minecraft:dirt\", \"minecraft:sand\"]\n}\n",
+    )
+    .unwrap();
+    check(&fixture.0, &ceilings, &mut findings);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(
+        findings[0]
+            .message
+            .contains("string literals: 3 is above its ceiling 2"),
+        "{}",
+        findings[0].message
+    );
+
+    // A listed crate that does not exist fails closed.
+    let mut findings = Vec::new();
+    let missing = Ceilings {
+        split_crates: &["mc-gone"],
+        ..ceilings
+    };
+    check(&fixture.0, &missing, &mut findings);
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.message.contains("cannot read split crate mc-gone")),
+        "{findings:?}"
+    );
 }
 
 #[test]
@@ -402,6 +465,7 @@ fn hot_file_growth_above_its_measured_ceiling_fails() {
     );
     let ceilings = Ceilings {
         hot_files: &[("a.rs", 2)],
+        split_crates: &[],
         ..super::CEILINGS
     };
     let mut findings = Vec::new();
@@ -466,6 +530,7 @@ fn construction_accesses_count_only_outside_the_owner_and_children() {
     let measured = Ceilings {
         construction_field_accesses: 4,
         hot_files: &[],
+        split_crates: &[],
         ..super::CEILINGS
     };
     let mut findings = Vec::new();

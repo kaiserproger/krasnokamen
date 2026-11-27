@@ -8,7 +8,7 @@ use super::furnace;
 use super::{
     CONTAINER_MAX_STACK, Equipment, ItemRules, Menu, MenuKind, PlayerInventory, QuickCraft, SlotRef,
 };
-use crate::boundary::ClickMode;
+use crate::ClickMode;
 
 /// Slot id the client uses for a click outside the window.
 const OUTSIDE: i16 = -999;
@@ -44,7 +44,7 @@ pub struct ClickOutcome {
     pub crafted_recipes: Vec<(String, Vec<ItemStack>)>,
     pub brewed_potions: Vec<String>,
     /// Outputs whose actual craft inputs were consumed by this accepted click.
-    pub(crate) crafted: Vec<(u32, i32, MenuKind)>,
+    pub crafted: Vec<(u32, i32, MenuKind)>,
 }
 
 impl Menu {
@@ -329,7 +329,7 @@ impl Click<'_, '_> {
         }
         self.creative
             || self.armor_slot(index).is_none()
-            || crate::enchantments::level(self.get(index), "binding_curse") == 0
+            || crate::enchanting::level(self.get(index), "binding_curse") == 0
     }
 
     /// Furnace storage slot for `index`, with the menu's cooking kind.
@@ -364,7 +364,7 @@ impl Click<'_, '_> {
                 };
             }
             (MenuKind::Cartography, SlotRef::Grid(slot)) => {
-                return crate::maps::cartography::allowed(self.rules, slot, stack);
+                return crate::cartography::allowed(self.rules, slot, stack);
             }
             (MenuKind::Crafter, SlotRef::Container(slot)) => {
                 return self.crafter_disabled & (1 << slot) == 0;

@@ -1,4 +1,4 @@
-use crate::boundary::{BlockPos, ChangeSet, ClickMode};
+use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::{EntityKind, EntitySlot, StackRow};
 use crate::tick::TickState;
 use mc_data::{
@@ -6,6 +6,7 @@ use mc_data::{
     inventory_semantics_26_1_2::{can_stack, decrement_stack},
 };
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -19,7 +20,7 @@ fn target(state: &TickState, player: EntityId) -> Option<EntityId> {
     (menu.window == window
         && matches!(
             menu.kind,
-            crate::inventory::MenuKind::Chest { .. } | crate::inventory::MenuKind::Hopper
+            mc_inventory::MenuKind::Chest { .. } | mc_inventory::MenuKind::Hopper
         ))
     .then_some(target)
 }
@@ -60,7 +61,7 @@ pub(crate) fn select_bundle_item(
         .as_mut()
         .and_then(|vehicle| vehicle.slots.get_mut(index))
     {
-        crate::inventory::bundle::select(&registry.item_rules(), stack, selected);
+        mc_inventory::bundle::select(&registry.item_rules(), stack, selected);
     }
 }
 
@@ -97,9 +98,9 @@ pub(super) fn open(
     };
     let slots = v.slots.clone();
     let kind = if slots.len() == 5 {
-        crate::inventory::MenuKind::Hopper
+        mc_inventory::MenuKind::Hopper
     } else {
-        crate::inventory::MenuKind::Chest { rows: 3 }
+        mc_inventory::MenuKind::Chest { rows: 3 }
     };
     let registry = Arc::clone(&state.registry);
     let Some(p) = state.players.get_mut(&player) else {
@@ -205,7 +206,7 @@ pub(crate) fn click(
         .as_mut()
     {
         for (target, source) in vehicle.slots.iter_mut().zip(&slots) {
-            crate::inventory::bundle::copy_selection(target, source);
+            mc_inventory::bundle::copy_selection(target, source);
         }
     }
     crate::tick::apply_player_effects(state, connection, player, effects, changes);
@@ -261,7 +262,7 @@ pub(super) fn maintain(state: &mut TickState, changes: &mut ChangeSet) {
     }
 }
 fn insert(
-    rules: &crate::inventory::ItemRules<'_>,
+    rules: &mc_inventory::ItemRules<'_>,
     slots: &mut [ItemStack],
     incoming: &mut ItemStack,
 ) -> i32 {
@@ -454,7 +455,7 @@ pub(super) fn tick_hopper(state: &mut TickState, slot: EntitySlot, _changes: &mu
 }
 
 pub(crate) fn insert_one(
-    rules: &crate::inventory::ItemRules<'_>,
+    rules: &mc_inventory::ItemRules<'_>,
     slots: &mut [ItemStack],
     stack: &ItemStack,
 ) -> bool {

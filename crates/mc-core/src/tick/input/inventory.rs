@@ -28,7 +28,7 @@ pub(in crate::tick) fn select_bundle_item(
     state: &mut TickState,
     (connection, slot, selected_index): (ConnectionId, i32, i32),
 ) {
-    use crate::inventory::{SlotRef, bundle};
+    use mc_inventory::{SlotRef, bundle};
     let Some(entity) = state.connections.by_connection.get(&connection).copied() else {
         return;
     };
@@ -216,7 +216,7 @@ pub(in crate::tick) fn container_click(
         &i32,
         &i16,
         &i8,
-        &crate::boundary::ClickMode,
+        &mc_inventory::ClickMode,
     ),
     changes: &mut ChangeSet,
 ) {

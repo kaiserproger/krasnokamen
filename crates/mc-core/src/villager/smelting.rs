@@ -3,11 +3,11 @@
 use super::{Activity, VillagerProfession, VillagerState, mining};
 use crate::boundary::BlockPos;
 use crate::entities::EntitySlot;
-use crate::inventory::furnace::{FUEL, INPUT, OUTPUT};
 use crate::settlements::{SettlementId, construction, inventory};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 use mc_data::recipes::CookingKind;
+use mc_inventory::furnace::{FUEL, INPUT, OUTPUT};
 use serde::{Deserialize, Serialize};
 
 #[path = "smelting_cache.rs"]

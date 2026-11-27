@@ -7,8 +7,8 @@ use mc_data::{Identifier, ItemStack};
 use mc_physics::mth;
 
 use crate::command_args::{CommandError, Coord, coord};
-use crate::inventory::{ItemRules, PlayerInventory};
 use crate::survival::{Difficulty, Experience};
+use mc_inventory::{ItemRules, PlayerInventory};
 
 /// Shared root permission policy for native execution and edge advertisement.
 /// Edge-only administration is listed too; this does not add native handlers.

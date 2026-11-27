@@ -1103,7 +1103,7 @@ pub(crate) fn validate_restore(state: &TickState) -> Result<(), crate::CoreError
                 if action.actor != uuid
                     || action.target == Some(uuid)
                     || action.held.count != 1
-                    || action.held_slot >= crate::inventory::PLAYER_SLOTS
+                    || action.held_slot >= mc_inventory::PLAYER_SLOTS
                     || action.phase.started_tick > state.tick
                     || action.phase.ready_tick != attack.ready_tick(action.phase.started_tick)
                     || action.phase.active_tick

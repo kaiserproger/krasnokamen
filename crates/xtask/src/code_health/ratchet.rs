@@ -6,7 +6,8 @@
 //! `ceiling can drop to N`: lower the constant in the same change. Raising a
 //! ceiling is an explicit edit of the constant with a reason comment next to
 //! it; there is no flag or environment override. Anti-pattern crate totals
-//! survive file splits; the hot-file ceilings deliberately reward extraction.
+//! survive file splits and crate splits (the split crates keep counting); the
+//! hot-file ceilings deliberately reward extraction.
 
 use std::path::Path;
 
@@ -26,6 +27,10 @@ pub(super) struct Ceilings {
     pub(super) construction_field_accesses: usize,
     /// Paths relative to `crates/mc-core/src`.
     pub(super) hot_files: &'static [(&'static str, usize)],
+    /// Domain crates split out of `mc-core` (ADR 0021), as `crates/<name>`:
+    /// their production code counts toward every anti-pattern ceiling, so a
+    /// move never loosens one. The module cycle and hot files stay mc-core's.
+    pub(super) split_crates: &'static [&'static str],
 }
 
 pub(super) const CEILINGS: Ceilings = Ceilings {
@@ -50,7 +55,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // together with the copper family tables and the concrete rule. On the
     // tree merged with cut 3: 182 modules, 196 top-level modules, 245,946
     // production lines.
-    cycle_modules: 182,
+    // D124 inventory combined with the sealed batch 2 cuts: 178 modules.
+    cycle_modules: 178,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
@@ -184,6 +190,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // D123 drift: 852 measured on the integrated tree, 2026-11-25.
         ("entities.rs", 852),
     ],
+    // Domain crates split from core keep contributing to the anti-pattern counts.
+    split_crates: &["mc-inventory", "mc-light", "mc-placement"],
 };
 
 /// The cycle's production lines on ffd52010: the reference of a diagnostic
@@ -257,8 +265,8 @@ struct Limit {
     fix: &'static str,
 }
 
-/// Measures `root`'s `mc-core`, prints the report and pushes a finding for
-/// every ratchet above its ceiling.
+/// Measures `root`'s `mc-core` (and the crates split from it), prints the
+/// report and pushes a finding for every ratchet above its ceiling.
 pub(super) fn check(root: &Path, ceilings: &Ceilings, findings: &mut Vec<Finding>) {
     let src = root.join("crates/mc-core/src");
     let facts = match core_ast::collect(&src) {
@@ -273,6 +281,21 @@ pub(super) fn check(root: &Path, ceilings: &Ceilings, findings: &mut Vec<Finding
         }
     };
     super::domain_boundary::check(&src, &facts.domain_refs, findings);
+    let mut split = Vec::new();
+    for &name in ceilings.split_crates {
+        let crate_src = root.join("crates").join(name).join("src");
+        match core_ast::collect(&crate_src) {
+            Ok(crate_facts) => split.push((name, crate_facts)),
+            Err(err) => {
+                findings.push(Finding {
+                    path: crate_src,
+                    line: 0,
+                    message: format!("cannot read split crate {name}: {err}"),
+                });
+                return;
+            }
+        }
+    }
     println!("mc-core coherence ratchets (syn, production code; above a ceiling fails):");
     let total_lines: usize =
         facts.modules.iter().map(|m| m.lines).sum::<usize>() + facts.root.lines;
@@ -311,12 +334,24 @@ pub(super) fn check(root: &Path, ceilings: &Ceilings, findings: &mut Vec<Finding
     }];
     for counter in Counter::ALL {
         let (name, why, false_positives) = describe(counter);
-        let measured = facts.total(counter);
+        let split_counts: Vec<(&str, usize)> = split
+            .iter()
+            .map(|(crate_name, crate_facts)| (*crate_name, crate_facts.total(counter)))
+            .collect();
+        let measured =
+            facts.total(counter) + split_counts.iter().map(|&(_, count)| count).sum::<usize>();
         println!(
             "  {name}: {measured} (ceiling {}) - {why}",
             ceilings.counter(counter)
         );
         println!("    by module: {}", breakdown(&facts, counter));
+        if !split_counts.is_empty() {
+            let listed: Vec<String> = split_counts
+                .iter()
+                .map(|(crate_name, count)| format!("{crate_name} {count}"))
+                .collect();
+            println!("    split crates: {}", listed.join(", "));
+        }
         println!("    false positives: {false_positives}");
         limits.push(Limit {
             name,

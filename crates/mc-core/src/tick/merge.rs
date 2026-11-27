@@ -1094,7 +1094,7 @@ impl TickState {
                 .registry
                 .blocks
                 .by_id(mc_world::BlockStateId(broken))
-                .is_some_and(|block| crate::shulker::is_block(block.block.id.path()))
+                .is_some_and(|block| mc_inventory::shulker::is_block(block.block.id.path()))
             && crate::block_drop_context::retains_contents(&drops);
         if creative_shulker {
             // Native playerWillDestroy spawns collected box components directly,

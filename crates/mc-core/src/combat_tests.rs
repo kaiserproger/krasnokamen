@@ -8,7 +8,7 @@ use mc_data::{Identifier, ItemEnchantment, ItemStack};
 use super::{
     HIT_KNOCKBACK, Swing, attack_strength, below_minimum_charge, knockback_velocity, melee_hit,
 };
-use crate::inventory::ItemRules;
+use mc_inventory::ItemRules;
 
 const SWORD: u32 = 1;
 const STICK: u32 = 2;

@@ -60,9 +60,13 @@ class CustodyTests(unittest.TestCase):
 
     def test_item_entities_and_menus_are_custody(self):
         for path in ("crates/mc-core/src/item_motion.rs", "crates/mc-core/src/mounts/menus.rs",
-                     "crates/mc-core/src/inventory/click.rs", "crates/mc-core/src/tick/containers.rs"):
+                     "crates/mc-inventory/src/click.rs", "crates/mc-core/src/tick/containers.rs"):
             with self.subTest(path=path):
                 self.assertEqual([r["kind"] for r in build([path])["reviewers"]], ["custody"])
+
+    def test_inventory_crate_change_runs_core_conservation(self):
+        found = gates(build(["crates/mc-inventory/src/click.rs"]))
+        self.assertIn(f"{PY} test -p mc-core --lib conservation custody", found)
 
 
 class GameplayTests(unittest.TestCase):

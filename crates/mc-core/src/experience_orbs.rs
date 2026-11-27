@@ -172,7 +172,7 @@ pub(crate) fn mob_experience(name: &str, baby: bool, seed: u64) -> i32 {
 fn mend(player: &mut crate::player::PlayerState, mut amount: i32, mut seed: u64) -> (i32, bool) {
     let slots = [
         usize::from(player.inventory.selected.min(8)),
-        crate::inventory::OFF_HAND,
+        mc_inventory::OFF_HAND,
         36,
         37,
         38,

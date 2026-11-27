@@ -1,8 +1,9 @@
 use super::*;
-use crate::boundary::{ChunkPos, ClickMode, ConnectionId, Hand, PlayerInput};
+use crate::boundary::{ChunkPos, ConnectionId, Hand, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
+use mc_inventory::ClickMode;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 const KEY: (i32, i32, i32) = (8, 201, 8);

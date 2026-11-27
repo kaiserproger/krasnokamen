@@ -1,7 +1,7 @@
 use super::*;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
 
-fn stack(registry: &crate::registry::CoreRegistry, name: &str) -> ItemStack {
+fn stack(registry: &crate::test_data::Builtin, name: &str) -> ItemStack {
     ItemStack::new(
         registry
             .items
@@ -13,11 +13,11 @@ fn stack(registry: &crate::registry::CoreRegistry, name: &str) -> ItemStack {
 
 #[test]
 fn repair_accepts_fresh_input_and_merges_only_curses() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     let rules = registry.item_rules();
     let mut grid = [
-        stack(&registry, "diamond_pickaxe"),
-        stack(&registry, "diamond_pickaxe"),
+        stack(registry, "diamond_pickaxe"),
+        stack(registry, "diamond_pickaxe"),
         ItemStack::EMPTY,
         ItemStack::EMPTY,
     ];
@@ -47,9 +47,9 @@ fn repair_accepts_fresh_input_and_merges_only_curses() {
 
 #[test]
 fn banner_clone_preserves_source_and_consumes_only_blank() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     let rules = registry.item_rules();
-    let mut source = stack(&registry, "white_banner");
+    let mut source = stack(registry, "white_banner");
     source
         .extended_mut()
         .banner_patterns
@@ -59,7 +59,7 @@ fn banner_clone_preserves_source_and_consumes_only_blank() {
         });
     let mut grid = [
         source.clone(),
-        stack(&registry, "white_banner"),
+        stack(registry, "white_banner"),
         ItemStack::EMPTY,
         ItemStack::EMPTY,
     ];
@@ -70,7 +70,7 @@ fn banner_clone_preserves_source_and_consumes_only_blank() {
     assert_eq!(grid[0], source);
     assert!(grid[1].is_empty());
     assert!(drops.is_empty());
-    grid[1] = stack(&registry, "red_banner");
+    grid[1] = stack(registry, "red_banner");
     assert!(crafting::grid_result(&rules, &grid).is_empty());
     grid[1] = source;
     assert!(crafting::grid_result(&rules, &grid).is_empty());
@@ -78,11 +78,11 @@ fn banner_clone_preserves_source_and_consumes_only_blank() {
 
 #[test]
 fn shield_decoration_menu_crafts_and_rejects_invalid_inputs() {
-    use crate::boundary::ClickMode;
+    use crate::ClickMode;
 
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     let rules = registry.item_rules();
-    let mut banner = stack(&registry, "red_banner");
+    let mut banner = stack(registry, "red_banner");
     banner
         .extended_mut()
         .banner_patterns
@@ -90,7 +90,7 @@ fn shield_decoration_menu_crafts_and_rejects_invalid_inputs() {
             pattern: Identifier::parse("minecraft:stripe_bottom").unwrap(),
             color: 11,
         });
-    let mut shield = stack(&registry, "shield");
+    let mut shield = stack(registry, "shield");
     shield.damage = Some(42);
     shield.custom_name = Some("Keepsake".into());
     shield.extended_mut().custom_data = Some(
@@ -166,21 +166,21 @@ fn shield_decoration_menu_crafts_and_rejects_invalid_inputs() {
         let extra = (0..menu.grid.len())
             .find(|&i| i != banner_slot && i != shield_slot)
             .unwrap();
-        menu.grid[extra] = stack(&registry, "stone");
+        menu.grid[extra] = stack(registry, "stone");
         assert!(crafting::grid_result(&rules, &menu.grid).is_empty());
     }
 }
 
 #[test]
 fn shield_decoration_plain_banner_and_stacked_input() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     let rules = registry.item_rules();
-    let mut banner = stack(&registry, "blue_banner");
+    let mut banner = stack(registry, "blue_banner");
     banner.count = 2;
     let mut grid = [
         banner,
         ItemStack::EMPTY,
-        stack(&registry, "shield"),
+        stack(registry, "shield"),
         ItemStack::EMPTY,
     ];
     let output = crafting::grid_result(&rules, &grid);
@@ -208,10 +208,10 @@ fn shield_decoration_plain_banner_and_stacked_input() {
 
 #[test]
 fn written_book_cloning_increments_generation_and_retains_original() {
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     let rules = registry.item_rules();
     for generation in 0..=2 {
-        let mut original = stack(&registry, "written_book");
+        let mut original = stack(registry, "written_book");
         let mut value = Vec::new();
         mc_nbt::write_network(
             &mut value,
@@ -230,8 +230,8 @@ fn written_book_cloning_increments_generation_and_retains_original() {
         );
         let mut grid = [
             original.clone(),
-            stack(&registry, "writable_book"),
-            stack(&registry, "writable_book"),
+            stack(registry, "writable_book"),
+            stack(registry, "writable_book"),
             ItemStack::EMPTY,
         ];
         let result = crafting::grid_result(&rules, &grid);

@@ -1,4 +1,4 @@
-# ADR 0021 - Build time: line-table debuginfo now, an mc-core split later
+# ADR 0021 - Build time: line-table debuginfo, then an mc-core crate split
 
 **Date:** 2026-11-05  
 **Status:** Step 1 accepted by the owner and implemented (2026-11-05). Step 2
@@ -21,6 +21,10 @@ host's, so the count is checked on the integrated tree;
 Moving existing code into modules follows this ADR's cycle-cut plan with
 byte-exact moves; it may start before the 21 November announcement only once the
 current release tasks are closed, otherwise after (owner, 2026-11-17).
+**Direction (owner D124/D128, 2026-11-27):** split `mc-core` into crates now,
+at real ownership boundaries, as the top structural priority
+([cuts](#d124d128-crate-cuts-hub-value-types-down-then-domain-crates)). This
+replaces the 2026-11-16 timing; the feature rule above still holds.
 **Related:** retired v1 ADR 0011, in Git history (rejected
 one-crate-per-domain without an enforceable boundary),
 [0013](0013-core-model-v2.md) (current crate ownership),
@@ -348,6 +352,57 @@ Historical integration measurement: SCC 186/199 modules, 235,960 production
 lines; `entities.rs` 925 → 864 items/statements; ceilings 186/864. No encoded
 record, call order or gameplay decision changes. Move script/measurements:
 `receipts/CutEntities/`.
+
+### D124/D128 crate cuts: hub value types down, then domain crates
+
+**Graph at `973e6e60`** (syn collector, one edge per named reference): 199
+top-level modules, 248,021 production lines, 8,590 cross-module references;
+largest SCC 186 modules/245,182 lines. Only 12 leaves (2,368 lines) extract
+with no cut, and freeing every pure `boundary` value type frees just
+`target_grid`: every useful crate needs a few item-level out-edge cuts.
+
+**Rules.** Crates go below `mc-core`. An out-edge is cut by moving a pure item
+down with its owner, moving a caller up into core, or passing a field instead
+of `CoreRegistry`. No facade or hook layer, and no `pub use` keeps an old path:
+every caller moves. Path rewrites are re-runnable, use-tree-aware scripts
+(`receipts/D124/D124CrateSplit/codemod-*.py`); plan and lane claims are in
+that directory's `CUT-MAP.md`/`CLAIM.md`.
+
+**`EntityId` -> `mc-domain`** (`94eba56f`, `93f26fc6`): the wire entity id is
+a protocol-independent value type. Its definition moves byte for byte;
+`mc-domain` gains the `serde` its derives need; 352 files change only paths.
+
+**`mc-inventory`:** `inventory.rs` and `inventory/**` (player inventory,
+menus, crafting, stations, furnace/enchanting/anvil rules; 4,320 production
+lines) become the crate by `git mv`. Out-edges cut:
+
+| Edge | Cut |
+|---|---|
+| `boundary::ClickMode` | definition moves into the crate; `boundary::PlayerInput` imports it |
+| `enchantments::level` | moves to `mc_inventory::enchanting::level` (pure stack query) |
+| `shulker::{is_block,is_item}` | move to `mc_inventory::shulker` (shulker-box identity) |
+| `maps::cartography::allowed`, `maps::{map_id,set_map_id}` | move to `mc_inventory::cartography` (slot rule and the `map_id` component it reads) |
+| `BlockDropItems for ItemRules` | impl moves to `block_drops.rs`, the trait owner |
+
+Visibility widens only for items core calls (bundle, furnace fuel, recipe
+reload, crafted outcome, brewing input). Pure tests move with the crate; those
+that loaded `CoreRegistry::load(None)` read `test_data::builtin()`, the same
+embedded `mc-data` catalog. Tests that drive core stay in core
+(`inventory_conservation_tests.rs`, `player/craft_stations_tests.rs`,
+`player/bundle_use_tests.rs`, `registry_inventory_tests.rs`); 120 tests before
+and after. The harness custody rule covers `crates/mc-inventory/**` and runs the
+core conservation tests for it; matrix generation reads `MenuKind`/`ClickMode`
+from the crate. No behaviour, encoded record or call order changes. The
+largest cycle drops from 185 to 183 modules (`inventory`, `command_items`);
+code-health keeps counting the crate's literals and `.path()` comparisons
+(`split_crates` in `ratchet.rs`), so the move loosens no anti-pattern ceiling.
+
+**Build effect.** An edit inside a lower crate still rebuilds every crate above
+it (`mc-core`, then the server), so the server edit loop changes only by the
+lines that left `mc-core`; the crate's own test loop (`cargo test -p
+mc-inventory`) no longer compiles `mc-core` at all. Base-vs-cut timings:
+pending Main's quiet-window measurement (the loaded-host numbers in
+`receipts/D124/D124CrateSplit/MEASURE.md` are provisional, not a claim).
 
 ### Cycle ratchet (implemented 2026-11-07)
 

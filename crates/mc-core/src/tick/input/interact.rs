@@ -213,7 +213,7 @@ pub(in crate::tick) fn use_item_on(
         if !crate::tick::container_access::can_open(state, *position) {
             return;
         }
-        if kind == crate::inventory::MenuKind::Beacon {
+        if kind == mc_inventory::MenuKind::Beacon {
             crate::beacon::open(state, entity, *connection, *position, changes);
             return;
         }
@@ -252,7 +252,7 @@ pub(in crate::tick) fn use_item_on(
         state
             .open_containers
             .insert(entity, (position.x, position.y, position.z));
-        if matches!(kind, crate::inventory::MenuKind::Furnace(_)) {
+        if matches!(kind, mc_inventory::MenuKind::Furnace(_)) {
             let properties = state
                 .block_entities
                 .get_mut(&(position.x, position.y, position.z))
@@ -276,10 +276,10 @@ pub(in crate::tick) fn use_item_on(
                 );
             }
         }
-        if kind == crate::inventory::MenuKind::BrewingStand {
+        if kind == mc_inventory::MenuKind::BrewingStand {
             crate::brewing::opened(state, entity, *connection, *position);
         }
-        if kind == crate::inventory::MenuKind::Crafter {
+        if kind == mc_inventory::MenuKind::Crafter {
             crate::crafter::opened(state, entity, *position);
         }
         return;

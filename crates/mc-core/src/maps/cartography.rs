@@ -1,31 +1,14 @@
 //! Cartography output is planned without allocating; taking it commits map+items.
-use super::{SavedMap, map_id, set_map_id};
-use crate::boundary::{ChangeSet, ClickMode};
-use crate::inventory::{ItemRules, MenuKind};
+use super::SavedMap;
+use crate::boundary::ChangeSet;
 use crate::tick::TickState;
 use mc_data::ItemStack;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
+use mc_inventory::MenuKind;
+use mc_inventory::cartography::{allowed, map_id, set_map_id};
 use std::sync::Arc;
 
-pub(crate) fn allowed(rules: &ItemRules<'_>, slot: usize, stack: &ItemStack) -> bool {
-    if stack.is_empty() {
-        return true;
-    }
-    let Some(name) = crate::inventory::anvil::logical_item(rules, stack) else {
-        return false;
-    };
-    if rules.items.name_of(stack.item_id) != Some(name) {
-        return false;
-    }
-    match slot {
-        0 => name.as_str() == "minecraft:filled_map" && map_id(stack).is_some(),
-        1 => matches!(
-            name.as_str(),
-            "minecraft:paper" | "minecraft:map" | "minecraft:glass_pane"
-        ),
-        _ => false,
-    }
-}
 pub(crate) fn is_open(state: &TickState, actor: EntityId) -> bool {
     state
         .players

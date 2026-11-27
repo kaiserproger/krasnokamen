@@ -496,7 +496,7 @@ pub(crate) fn interact(
     };
     let slot = match hand {
         Hand::Main => usize::from(player.inventory.selected.min(8)),
-        Hand::Off => crate::inventory::OFF_HAND,
+        Hand::Off => mc_inventory::OFF_HAND,
     };
     let plan = FeedPlan {
         target,

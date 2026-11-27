@@ -522,7 +522,7 @@ pub type BlockEntityImage = (
 #[derive(Debug, Clone, Default)]
 pub struct BlockEntityState {
     pub slots: Vec<mc_data::ItemStack>,
-    pub furnace: Option<crate::inventory::furnace::FurnaceState>,
+    pub furnace: Option<mc_inventory::furnace::FurnaceState>,
 }
 
 impl BlockEntityState {

@@ -91,7 +91,7 @@ fn placing_never_merges_stacks_of_different_components() {
 #[test]
 fn cooking_books_match_station_kind_and_keep_non_input_custody() {
     use mc_data::recipes::CookingKind;
-    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    let registry = crate::test_data::builtin();
     for (kind, recipe_name, ingredient) in [
         (
             CookingKind::Furnace,

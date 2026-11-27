@@ -1280,8 +1280,8 @@ fn merchant_menu_stops_navigation_and_work_until_live_menu_closes() {
         crate::boundary::ConnectionId(42),
         crate::commands::GameMode::Survival,
     );
-    let mut menu = crate::inventory::Menu::new(1, crate::inventory::MenuKind::Merchant);
-    menu.merchant = Some(crate::inventory::MerchantMenu {
+    let mut menu = mc_inventory::Menu::new(1, mc_inventory::MenuKind::Merchant);
+    menu.merchant = Some(mc_inventory::MerchantMenu {
         entity: id,
         selected: 0,
         last_restock: 0,
@@ -2441,8 +2441,8 @@ fn full_brain_visible_waits_at_mix_density_and_interactions_preempt_regular_admi
         // population, not merely move to its ordinary distance-one queue.
         let actors: Vec<_> = cache.residents.iter().rev().take(4).copied().collect();
         let merchant = state.entities.body(actors[0]).id;
-        let mut menu = crate::inventory::Menu::new(1, crate::inventory::MenuKind::Merchant);
-        menu.merchant = Some(crate::inventory::MerchantMenu {
+        let mut menu = mc_inventory::Menu::new(1, mc_inventory::MenuKind::Merchant);
+        menu.merchant = Some(mc_inventory::MerchantMenu {
             entity: merchant,
             selected: 0,
             last_restock: 0,
@@ -2537,8 +2537,8 @@ fn trade_combat_panic_pursuit_and_committed_paths_never_downgrade() {
         crate::boundary::ConnectionId(42),
         crate::commands::GameMode::Survival,
     );
-    let mut menu = crate::inventory::Menu::new(1, crate::inventory::MenuKind::Merchant);
-    menu.merchant = Some(crate::inventory::MerchantMenu {
+    let mut menu = mc_inventory::Menu::new(1, mc_inventory::MenuKind::Merchant);
+    menu.merchant = Some(mc_inventory::MerchantMenu {
         entity: merchant,
         selected: 0,
         last_restock: 0,

@@ -6,7 +6,7 @@ use mc_data::{Identifier, ItemStack};
 use super::{
     Command, CommandError, Coord, Destination, GameMode, Target, clear, debug_give, give, parse,
 };
-use crate::inventory::{ItemRules, PlayerInventory};
+use mc_inventory::{ItemRules, PlayerInventory};
 
 fn id(name: &str) -> Identifier {
     Identifier::parse(name).unwrap()

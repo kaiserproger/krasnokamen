@@ -483,7 +483,7 @@ fn recipe_book_requires_advancement_unlock_and_crafting_awards_only_after_output
             state_id,
             slot: 0,
             button: 0,
-            mode: crate::boundary::ClickMode::QuickMove,
+            mode: mc_inventory::ClickMode::QuickMove,
         }],
     );
     assert_eq!(

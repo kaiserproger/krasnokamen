@@ -12,9 +12,10 @@ use mc_script::{
 use mc_world::BlockPos;
 use serde::{Deserialize, Serialize};
 
-use crate::boundary::{ClickMode, ConnectionId, PlayerChange, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerChange, PlayerInput};
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_inventory::ClickMode;
 
 const ZONES: &str = "player-zones";
 const NATIVE_SETTLEMENTS_OWNER: &str = "krasnokamen-settlements";
@@ -662,7 +663,7 @@ fn open_menu(
     };
     let effects = native.open_menu(
         &registry.item_rules(),
-        crate::inventory::MenuKind::Chest { rows: rows as u8 },
+        mc_inventory::MenuKind::Chest { rows: rows as u8 },
         serde_json::json!({"text": definition.title()}).to_string(),
         &items,
     );

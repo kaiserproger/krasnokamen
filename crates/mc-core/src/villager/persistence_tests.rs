@@ -253,13 +253,10 @@ fn vanilla_villager_level_minimum_normalizes_without_mutating_input() {
 #[test]
 #[ignore = "requires local .analysis/maps/falcons-rock/vanilla-input real map"]
 fn real_vanilla_level_seven_villager_preserves_body_and_master_trades() {
-    use crate::{
-        boundary::ClickMode,
-        inventory::{Menu, MenuKind, MerchantMenu, PlayerInventory},
-        registry::CoreRegistry,
-        villager::trades,
-    };
+    use crate::{registry::CoreRegistry, villager::trades};
     use mc_domain::EntityId;
+    use mc_inventory::ClickMode;
+    use mc_inventory::{Menu, MenuKind, MerchantMenu, PlayerInventory};
 
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../.analysis/maps/falcons-rock/vanilla-input")

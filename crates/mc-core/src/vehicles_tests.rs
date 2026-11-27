@@ -1,9 +1,10 @@
 use super::*;
-use crate::boundary::{ClickMode, ConnectionId, PlayerInput};
+use crate::boundary::{ConnectionId, PlayerInput};
 use crate::journal::{EntityStateImage, ReplayEntity};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
+use mc_inventory::ClickMode;
 use std::sync::Arc;
 
 #[path = "boat_floating_tests.rs"]
@@ -1318,7 +1319,7 @@ fn creative_offhand_vehicle_placement_credits_used_without_spending() {
         let p = state.players.get_mut(&actor).unwrap();
         p.game_mode = crate::commands::GameMode::Creative;
         p.inventory.slots[0] = main.clone();
-        p.inventory.slots[crate::inventory::OFF_HAND] = held.clone();
+        p.inventory.slots[mc_inventory::OFF_HAND] = held.clone();
         let clicked = if name.ends_with("minecart") {
             rail(&mut state, 0, 65, 0, "east_west", "rail", false);
             BlockPos { x: 0, y: 65, z: 0 }
@@ -1337,7 +1338,7 @@ fn creative_offhand_vehicle_placement_credits_used_without_spending() {
         assert_eq!(changes.entities_spawned.len(), 1, "{name}");
         assert_eq!(state.players[&actor].inventory.slots[0], main);
         assert_eq!(
-            state.players[&actor].inventory.slots[crate::inventory::OFF_HAND],
+            state.players[&actor].inventory.slots[mc_inventory::OFF_HAND],
             held
         );
         assert_eq!(
@@ -1376,7 +1377,7 @@ fn furnace_fuel_consumption_does_not_award_item_used_in_survival_or_creative() {
         let item_id = item(&state, name);
         let p = state.players.get_mut(&actor).unwrap();
         p.game_mode = mode;
-        p.inventory.slots[crate::inventory::OFF_HAND] = ItemStack::new(item_id, 2);
+        p.inventory.slots[mc_inventory::OFF_HAND] = ItemStack::new(item_id, 2);
         state
             .entities
             .row_mut(slot)
@@ -1405,7 +1406,7 @@ fn furnace_fuel_consumption_does_not_award_item_used_in_survival_or_creative() {
             3600
         );
         assert_eq!(
-            state.players[&actor].inventory.slots[crate::inventory::OFF_HAND].count,
+            state.players[&actor].inventory.slots[mc_inventory::OFF_HAND].count,
             if mode == crate::commands::GameMode::Creative {
                 2
             } else {
@@ -1470,7 +1471,7 @@ fn tnt_cart_ignition_credits_used_once_and_broken_only_on_actual_durability_brea
         held.damage = damage;
         let p = state.players.get_mut(&actor).unwrap();
         p.game_mode = mode;
-        p.inventory.slots[crate::inventory::OFF_HAND] = held.clone();
+        p.inventory.slots[mc_inventory::OFF_HAND] = held.clone();
         let used_before = p.statistics.get(StatType::Used, item_id);
         let broken_before = p.statistics.get(StatType::Broken, item_id);
         state
@@ -1497,7 +1498,7 @@ fn tnt_cart_ignition_credits_used_once_and_broken_only_on_actual_durability_brea
             -1
         );
         assert_eq!(
-            state.players[&actor].inventory.slots[crate::inventory::OFF_HAND],
+            state.players[&actor].inventory.slots[mc_inventory::OFF_HAND],
             held
         );
         assert_eq!(
@@ -1544,7 +1545,7 @@ fn tnt_cart_ignition_credits_used_once_and_broken_only_on_actual_durability_brea
                 .get(StatType::Broken, item_id),
             broken_before + i32::from(breaks)
         );
-        let after = &state.players[&actor].inventory.slots[crate::inventory::OFF_HAND];
+        let after = &state.players[&actor].inventory.slots[mc_inventory::OFF_HAND];
         if mode == crate::commands::GameMode::Creative {
             assert_eq!(after, &held);
         } else if name == "fire_charge" || breaks {
@@ -1563,7 +1564,7 @@ fn tnt_cart_ignition_credits_used_once_and_broken_only_on_actual_durability_brea
             &mut changes
         ));
         assert_eq!(
-            state.players[&actor].inventory.slots[crate::inventory::OFF_HAND],
+            state.players[&actor].inventory.slots[mc_inventory::OFF_HAND],
             after
         );
         assert_eq!(

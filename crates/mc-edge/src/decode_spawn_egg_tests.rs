@@ -57,7 +57,7 @@ fn equip(state: &mut TickState, actor: EntityId, name: &str, hand: InteractionHa
     let index = if hand == InteractionHand::MainHand {
         0
     } else {
-        mc_core::inventory::OFF_HAND
+        mc_inventory::OFF_HAND
     };
     state.players.get_mut(&actor).unwrap().inventory.slots[index] = egg;
 }
@@ -167,7 +167,7 @@ fn spawn_egg_cow_offhand_uses_same_admission() {
     assert_eq!(cows.len(), 1);
     assert_walking_spawn_cell(&state, cows[0], [10.5, 201.0, 8.5]);
     assert_eq!(
-        state.players[&actor].inventory.slots[mc_core::inventory::OFF_HAND].count,
+        state.players[&actor].inventory.slots[mc_inventory::OFF_HAND].count,
         1
     );
 }

@@ -184,7 +184,7 @@ fn prepare_fields(
                 .iter()
                 .map(crate::tick::furnace_slot_to_stack)
                 .collect(),
-            furnace: Some(crate::inventory::furnace::FurnaceState {
+            furnace: Some(mc_inventory::furnace::FurnaceState {
                 lit_remaining: i32::from(furnace.burn_remaining),
                 lit_total: i32::from(furnace.burn_total),
                 cook_progress: i32::from(furnace.cook_progress),

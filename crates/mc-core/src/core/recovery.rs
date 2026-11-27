@@ -269,15 +269,16 @@ pub(crate) fn load_dimension_state(
             .block_entities
             .hydrate(*pos, || crate::tick::BlockEntityState {
                 slots: record.slots.clone(),
-                furnace: record.furnace.as_ref().map(|image| {
-                    crate::inventory::furnace::FurnaceState {
+                furnace: record
+                    .furnace
+                    .as_ref()
+                    .map(|image| mc_inventory::furnace::FurnaceState {
                         lit_remaining: image.lit_remaining,
                         lit_total: image.lit_total,
                         cook_progress: image.cook_progress,
                         cook_total: image.cook_total,
                         recipes_used: Arc::clone(&image.recipes_used),
-                    }
-                }),
+                    }),
             });
         // Replay may be the only live inventory in this chunk. Checkpoint
         // preparation loads and hydrates its neighbours before freezing slots.

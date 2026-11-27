@@ -372,7 +372,7 @@ pub(crate) fn interact(
     }
     let inv_slot = match hand {
         Hand::Main => usize::from(player.inventory.selected.min(8)),
-        Hand::Off => crate::inventory::OFF_HAND,
+        Hand::Off => mc_inventory::OFF_HAND,
     };
     let held = player.inventory.slots[inv_slot].clone();
     if crate::leash::knot_interact(state, slot) {
@@ -875,7 +875,7 @@ fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
     };
     [
         usize::from(player.inventory.selected.min(8)),
-        crate::inventory::OFF_HAND,
+        mc_inventory::OFF_HAND,
     ]
     .into_iter()
     .any(|i| {

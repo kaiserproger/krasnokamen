@@ -1,10 +1,10 @@
 //! Item cooldowns and world-aware chorus fruit completion.
 
 use crate::boundary::PlayerChange;
-use crate::inventory::ItemRules;
 use crate::player::PlayerState;
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_inventory::ItemRules;
 
 impl PlayerState {
     #[must_use]

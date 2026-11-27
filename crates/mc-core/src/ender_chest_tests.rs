@@ -1,7 +1,8 @@
 use super::*;
-use crate::boundary::{ClickMode, Hand, PlayerChange, PlayerInput};
+use crate::boundary::{Hand, PlayerChange, PlayerInput};
 use crate::tick::run_tick;
 use mc_data::Identifier;
+use mc_inventory::ClickMode;
 
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

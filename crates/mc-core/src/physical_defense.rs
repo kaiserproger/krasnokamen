@@ -108,7 +108,7 @@ fn player_slot(state: &TickState, actor: EntitySlot, equipment: usize) -> Option
     let player = state.players.get(&state.entities.body(actor).id)?;
     Some(match equipment {
         0 => usize::from(player.inventory.selected.min(8)),
-        1 => crate::inventory::OFF_HAND,
+        1 => mc_inventory::OFF_HAND,
         2..=5 => 34 + equipment,
         _ => return None,
     })

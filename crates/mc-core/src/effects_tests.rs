@@ -1,9 +1,9 @@
 use super::*;
 use crate::boundary::{ConnectionId, Hand, PlayerChange, PlayerInput};
 use crate::commands::{Command, GameMode};
-use crate::inventory::ItemRules;
 use crate::player::PlayerState;
 use mc_data::{Identifier, ItemStack};
+use mc_inventory::ItemRules;
 
 fn id(name: &str) -> Identifier {
     Identifier::parse(name).unwrap()

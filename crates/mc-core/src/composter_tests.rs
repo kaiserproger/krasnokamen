@@ -226,21 +226,21 @@ fn failed_roll_full_use_offhand_and_creative_do_not_double_debit() {
     run_tick(&mut state, &[use_input(failed, Hand::Off)]);
     assert_eq!(level(&state, POS), Some(1));
     assert_eq!(
-        state.players[&entity].inventory.slots[crate::inventory::OFF_HAND].count,
+        state.players[&entity].inventory.slots[mc_inventory::OFF_HAND].count,
         1
     );
     give(&mut state, entity, "cake", 2, Hand::Off);
     run_tick(&mut state, &[use_input(1, Hand::Off)]);
     assert_eq!(level(&state, POS), Some(2));
     assert_eq!(
-        state.players[&entity].inventory.slots[crate::inventory::OFF_HAND].count,
+        state.players[&entity].inventory.slots[mc_inventory::OFF_HAND].count,
         1
     );
     state.players.get_mut(&entity).unwrap().game_mode = GameMode::Creative;
     run_tick(&mut state, &[use_input(2, Hand::Off)]);
     assert_eq!(level(&state, POS), Some(3));
     assert_eq!(
-        state.players[&entity].inventory.slots[crate::inventory::OFF_HAND].count,
+        state.players[&entity].inventory.slots[mc_inventory::OFF_HAND].count,
         1
     );
 }

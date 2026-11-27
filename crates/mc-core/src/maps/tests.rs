@@ -1,7 +1,8 @@
 use super::*;
 use crate::boundary::{ChangeSet, Hand, PlayerChange};
 use crate::dimensions::Dimension;
-use crate::maps::{Maps, SavedMap, map_id};
+use crate::maps::{Maps, SavedMap};
+use mc_inventory::cartography::map_id;
 
 #[test]
 fn framed_waypoints_survive_nbt_roundtrip() {
@@ -660,7 +661,7 @@ fn saved_maps_broken_pending_chest_discards_lookup_without_allocating() {
 
 #[test]
 fn saved_maps_cartography_clone_scale_lock_consumes_one_and_cancels_without_ids() {
-    use crate::inventory::MenuKind;
+    use mc_inventory::MenuKind;
     for (ingredient, new_map, locked, scale, count) in [
         ("map", false, false, 0, 2),
         ("paper", true, false, 1, 1),
@@ -701,7 +702,7 @@ fn saved_maps_cartography_clone_scale_lock_consumes_one_and_cancels_without_ids(
                 revision,
                 2,
                 0,
-                crate::boundary::ClickMode::Pickup,
+                mc_inventory::ClickMode::Pickup,
             ),
             &mut changes,
         );
@@ -723,13 +724,7 @@ fn saved_maps_cartography_clone_scale_lock_consumes_one_and_cancels_without_ids(
         crate::maps::cartography::click(
             &mut state,
             actor,
-            (
-                window,
-                revision - 1,
-                2,
-                0,
-                crate::boundary::ClickMode::Pickup,
-            ),
+            (window, revision - 1, 2, 0, mc_inventory::ClickMode::Pickup),
             &mut changes,
         );
         let menu = state.players[&actor].open.as_ref().unwrap();

@@ -855,17 +855,17 @@ fn room_for_slot(
                         "blast_furnace" => mc_data::recipes::CookingKind::BlastFurnace,
                         _ => mc_data::recipes::CookingKind::Furnace,
                     };
-                    if local == crate::inventory::furnace::OUTPUT {
+                    if local == mc_inventory::furnace::OUTPUT {
                         return 0;
                     }
-                    if local == crate::inventory::furnace::FUEL
-                        && !crate::inventory::furnace::is_fuel(&rules, kind, source)
-                        && !crate::inventory::furnace::is_empty_bucket(&rules, source)
+                    if local == mc_inventory::furnace::FUEL
+                        && !mc_inventory::furnace::is_fuel(&rules, kind, source)
+                        && !mc_inventory::furnace::is_empty_bucket(&rules, source)
                     {
                         return 0;
                     }
-                    if local == crate::inventory::furnace::FUEL
-                        && crate::inventory::furnace::is_empty_bucket(&rules, source)
+                    if local == mc_inventory::furnace::FUEL
+                        && mc_inventory::furnace::is_empty_bucket(&rules, source)
                     {
                         maximum = 1;
                     }
@@ -888,7 +888,7 @@ fn room_for_slot(
                     }
                 }
                 name if name.ends_with("shulker_box")
-                    && crate::shulker::is_item(&target.registry.items, source) =>
+                    && mc_inventory::shulker::is_item(&target.registry.items, source) =>
                 {
                     return 0;
                 }

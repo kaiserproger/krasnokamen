@@ -6,7 +6,7 @@ use super::click_tests::{
     BUCKET, COAL, Data, IRON_INGOT, LAVA_BUCKET, PLANKS, RAW_IRON, STONE, Session, stack,
 };
 use super::furnace::{FUEL, FurnaceState, INPUT, OUTPUT};
-use crate::boundary::ClickMode;
+use crate::ClickMode;
 
 fn run(state: &mut FurnaceState, data: &Data, slots: &mut [ItemStack], ticks: usize) {
     let rules = data.rules();
@@ -210,65 +210,6 @@ fn replacing_the_input_item_restarts_cooking() {
     };
     state.input_replaced(&before, &after);
     assert_eq!(state.cook_progress, 0);
-}
-
-#[test]
-fn full_data_furnace_accepts_acacia_planks_and_cooks_charcoal() {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
-    let registry = crate::registry::CoreRegistry::load(Some(&dir)).expect("full registry loads");
-    let rules = registry.item_rules();
-    let item = |name| {
-        registry
-            .items
-            .id_of(&mc_data::Identifier::parse(name).expect("item identifier"))
-            .expect("vanilla item")
-    };
-    let log = item("minecraft:acacia_log");
-    let planks = item("minecraft:acacia_planks");
-    let charcoal = item("minecraft:charcoal");
-    assert!(rules.tags.contains_raw_id(
-        mc_data::tags::ITEM_REGISTRY,
-        "minecraft:planks",
-        planks as i32
-    ));
-    assert_eq!(
-        rules.tags.fuel_values().burn_duration(planks),
-        Some(300),
-        "full-data startup must initialize fuel values, not just resolved tags"
-    );
-    let mut menu = super::Menu::new(1, MenuKind::Furnace(CookingKind::Furnace));
-    let mut inventory = super::PlayerInventory::default();
-    inventory.slots[0] = stack(log, 4);
-    inventory.slots[1] = stack(planks, 7);
-    let mut slots = vec![ItemStack::EMPTY; 3];
-    for slot in [30, 0, 31, 1] {
-        let state_id = menu.state_id;
-        let outcome = menu.click(
-            &rules,
-            &mut inventory,
-            &mut slots,
-            state_id,
-            slot,
-            0,
-            ClickMode::Pickup,
-            false,
-        );
-        assert!(!outcome.resync, "current-state pickup must not need resync");
-    }
-    assert_eq!(slots[INPUT], stack(log, 4));
-    assert_eq!(slots[FUEL], stack(planks, 7));
-    assert!(
-        menu.carried.is_empty(),
-        "fuel placement must empty the cursor"
-    );
-    let mut state = FurnaceState::default();
-    for _ in 0..200 {
-        state.tick(&rules, CookingKind::Furnace, &mut slots);
-    }
-    assert_eq!(state.lit_total, 300);
-    assert_eq!(slots[INPUT], stack(log, 3));
-    assert_eq!(slots[FUEL], stack(planks, 6));
-    assert_eq!(slots[OUTPUT], stack(charcoal, 1));
 }
 
 /// Equivalence oracle: `catch_up` must match explicit repeated `tick`s

@@ -199,7 +199,7 @@ pub(crate) fn opened(state: &mut TickState, entity: EntityId, block: mc_world::B
         "smoker" => CustomStat::InteractWithSmoker,
         "brewing_stand" => CustomStat::InteractWithBrewingStand,
         "crafting_table" => CustomStat::InteractWithCraftingTable,
-        _ if crate::shulker::is_block(name) => CustomStat::OpenShulkerBox,
+        _ if mc_inventory::shulker::is_block(name) => CustomStat::OpenShulkerBox,
         _ if mc_placement::copper::chest(name) => CustomStat::OpenChest,
         _ => return,
     };

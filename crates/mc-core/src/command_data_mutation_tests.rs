@@ -193,7 +193,7 @@ fn data_mutation_block_commits_live_inventory_without_resetting_furnace() {
     let pos = BlockPos { x: 4, y: 60, z: 4 };
     run(&mut state, context, "setblock 4 60 4 minecraft:furnace");
     let stack = item(&state, "minecraft:iron_ingot", 3);
-    let furnace = crate::inventory::furnace::FurnaceState {
+    let furnace = mc_inventory::furnace::FurnaceState {
         lit_remaining: 87,
         lit_total: 1600,
         cook_progress: 31,
