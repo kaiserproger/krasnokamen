@@ -53,6 +53,10 @@ mod chests {
 pub mod chiseled_shelf;
 mod chorus;
 pub(crate) mod chunk_tickets;
+#[cfg(test)]
+mod combat {
+    mod tests;
+}
 pub mod command_args;
 pub mod command_attribute;
 mod command_block_entity;

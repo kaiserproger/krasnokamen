@@ -57,7 +57,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // production lines.
     // D124 inventory combined with the sealed batch 2 cuts: 178 modules.
     // D128 chunk-loader combined with that batch: 176 modules.
-    cycle_modules: 176,
+    // D124 survival combined with inventory, placement, light and chunk-loader: 174 modules.
+    cycle_modules: 174,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
@@ -192,7 +193,13 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         ("entities.rs", 852),
     ],
     // Domain crates split from core keep contributing to the anti-pattern counts.
-    split_crates: &["mc-chunk-loader", "mc-inventory", "mc-light", "mc-placement"],
+    split_crates: &[
+        "mc-chunk-loader",
+        "mc-inventory",
+        "mc-light",
+        "mc-placement",
+        "mc-survival",
+    ],
 };
 
 /// The cycle's production lines on ffd52010: the reference of a diagnostic
