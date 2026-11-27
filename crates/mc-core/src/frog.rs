@@ -3,13 +3,6 @@ use crate::boundary::BlockPos;
 use crate::entities::ColdRow;
 use crate::tick::TickState;
 
-static TYPE: std::sync::LazyLock<u32> =
-    std::sync::LazyLock::new(|| crate::piglin::type_id_of("minecraft:frog").expect("frog type"));
-
-pub(crate) fn is_frog(type_id: u32) -> bool {
-    type_id == *TYPE
-}
-
 pub(crate) fn drive(row: &ColdRow) -> Option<([f64; 3], f64)> {
     if let Some((_, target)) = row.frog_prey {
         return Some((
@@ -83,7 +76,7 @@ fn site(state: &TickState, pos: [f64; 3]) -> Option<[i32; 3]> {
 
 pub(crate) fn run(state: &mut TickState) {
     let mut slots = std::mem::take(&mut state.serial_entity_slots);
-    slots.extend(state.entities.mob_slots(*TYPE));
+    slots.extend(state.entities.mob_slots(crate::blueprint::frog_type()));
     for &slot in &slots {
         let body = state.entities.body(slot);
         let id = body.id;

@@ -374,6 +374,11 @@ pub struct Explosion {
     pub griefing: bool,
 }
 
+/// Creeper fuse length in ticks (vanilla `maxSwell`).
+pub const FUSE_TICKS: u32 = 30;
+/// Vanilla creeper blast power (`explosionRadius` 3, uncharged).
+pub const CREEPER_POWER: f32 = 3.0;
+
 /// Vanilla categories, caps and despawn distances share the data contract.
 pub use mc_data::entity_types::MobCategory;
 
@@ -769,6 +774,25 @@ pub(crate) fn variant_data(
     })
 }
 
+/// The frog protocol type id, resolved once from the immutable entity contract.
+static FROG_TYPE: std::sync::LazyLock<u32> = std::sync::LazyLock::new(|| {
+    (0..mc_data::entity_types::ENTITY_TYPE_COUNT as u32)
+        .find(|&id| {
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(id)
+                .is_some_and(|contract| contract.name == "minecraft:frog")
+        })
+        .expect("frog type")
+});
+
+pub fn is_frog(type_id: u32) -> bool {
+    type_id == *FROG_TYPE
+}
+
+/// The frog protocol type id, for the core's retained frog pass.
+pub fn frog_type() -> u32 {
+    *FROG_TYPE
+}
+
 /// Dye colors by id, as the loot tables name them (`minecraft:sheep/color`).
 pub const DYE_COLORS: [&str; 16] = [
     "white",
@@ -895,8 +919,10 @@ const IDLE_GOALS: &[Goal] = &[Goal {
     kind: GoalKind::Idle,
 }];
 
-/// Vanilla blueprints the core simulates. No type-name branches in the tick:
-/// the entity phase only reads these fields.
+/// Vanilla blueprints the core simulates, before the domain extensions and the
+/// shared capability pass (the host registry runs both, see
+/// [`finish_blueprints`]). No type-name branches in the tick: the entity phase
+/// only reads these fields.
 pub fn vanilla_blueprints(
     entity_types: &mc_data::entity_types::EntityTypeRegistry,
     items: &mc_data::items::ItemRegistry,
@@ -1302,13 +1328,17 @@ pub fn vanilla_blueprints(
             _ => 1,
         };
     }
-    crate::special_mobs::extend_blueprints(entity_types, entity_loot, &mut out);
-    crate::copper_golem::extend_blueprints(entity_types, &mut out);
-    crate::end_fight::extend_blueprints(entity_types, &mut out);
-    crate::species::extend_blueprints(entity_types, items, entity_loot, &mut out);
-    crate::projectiles::extend_blueprints(entity_types, &mut out);
-    crate::vehicles::extend_blueprints(entity_types, &mut out);
-    for (_, blueprint) in &mut out {
+    out
+}
+
+/// Shared per-type capabilities and crossbreeding, applied after the host
+/// appended every domain extension: the extenders read the base table, so the
+/// registry runs them between [`vanilla_blueprints`] and this pass.
+pub fn finish_blueprints(
+    entity_types: &mc_data::entity_types::EntityTypeRegistry,
+    out: &mut [(u32, MobBlueprint)],
+) {
+    for (_, blueprint) in out.iter_mut() {
         vanilla_capabilities(blueprint);
     }
     let id = |name: &str| {
@@ -1319,7 +1349,7 @@ pub fn vanilla_blueprints(
         id("minecraft:donkey"),
         id("minecraft:mule"),
     ) {
-        for (key, blueprint) in &mut out {
+        for (key, blueprint) in out.iter_mut() {
             let partner = if *key == horse {
                 Some(donkey)
             } else if *key == donkey {
@@ -1336,7 +1366,7 @@ pub fn vanilla_blueprints(
     // Vanilla breeds trader llamas with hay like ordinary llamas; a mixed
     // pair produces an ordinary llama.
     if let (Some(llama), Some(trader)) = (id("minecraft:llama"), id("minecraft:trader_llama")) {
-        for (key, blueprint) in &mut out {
+        for (key, blueprint) in out.iter_mut() {
             if *key == trader {
                 blueprint.capabilities.crossbreed = Some(Crossbreed {
                     partner: llama,
@@ -1350,7 +1380,6 @@ pub fn vanilla_blueprints(
             }
         }
     }
-    out
 }
 
 /// `#minecraft:fall_damage_immune` of the 26.1.2 data pack.
@@ -1381,6 +1410,50 @@ const ZOMBIE_FAMILY: [&str; 4] = [
     "minecraft:drowned",
     "minecraft:zombie_villager",
 ];
+
+/// Vanilla Animal/AgeableWaterCreature families; villagers own their age separately.
+pub fn ageable(name: &str) -> bool {
+    matches!(
+        name,
+        "minecraft:sheep"
+            | "minecraft:cow"
+            | "minecraft:mooshroom"
+            | "minecraft:chicken"
+            | "minecraft:pig"
+            | "minecraft:goat"
+            | "minecraft:rabbit"
+            | "minecraft:camel"
+            | "minecraft:camel_husk"
+            | "minecraft:armadillo"
+            | "minecraft:axolotl"
+            | "minecraft:bee"
+            | "minecraft:cat"
+            | "minecraft:wolf"
+            | "minecraft:horse"
+            | "minecraft:donkey"
+            | "minecraft:mule"
+            | "minecraft:skeleton_horse"
+            | "minecraft:zombie_horse"
+            | "minecraft:llama"
+            | "minecraft:trader_llama"
+            | "minecraft:ocelot"
+            | "minecraft:fox"
+            | "minecraft:hoglin"
+            | "minecraft:strider"
+            | "minecraft:dolphin"
+            | "minecraft:squid"
+            | "minecraft:glow_squid"
+            | "minecraft:nautilus"
+            | "minecraft:zombie_nautilus"
+            | "minecraft:happy_ghast"
+            | "minecraft:sniffer"
+            | "minecraft:panda"
+            | "minecraft:polar_bear"
+            | "minecraft:turtle"
+            | "minecraft:frog"
+            | "minecraft:parrot"
+    )
+}
 
 /// Vanilla capability data: the only place the shared-behaviour type lists
 /// live. The tick reads [`MobBlueprint::capabilities`] and params, never names.
@@ -1444,8 +1517,8 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
             _ => AquaticControl::Other,
         },
         explodes: (name == "minecraft:creeper").then_some(Explosion {
-            power: crate::hostile::CREEPER_POWER,
-            fuse_ticks: crate::hostile::FUSE_TICKS,
+            power: CREEPER_POWER,
+            fuse_ticks: FUSE_TICKS,
             griefing: true,
         }),
         temptable: blueprint.has_goal(GoalKind::Breed) && !blueprint.breed_food.is_empty(),
@@ -1487,7 +1560,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
                 | "minecraft:zoglin"
                 | "minecraft:zombie_horse"
         ),
-        ageable: crate::entity_life::ageable(name),
+        ageable: ageable(name),
         milkable: matches!(
             name,
             "minecraft:cow" | "minecraft:goat" | "minecraft:mooshroom"

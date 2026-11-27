@@ -5,7 +5,6 @@ use crate::inventory::ItemRules;
 use crate::survival::{DamageKind, Difficulty};
 use crate::tick::TickState;
 use mc_data::entity_data_value::EntityDataValue;
-use mc_data::entity_data_value::EntityDataValue;
 use mc_data::loot::entity_26_1_2::{
     EntityDeathCause, EntityLootAttack, EntityLootEntity, EntityLootPlayerAttribution,
 };
@@ -104,7 +103,7 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     result.flags.is_on_fire = row.appearance.shared_flags & 1 != 0;
     result.slime_size = row.loot.slime_size.map(i32::from);
     result.raider_is_captain = Some(row.loot.patrol_leader);
-    if crate::mounts::type_id(body).is_some_and(crate::frog::is_frog) {
+    if crate::mounts::type_id(body).is_some_and(crate::blueprint::is_frog) {
         let opaque = (!row.opaque_entity_fields.is_empty()).then(|| {
             mc_nbt::read_named(&mut row.opaque_entity_fields.as_slice())
                 .expect("validated retained entity fields")

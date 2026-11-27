@@ -295,7 +295,7 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
     ) else {
         return;
     };
-    if ageable(contract.name) || contract.name == "minecraft:tadpole" {
+    if crate::blueprint::ageable(contract.name) || contract.name == "minecraft:tadpole" {
         crate::golden_dandelion::sync(row);
     }
     // Custom tame-health attributes were captured natively; presentation alone
@@ -1137,50 +1137,6 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
     fields.extend(crate::mounts::persistence::to_fields(life));
     fields.extend(crate::portals::fields(life.portal));
     fields
-}
-
-/// Vanilla Animal/AgeableWaterCreature families; villagers own their age separately.
-pub(crate) fn ageable(name: &str) -> bool {
-    matches!(
-        name,
-        "minecraft:sheep"
-            | "minecraft:cow"
-            | "minecraft:mooshroom"
-            | "minecraft:chicken"
-            | "minecraft:pig"
-            | "minecraft:goat"
-            | "minecraft:rabbit"
-            | "minecraft:camel"
-            | "minecraft:camel_husk"
-            | "minecraft:armadillo"
-            | "minecraft:axolotl"
-            | "minecraft:bee"
-            | "minecraft:cat"
-            | "minecraft:wolf"
-            | "minecraft:horse"
-            | "minecraft:donkey"
-            | "minecraft:mule"
-            | "minecraft:skeleton_horse"
-            | "minecraft:zombie_horse"
-            | "minecraft:llama"
-            | "minecraft:trader_llama"
-            | "minecraft:ocelot"
-            | "minecraft:fox"
-            | "minecraft:hoglin"
-            | "minecraft:strider"
-            | "minecraft:dolphin"
-            | "minecraft:squid"
-            | "minecraft:glow_squid"
-            | "minecraft:nautilus"
-            | "minecraft:zombie_nautilus"
-            | "minecraft:happy_ghast"
-            | "minecraft:sniffer"
-            | "minecraft:panda"
-            | "minecraft:polar_bear"
-            | "minecraft:turtle"
-            | "minecraft:frog"
-            | "minecraft:parrot"
-    )
 }
 
 /// These AgeableMob subclasses override vanilla `isBaby` to always return

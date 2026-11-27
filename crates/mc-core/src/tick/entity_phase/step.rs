@@ -195,7 +195,7 @@ pub(in crate::tick) fn step_entity(
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);
-    } else if crate::frog::is_frog(row.type_id)
+    } else if crate::blueprint::is_frog(row.type_id)
         && let Some((target, speed)) = crate::frog::drive(ctx.entities.row(row.slot))
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);

@@ -2,8 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::blueprint::FUSE_TICKS;
 use crate::boundary::{ConnectionId, PlayerInput};
-use crate::hostile::{CREEPER_SWELL_DIR_INDEX, FUSE_TICKS, launch_arrow};
+use crate::hostile::{CREEPER_SWELL_DIR_INDEX, launch_arrow};
 use crate::projectiles::{ARROW_IN_GROUND_INDEX, ARROW_STUCK_TICKS};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};

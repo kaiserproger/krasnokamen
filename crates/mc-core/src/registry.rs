@@ -15,7 +15,7 @@ use mc_data::items::krasnokamen_required_items;
 use mc_physics::BlockMaterialIds;
 use mc_world::BlockRegistry;
 
-use crate::blueprint::{MobBlueprint, vanilla_blueprints};
+use crate::blueprint::{MobBlueprint, finish_blueprints, vanilla_blueprints};
 use crate::config::CoreError;
 
 type LoadedVanillaData = (
@@ -600,6 +600,13 @@ impl CoreRegistry {
             collision_boxes[state.id.0 as usize] = boxes;
         }
         let mut blueprints = vanilla_blueprints(&entity_types, &items, &entity_loot);
+        crate::special_mobs::extend_blueprints(&entity_types, &entity_loot, &mut blueprints);
+        crate::copper_golem::extend_blueprints(&entity_types, &mut blueprints);
+        crate::end_fight::extend_blueprints(&entity_types, &mut blueprints);
+        crate::species::extend_blueprints(&entity_types, &items, &entity_loot, &mut blueprints);
+        crate::projectiles::extend_blueprints(&entity_types, &mut blueprints);
+        crate::vehicles::extend_blueprints(&entity_types, &mut blueprints);
+        finish_blueprints(&entity_types, &mut blueprints);
         crate::species::apply_food_tags(&tags, &mut blueprints);
         let name = |id: &str| Identifier::parse(id).expect("vanilla entity identifier parses");
         let item_type_id = entity_types
