@@ -701,19 +701,39 @@ pub(super) fn upgrade_project(
     record: &SettlementRecord,
     images: &[crate::plugin_inventories::native::Image],
 ) -> Option<(Project, String, u8)> {
+    upgrade_project_observed(state, record, images, None)
+}
+
+/// [`upgrade_project`] with the candidate loop written to `diagnostic` when the
+/// planner samples a phase-log record. The admission rules are unchanged.
+pub(super) fn upgrade_project_observed(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[crate::plugin_inventories::native::Image],
+    mut diagnostic: Option<&mut crate::settlements::decision_log::Upgrades>,
+) -> Option<(Project, String, u8)> {
     // One joint bill and one House reserve per call: both walk the projects,
     // the POIs and the recipe index, and the per-building loop below must not
     // repeat that work once per candidate.
     let joint = super::joint_active_bill(state, record.id).unwrap_or_default();
     let reserved = super::house_reserve_bill(state, record, images);
-    record
-        .buildings
-        .values()
-        .filter_map(|building| {
-            let (blueprint, origin, rotation) = upgrade_blueprint(state, record.id, building)?;
-            let level = building.level + 1;
-            let (species, color) =
-                funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
+    let mut funded = 0;
+    for building in record.buildings.values() {
+        let Some((blueprint, origin, rotation)) = upgrade_blueprint(state, record.id, building)
+        else {
+            continue;
+        };
+        let level = building.level + 1;
+        if let Some(log) = diagnostic.as_deref_mut() {
+            log.eligible += 1;
+        }
+        let Some(next) = blueprint.level(level) else {
+            continue;
+        };
+        let Some((species, color)) = funded_variant(state, record.id, &next.materials, images)
+        else {
+            continue;
+        };
             // Stock-only admission policy (docs settlements/construction.md):
             // the executor crafts bill items at haul (`reserve_wood` +
             // `ensure_units`), so `funded_variant` alone admits an upgrade that
@@ -730,8 +750,10 @@ pub(super) fn upgrade_project(
             // other active projects are promised (`with_joint`, the rule
             // `jointly_fundable` applies to a new site), so a birch or spruce
             // village passes and a bill already promised away does not.
-            let bill =
-                super::selected_bill(state, record.id, &blueprint.level(level)?.materials, images)?;
+            let Some(bill) = super::selected_bill(state, record.id, &next.materials, images)
+            else {
+                continue;
+            };
             // The priority House's own bill is reserved while the village is
             // short of roofed beds: an upgrade never spends the stock the
             // House lane is waiting on (runs 2-3 of the final civ series). The
@@ -760,28 +782,41 @@ pub(super) fn upgrade_project(
             if !crate::settlements::construction_crafting::missing_base(state, &own, images)
                 .is_empty()
             {
-                return None;
+                continue;
             }
-            let species = species.to_owned();
-            Some((
-                Project {
-                    settlement: record.id,
-                    blueprint: blueprint.id.clone(),
-                    level,
-                    origin,
-                    rotation,
-                    building: Some(building.id),
-                    structure: String::new(),
-                    ordered: false,
-                    builder: None,
-                    order_seq: None,
+        let project = Project {
+            settlement: record.id,
+            blueprint: blueprint.id.clone(),
+            level,
+            origin,
+            rotation,
+            building: Some(building.id),
+            structure: String::new(),
+            ordered: false,
+            builder: None,
+            order_seq: None,
+        };
+        let admitted = fence_admits(state, &project, species);
+        if let Some(log) = diagnostic.as_deref_mut() {
+            log.funded[funded] = (
+                building.id.0,
+                if admitted {
+                    "fence_admitted"
+                } else {
+                    "fence_refused"
                 },
-                species,
-                color,
-            ))
-        })
-        .take(UPGRADE_CANDIDATES)
-        .find(|(project, species, _)| fence_admits(state, project, species))
+            );
+            log.count = funded + 1;
+        }
+        if admitted {
+            return Some((project, species.to_owned(), color));
+        }
+        funded += 1;
+        if funded == UPGRADE_CANDIDATES {
+            break;
+        }
+    }
+    None
 }
 
 /// Whether the placement fence admits this project's plan: the autonomous

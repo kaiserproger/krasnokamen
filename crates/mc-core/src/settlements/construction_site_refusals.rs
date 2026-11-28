@@ -645,6 +645,40 @@ pub(super) struct SitePass {
     /// `PLAN_CADENCE` admission pass (up to 20 x settlements ticks), so the
     /// settlement stops stepping until that pass reports again.
     pub(super) complete: bool,
+    /// This pass's completed walk materialized nothing (an admission whose
+    /// winner the world refused). Diagnostic only.
+    pub(super) materialization_failed: bool,
+    /// The House kind's own outcome in this pass, when the pass advanced it.
+    /// Diagnostic only: `summary` reports the whole pass, this field the lane.
+    pub(super) house_outcome: Option<&'static str>,
+}
+
+impl SitePass {
+    /// This pass as the phase log records it. Diagnostic only; the numbers are
+    /// the ones the pass already computed.
+    pub(super) fn summary(&self) -> decision_log::Site {
+        let unfunded = self.report.counts[Reason::MaterialBill as usize];
+        decision_log::Site {
+            outcome: if self.site.is_some() {
+                "site_ready"
+            } else if self.materialization_failed {
+                "materialization_refused"
+            } else if self.running && self.waiting {
+                "sweep_holding_site"
+            } else if self.running {
+                "sweep_incomplete"
+            } else if self.report.frontages == 0 {
+                "no_frontage"
+            } else if unfunded > 0 && self.report.examined == 0 {
+                "unfunded"
+            } else {
+                "sweep_empty"
+            },
+            frontages: self.report.frontages,
+            examined: self.report.examined,
+            unfunded,
+        }
+    }
 }
 
 /// Search the funded kinds in priority order over one shared street walk, for an
@@ -714,6 +748,8 @@ fn scan_site_kinds<'a>(
             waiting: false,
             house_advanced: false,
             complete: false,
+            materialization_failed: false,
+            house_outcome: Some("no_frontage"),
         };
     }
     let mut cursor = start % count;
@@ -728,8 +764,10 @@ fn scan_site_kinds<'a>(
     let mut running = false;
     let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
     let mut house_advanced = false;
+    let mut house_outcome = None;
     let mut survey = Survey::default();
     for blueprint in kinds {
+        let house = blueprint.kind == BuildingKind::House;
         let Some(level) = blueprint.level(1) else {
             continue;
         };
@@ -754,10 +792,16 @@ fn scan_site_kinds<'a>(
         };
         if slice.admit && species.is_none() {
             report.reject(Reason::MaterialBill, record.anchor);
+            if house {
+                house_outcome = Some("unfunded");
+            }
             continue;
         }
         if !slice.admit && !sweeps.funded(blueprint.id.as_str()) {
             report.reject(Reason::MaterialBill, record.anchor);
+            if house {
+                house_outcome = Some("unfunded");
+            }
             continue;
         }
         survey.storage = storage::Capacity::for_blueprint(state, record, blueprint, images);
@@ -797,9 +841,15 @@ fn scan_site_kinds<'a>(
             Advance::Incomplete(next) => {
                 cursor = next;
                 running = true;
+                if house {
+                    house_outcome = Some("sweep_incomplete");
+                }
             }
             Advance::Empty => {
                 cursor = 0;
+                if house {
+                    house_outcome = Some("sweep_empty");
+                }
             }
             Advance::Cheapest(origin, rotation) => {
                 // A step that may not admit leaves nothing to materialize: the
@@ -826,6 +876,14 @@ fn scan_site_kinds<'a>(
                         )
                     })
                     .flatten();
+                let materialization_failed = slice.admit && site.is_none();
+                if house {
+                    house_outcome = Some(if materialization_failed {
+                        "materialization_refused"
+                    } else {
+                        "site_ready"
+                    });
+                }
                 // A refused materialization is not an admission: an earlier
                 // kind's unfinished sweep that holds a lot keeps the slot.
                 return SitePass {
@@ -836,6 +894,8 @@ fn scan_site_kinds<'a>(
                     waiting: sweeps.holding(advanced.iter().copied()),
                     house_advanced,
                     complete: true,
+                    materialization_failed,
+                    house_outcome,
                 };
             }
         }
@@ -849,6 +909,8 @@ fn scan_site_kinds<'a>(
         waiting: sweeps.holding(advanced.iter().copied()),
         house_advanced,
         complete: false,
+        materialization_failed: false,
+        house_outcome,
     }
 }
 
@@ -938,6 +1000,7 @@ pub(super) fn scan_sites(
     images: &[super::super::inventory::Image],
     sweeps: &mut Sweeps,
     budget: &mut site_turn::SiteBudget,
+    mut diagnostic: Option<&mut decision_log::Plan>,
     step: Option<u32>,
 ) -> SiteScan {
     let admit = step.is_none();
@@ -960,6 +1023,11 @@ pub(super) fn scan_sites(
         _ => None,
     };
     let house_ran = house.is_some();
+    if let Some(log) = diagnostic.as_deref_mut()
+        && let Some(pass) = house.as_ref()
+    {
+        log.priority_house = Some(pass.summary());
+    }
     let house = house.unwrap_or_else(|| SitePass {
         site: None,
         cursor: record.construction_cursor,
@@ -968,6 +1036,8 @@ pub(super) fn scan_sites(
         waiting: false,
         house_advanced: false,
         complete: false,
+        materialization_failed: false,
+        house_outcome: None,
     });
     let mut running = house.running;
     let mut waiting = house.waiting;
@@ -984,6 +1054,16 @@ pub(super) fn scan_sites(
             funded_memo(state, record, images, sweeps)
         };
         if count != 0 {
+            let funded_house = kinds[..count]
+                .iter()
+                .flatten()
+                .any(|blueprint| blueprint.kind == BuildingKind::House);
+            if let Some(log) = diagnostic.as_deref_mut()
+                && candidate_kinds(state, record, images)
+                    .any(|kind| kind == BuildingKind::House)
+            {
+                log.ordinary_house_funded = Some(funded_house);
+            }
             let pass = scan_site_kinds(
                 state,
                 record,
@@ -1030,6 +1110,12 @@ pub(super) fn scan_sites(
                     refusals = ?pass.report,
                     "funded kinds found no legal site"
                 );
+            }
+            if let Some(log) = diagnostic.as_deref_mut() {
+                log.ordinary_site = Some(pass.summary());
+                if log.ordinary_house_funded == Some(true) {
+                    log.ordinary_house_sweep = pass.house_outcome;
+                }
             }
             funded = Some(pass);
         }
@@ -1082,7 +1168,16 @@ pub(super) fn step_sites(state: &mut TickState, budget: &mut site_turn::SiteBudg
         let restarts = sweeps.restarts_total();
         let scan = {
             let record = state.settlements.get(id).expect("stepped settlement");
-            scan_sites(state, id, record, &images, &mut sweeps, budget, Some(slice))
+            scan_sites(
+                state,
+                id,
+                record,
+                &images,
+                &mut sweeps,
+                budget,
+                None,
+                Some(slice),
+            )
         };
         // A finished walk waits for the settlement's next admission pass. An
         // unfinished walk that still holds a lot keeps stepping; one that holds

@@ -2,6 +2,7 @@
 //! Moved verbatim from `brain.rs`.
 
 use super::*;
+use crate::settlements::decision_log;
 
 pub(super) fn food_points(food: &FoodTable, item: u32) -> i32 {
     food.entries
@@ -16,16 +17,58 @@ pub(super) fn total_food(food: &FoodTable, v: &VillagerState) -> i32 {
             .map(|s| s.count.max(0) * food_points(food, s.item_id))
             .sum::<i32>()
 }
+#[cfg(test)]
 pub(super) fn willing(food: &FoodTable, v: &VillagerState) -> bool {
-    v.age == 0 && !v.sleeping && v.activity != Activity::Panic && total_food(food, v) >= 12
+    willingness_refusal(food, v).is_none()
+}
+
+/// Why a resident is not willing to court. The order is the one the predicate
+/// applied: age, sleep, panic, then rations.
+enum WillingRefusal {
+    Child,
+    Cooldown,
+    Sleeping,
+    Panic,
+    Food,
+    ReservedFood,
+}
+
+fn willingness_refusal(food: &FoodTable, v: &VillagerState) -> Option<WillingRefusal> {
+    if v.age < 0 {
+        Some(WillingRefusal::Child)
+    } else if v.age > 0 {
+        Some(WillingRefusal::Cooldown)
+    } else if v.sleeping {
+        Some(WillingRefusal::Sleeping)
+    } else if v.activity == Activity::Panic {
+        Some(WillingRefusal::Panic)
+    } else if total_food(food, v) < 12 {
+        Some(WillingRefusal::Food)
+    } else {
+        None
+    }
 }
 fn willing_with_production(
     state: &TickState,
     slot: EntitySlot,
     food: &FoodTable,
     v: &VillagerState,
+    refusals: Option<&mut decision_log::WillingRefusals>,
 ) -> bool {
-    willing(food, v) && available_food(state, slot, food, v) >= 12
+    let refusal = willingness_refusal(food, v).or_else(|| {
+        (available_food(state, slot, food, v) < 12).then_some(WillingRefusal::ReservedFood)
+    });
+    if let (Some(refusal), Some(counts)) = (&refusal, refusals) {
+        match refusal {
+            WillingRefusal::Child => counts.child += 1,
+            WillingRefusal::Cooldown => counts.cooldown += 1,
+            WillingRefusal::Sleeping => counts.sleeping += 1,
+            WillingRefusal::Panic => counts.panic += 1,
+            WillingRefusal::Food => counts.food += 1,
+            WillingRefusal::ReservedFood => counts.reserved_food += 1,
+        }
+    }
+    refusal.is_none()
 }
 
 pub(super) fn available_food(
@@ -623,17 +666,44 @@ pub(super) fn abort_courtship(v: &mut VillagerState) {
     v.courtship_started_tick = None;
 }
 pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &mut ChangeSet) {
+    // Under `MC_CORE_PHASE_LOG` each actor's gates are counted per town, and
+    // the town's open window is closed after the loop. Off, this is one cached
+    // boolean test and the loop below adds one `Option` read per gate.
+    let mut diagnostic = decision_log::enabled().then(|| {
+        (
+            state.tick_control.game_ticks(state.tick),
+            std::mem::take(&mut state.settlements.courtship_log),
+        )
+    });
     // Birth searches charge the same shared pool as movement.
     let count = cache.actors().len();
     for offset in 0..count {
         let first = cache.actors()[offset];
+        let mut counts = diagnostic.as_mut().and_then(|(game_time, towns)| {
+            let id = state.entities.row(first).villager.as_ref()?.settlement?;
+            state.settlements.get(id)?;
+            let log = towns.entry(id).or_default();
+            log.observe(id.0, state.tick, *game_time);
+            Some(&mut log.counts)
+        });
+        macro_rules! count {
+            ($field:ident) => {
+                if let Some(c) = counts.as_deref_mut() {
+                    c.$field += 1;
+                }
+            };
+        }
+        count!(actors);
         if !active(state, first) || !cache.admitted(first) {
             continue;
         }
+        count!(admitted);
         let a = state.entities.row(first).villager.as_ref().unwrap();
         let first_id = state.entities.body(first).id;
         if let Some(partner) = a.partner {
+            count!(paired);
             let Some(second) = state.entities.slot_of(partner) else {
+                count!(missing_partner);
                 abort_courtship(state.entities.row_mut(first).villager.as_mut().unwrap());
                 continue;
             };
@@ -650,14 +720,15 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                         b.partner == Some(first_id)
                             && b.courtship_until == a.courtship_until
                             && b.courtship_started_tick == a.courtship_started_tick
-                            && willing_with_production(state, second, &cache.food, b)
+                            && willing_with_production(state, second, &cache.food, b, None)
                     })
-                && willing_with_production(state, first, &cache.food, a)
+                && willing_with_production(state, first, &cache.food, a, None)
                 && a.courtship_started_tick.is_some()
                 && crate::settlements::households::can_breed(state, [first_id, partner])
                 && distance(state.entities.pos(first), state.entities.pos(second)) <= 8.0 * 8.0;
             let due = a.courtship_until.is_some_and(|until| state.tick >= until);
             if !valid {
+                count!(invalid_pair);
                 abort_courtship(state.entities.row_mut(first).villager.as_mut().unwrap());
                 if let Some(b) = state.entities.row_mut(second).villager.as_mut()
                     && b.partner == Some(first_id)
@@ -669,11 +740,13 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             if !due {
                 continue;
             }
+            count!(due);
             if distance(state.entities.pos(first), state.entities.pos(second)) > 5.0 {
                 abort_courtship(state.entities.row_mut(first).villager.as_mut().unwrap());
                 abort_courtship(state.entities.row_mut(second).villager.as_mut().unwrap());
                 continue;
             }
+            count!(due_in_range);
             let mut path = std::mem::take(
                 &mut state
                     .entities
@@ -683,7 +756,11 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                     .unwrap()
                     .navigation_path,
             );
-            let bed = free_bed(state, cache, first, &mut path);
+            let search = allocator::search_free_bed(state, cache, first, &mut path);
+            if let Some(c) = counts.as_deref_mut() {
+                search.count(&mut c.birth_bed);
+            }
+            let bed = search.bed();
             if bed.is_none() && allocator::nodes_exhausted(state) {
                 state
                     .entities
@@ -766,6 +843,7 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                 };
                 let id = state.spawn_mob(type_id, pos, 20.0);
                 if let Some(child) = state.entities.slot_of(id) {
+                    count!(born);
                     let dimension = state.dimension.name().to_owned();
                     let mut parents = [
                         state.entities.row(first).uuid.to_string(),
@@ -796,25 +874,42 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                 }
                 changes.entities_spawned.push(id);
             }
-        } else if state.tick.is_multiple_of(20)
-            && willing_with_production(state, first, &cache.food, a)
-        {
+        } else if state.tick.is_multiple_of(20) {
+            count!(unpaired_on_cadence);
+            if !willing_with_production(
+                state,
+                first,
+                &cache.food,
+                a,
+                counts.as_deref_mut().map(|c| &mut c.ineligible),
+            ) {
+                continue;
+            }
+            count!(willing);
             let pos = state.entities.pos(first);
             let second = bodies_near(state, pos, 8.0, true).find(|&s| {
-                s.0 > first.0
+                let in_range = s.0 > first.0
                     && active(state, s)
-                    && distance(pos, state.entities.pos(s)) <= 8.0 * 8.0
-                    && state.entities.row(s).villager.as_ref().is_some_and(|b| {
-                        b.partner.is_none() && willing_with_production(state, s, &cache.food, b)
-                    })
-                    && crate::settlements::households::can_breed(
-                        state,
-                        [first_id, state.entities.body(s).id],
-                    )
+                    && distance(pos, state.entities.pos(s)) <= 8.0 * 8.0;
+                if !in_range {
+                    return false;
+                }
+                count!(neighbors_in_range);
+                if !state.entities.row(s).villager.as_ref().is_some_and(|b| {
+                    b.partner.is_none() && willing_with_production(state, s, &cache.food, b, None)
+                }) {
+                    return false;
+                }
+                count!(willing_neighbors);
+                crate::settlements::households::can_breed(
+                    state,
+                    [first_id, state.entities.body(s).id],
+                )
             });
             let Some(second) = second else {
                 continue;
             };
+            count!(compatible_pair);
             // Vanilla spends a courtship's food even when no bed takes the
             // baby. A settlement's stored rations are not wasted that way: a
             // resident courts only while a spare bed is reachable, searched on
@@ -835,10 +930,15 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                     .ration_at
                     > state.tick
                 {
+                    count!(ration_wait);
                     continue;
                 }
                 let mut path = std::mem::take(&mut cache.candidate_path);
-                let found = free_bed(state, cache, first, &mut path).is_some();
+                let search = allocator::search_free_bed(state, cache, first, &mut path);
+                if let Some(c) = counts.as_deref_mut() {
+                    search.count(&mut c.pairing_bed);
+                }
+                let found = search.bed().is_some();
                 path.clear();
                 cache.candidate_path = path;
                 if !found {
@@ -854,6 +954,7 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
                     continue;
                 }
             }
+            count!(started);
             let second_id = state.entities.body(second).id;
             let duration = 275 + ((first_id.0 as u64 ^ second_id.0 as u64 ^ state.tick) % 50);
             let until = state
@@ -868,6 +969,9 @@ pub(crate) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             b.courtship_until = Some(until);
             b.courtship_started_tick = Some(state.tick);
         }
+    }
+    if let Some((_, towns)) = diagnostic {
+        state.settlements.courtship_log = towns;
     }
 }
 /// Vanilla `wantsToSpawnGolem`: slept within a day and saw no golem recently.

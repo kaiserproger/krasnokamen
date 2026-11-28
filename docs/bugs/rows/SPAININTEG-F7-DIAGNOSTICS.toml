@@ -6,9 +6,21 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "Re-port family of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143: port feature by feature, no wholesale merge; branch wt/SpainInteg 99b3bf0154da vs main 2123 commits ahead). Source commits: a2ec37ac2 (observe settlement planner and courtship decisions), 720176338 (count both integrated site refusal reasons). These two observability commits were the only family-2/3 neighbours the six behavioural families did not name; they are diagnostics only, so they port last, after F1-F6, and they must not change behaviour."
-regression = []
+regression = [
+  "cargo:mc-core:construction::diagnostics_tests::planner_and_courtship_records_reach_the_phase_log",
+  "cargo:mc-core:settlements::decision_log::tests::courtship_summary_emits_once_per_eligible_window_per_town",
+]
 
-# Ownership: no owner yet (fleet at the 10-live cap on 2026-11-28); waits for a free lane slot.
+# Ported on wt/SpainF7, 2026-11-28: the planner verdict sample, the courtship gate
+# aggregate, the storehouse lane facts and the upgrade candidate list reach
+# `MC_CORE_PHASE_LOG` through `settlements/decision_log.rs` and its callers.
+# 720176338 needs no port: main already counts both integrated refusal reasons
+# (`crates/mc-core/src/settlements/construction_site_refusals.rs:46`, `REASONS`
+# has 27 entries including `LotTreesWithoutRoute`).
+
+# Ownership: ported on `wt/SpainF7` (SpainF7, 2026-11-28) as the diagnostics-only
+# family of receipts/D142/SPAIN-DISPOSITION.md; behaviour unchanged, status stays open
+# until Main promotes it.
 # The disposition table marks BedCounts, BedSearch, Courtship, CourtshipCounts, SHUNNED_PRIORITY and
 # the fuel/carry symbols missing on main; this row covers only the two diagnostic commits, not those
 # behavioural symbols.
