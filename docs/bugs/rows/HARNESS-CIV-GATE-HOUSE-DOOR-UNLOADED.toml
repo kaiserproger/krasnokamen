@@ -12,6 +12,7 @@ regression = [
   "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_refused_straight_walk_takes_a_lateral_hop_then_the_door",
   "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_door_no_hop_can_reach_is_observed_from_the_console_teleport",
   "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_door_no_hop_can_reach_without_a_teleport_fails_with_a_named_error",
+  "harness:civilization-seed-qa:new_house",
 ]
 repro_check = [
   "python3 -m unittest tools.harness.test_civilization_seed_qa.RemoteHouseDoorTests (aa2afc814: the door's chunk is loaded, then a straight walk; a refused straight walk takes a lateral hop; a door no hop reaches is observed from the console teleport; without a teleport a named error replaces the raw client refusal)",
