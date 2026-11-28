@@ -1,8 +1,8 @@
 [[bug]]
 id = "RC6-RELEASE-GATES"
-title = "The RC6 private owner candidate e1f87c2 has no measured host benchmark and no gate receipt; its remaining gates (host benchmark, same-tree player path, restart and custody, owner package smoke) are unrun."
+title = "The RC6 private owner candidate e1f87c2 has no measured host benchmark, no graphical same-tree player path and no restart/custody receipt; its loopback package smoke already passed (receipts/RC6Owner/private-linux/smoke-777/smoke.json, PASS on binary sha b485f3fe…, the e1f87c2 executable)."
 area = "harness"
 repro = "manual"
 severity = "blocker"
 status = "open"
-source = "receipts/D147/D147-RC6-QUEUE.md; candidate pin e1f87c2 (receipts/RC6Owner/). The host benchmark waits for a registered quiet -x window, which is a condition of this row, not a deferral: no second pin without a documented identity suffix, and no rebuild while the saved pin's hash is what the gates name."
+source = "Loopback package smoke PASS: receipts/RC6Owner/private-linux/smoke-777/smoke.json (binary_sha256 b485f3feb31dc8b08bc091f621be606cd8ce26f1e1bb6b0d61befca18252fb23 = the e1f87c2 executable, receipts/RC6Owner/MAIN-BENCH-PREP.md:7); it proves a headless loopback join, not a graphical client. Remaining: receipts/D147/D147-RC6-QUEUE.md; candidate pin e1f87c2 (receipts/RC6Owner/). The host benchmark waits for a registered quiet -x window, which is a condition of this row, not a deferral: no second pin without a documented identity suffix, and no rebuild while the saved pin's hash is what the gates name."
