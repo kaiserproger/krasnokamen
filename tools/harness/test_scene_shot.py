@@ -1543,3 +1543,59 @@ class NewSceneStepTests(unittest.TestCase):
             self.assertEqual(receipt["attack"]["health_after"], 4.0)
             self.assertEqual(receipt["health_after"], 4.0)
 
+
+class EntityRelativeTrajectoryTests(unittest.TestCase):
+    """The trajectory reads the reply it already parses; it must not pass a Java-undeclared filter."""
+
+    LIST_ENTITIES_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "radius": {"type": "number", "minimum": 0.0, "maximum": 128.0, "default": 32.0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 512, "default": 128},
+        },
+        "required": [],
+        "additionalProperties": False,
+    }
+
+    class _Probe:
+        def __init__(self, entities):
+            self.entities = entities
+            self.calls = []
+            self.fixtures = []
+            self.report = {}
+            self.assertions = {}
+
+        def call(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            if name == "minecraft_list_entities":
+                return {"entities": [dict(row) for row in self.entities]}
+            return {}
+
+        def fixture(self, command):
+            self.fixtures.append(command)
+
+        def check(self, name, condition):
+            self.assertions[name] = bool(condition)
+            if not condition:
+                raise AssertionError(name)
+
+    def test_trajectory_filters_the_reply_without_passing_entity_type(self):
+        from tools.harness.backends import scene_shot_checks
+        from tools.harness.mcp_schema import validate
+
+        stand = {"entity_type": "minecraft:armor_stand", "x": 1000.5, "y": 200.0, "z": 1000.5}
+        zombie = {"entity_type": "minecraft:zombie", "x": 1002.5, "y": 200.0, "z": 1000.5}
+        probe = self._Probe([zombie, stand])
+        scene_shot_checks.check_entity_relative_trajectory(probe, Path("."), cycles=1)
+
+        listings = [(name, arguments) for name, arguments in probe.calls
+                    if name == "minecraft_list_entities"]
+        self.assertEqual(len(listings), 2)
+        for _, arguments in listings:
+            self.assertNotIn("entity_type", arguments)
+            validate(self.LIST_ENTITIES_SCHEMA, arguments)
+        self.assertEqual(probe.report["relative_trajectory_origin"], [1000.5, 200.0, 1000.5])
+        self.assertTrue(probe.assertions["relative_trajectory_one_entity_received"])
+        self.assertTrue(probe.assertions["relative_trajectory_returns_the_client_to_the_origin"])
+        self.assertTrue(probe.fixtures)
+        self.assertIn("@e[type=minecraft:armor_stand,limit=1]", probe.fixtures[0])

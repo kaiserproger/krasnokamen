@@ -1776,8 +1776,11 @@ def check_entity_relative_trajectory(probe: ProbeSteps, artifact: Path, *,
     selector = f"@e[type={RELATIVE_TRAJECTORY_ENTITY},limit=1]"
 
     def received() -> tuple[float, float, float]:
-        page = probe.call("minecraft_list_entities", {
-            "radius": 16, "entity_type": RELATIVE_TRAJECTORY_ENTITY, "limit": 16})
+        # The Java catalog's `minecraft_list_entities` declares only radius and limit (the
+        # native client's entity_type/cursor are not in it), so preflight rejects the filter
+        # on every client. Fetch the full bounded page and filter the reply, which carries
+        # entity_type per row on both clients.
+        page = probe.call("minecraft_list_entities", {"radius": 16, "limit": 512})
         rows = [row for row in page.get("entities", [])
                 if isinstance(row, dict) and row.get("entity_type") == RELATIVE_TRAJECTORY_ENTITY]
         probe.check("relative_trajectory_one_entity_received", len(rows) == 1)
