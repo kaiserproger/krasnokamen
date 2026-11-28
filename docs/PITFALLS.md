@@ -152,6 +152,17 @@ without replacements being started. The queue is `docs/bugs/rows`, counted by
 ledger rows). Check: a closing report quotes `ledger list`'s open count and the
 next rows with owners.
 
+**A lane tip marked `changes` was merged as the reviewed fix.** Three times on
+2026-11-28 Main merged a branch whose head a review had already marked
+`changes` (the amended fix was still uncommitted in that worktree), or merged a
+combined branch that also carried an unreviewed persistence change, and in one
+case started a promotion whose reversed tree could not even compile because a
+test called a helper the fix had introduced. Read the disposition and the lane's
+`git status` before merging, not the lane's own "ready" summary, and reverse the
+fix in a scratch tree before promoting. Check: `receipts/D142/SPAIN-DISPOSITION.md`
+says `changes` for the head you are about to merge, or `git -C wt/<lane> status
+--short` is non-empty, or the reversed tree fails to build.
+
 ## The owner host
 
 **A relative path edited Main instead of the worktree.** File tools resolve a
