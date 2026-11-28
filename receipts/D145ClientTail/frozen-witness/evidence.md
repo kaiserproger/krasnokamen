@@ -1,0 +1,5 @@
+# Frozen witness capture reliability
+
+Related rows: NATIVE-FREEZE-CAMERA and NATIVE-FROZEN-FALLING-DRAWN-LATE. Both remain open; this change only prevents `native-v2-frozen-witness` from passing after a requested capture fails. The scene's own admission refuses when load15 is at least 12; `/proc/loadavg` reported load15 22.60 before this change, so no graphical run was attempted.
+
+With the new regression in place, ran `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 8G python3 -m unittest tools.harness.test_native_v2.NativeV2ProbeTests.test_frozen_witness_refuses_failed_capture_and_restores_timeout` from core tree `c1e4ac8e02977fd62170a6ed640da49251d2a69e` with the test added. `control-red.log`: one failure, `RuntimeError not raised` on a timed-out capture. After the production capture fix, the same command exited 0 (`control-green.log`). Both runs use the same test; the red precedes the fix. This is a harness fail-closed control, not a client-visible negative control for either ledger row.

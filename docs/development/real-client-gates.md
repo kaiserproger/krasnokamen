@@ -244,6 +244,9 @@ hit-testing: GUI-scale or layout proofs need a physical XTest click (pattern:
   exonerated by its wording. Xvfb/software rendering and capture overhead belong
   to the recorded backend: compare like with like and never subtract a historical
   `xcb_put_image` estimate to manufacture physical-display FPS.
+- The frozen-entity witness treats a timed-out or failed frame capture as
+  inconclusive and stops; an observation without its requested frame cannot
+  pass the graphical scenario.
 - **Promotion.** A client-visible row closes only through `ledger promote` with
   a registered `harness:<profile>:<scenario>` check that fails at the row's own
   assertion on a control tree with only that fix reversed; controls, client

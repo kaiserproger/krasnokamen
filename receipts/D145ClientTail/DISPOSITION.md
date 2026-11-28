@@ -12,3 +12,7 @@ No graphical run was performed for either row; neither is claimed fixed.
 ## Creative inventory
 
 - CLIENT-CREATIVE-PLACEMENT-DROPPED: open, original intermittent failure not reproduced. A traced shared-stand run passed; the exact command, mismatched diagnostic server pin, result and pointer edges are in [evidence](CLIENT-CREATIVE-PLACEMENT-DROPPED/evidence.md). No fix or red control.
+
+## Frozen presentation
+
+- NATIVE-FREEZE-CAMERA and NATIVE-FROZEN-FALLING-DRAWN-LATE: open. The shared witness now refuses a missing capture, with a focused red/green harness control; the requested client-visible pair has not run. The observed host load (15-minute load 22.60) exceeded the scene's budget of 12, so the scene was not started. See [evidence](frozen-witness/evidence.md).
