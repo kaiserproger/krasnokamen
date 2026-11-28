@@ -104,3 +104,18 @@ dropped as unportable formatting, 0 unassigned, branch retained at
 The branch is a patch series and is not merged wholesale, and no family merges
 until its own row carries a control and a live check. This table is the record:
 each family row names its commits, and the ledger is the queue.
+
+## Port review outcomes (2026-11-28 17:20 host)
+
+| family | port head | review | verdict | amend lane |
+|---|---|---|---|---|
+| F1 territory terrain | `wt/SpainD7Re` `187775ced` | `receipts/SpainF1Review/REPORT.md` (committee-sol) | **changes** — admission checks only the deep subset while execution fills from above, memo keyed by stage index and length, the real-work debit is unbounded, B2 is synthetic, the late-lava test is unfunded | `wt/SpainF1Fix` (`FixSpainF1`) |
+| F2 founding outposts | `wt/SpainF2` `04911e5570` | `receipts/SpainF2Review/REPORT.md` (committee-sol) | **changes** — production planning drops the cross-dimension household, cursor corners collide and do not survive replay, six controls are not Git pre-images, four tests pass on a default | `wt/SpainF2Fix` (`FixSpainF2`) |
+| F3 construction supply | `wt/SpainD7Re` (in port) | — | — | same lane as F1 |
+| F5 released carry | `wt/SpainF5` (in port) | — | — | `SpainF5` |
+
+Both merges were rehearsed and rolled back without touching `main`:
+`integsp-f1-merge` (`415ddeb4b`) and `integsp-f2-merge` (`2575e88c3`) hold the
+clean merges as evidence; `wt/IntegSp` is back at the shared head. F2's merged
+tree passed its own 85 founding tests (`20261128T100631-test-fozz2wzf`), so the
+amend work is about the review findings, not about the merge mechanics.
