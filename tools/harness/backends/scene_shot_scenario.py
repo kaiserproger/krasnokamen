@@ -26,7 +26,8 @@ from . import scene_shot as _qa
 from .scene_shot_checks import (
     check_263_entity_rigs, check_crowd_stream, check_decorated_pot, check_dynamic_context, check_elytra,
     check_entity_visuals,
-    check_element_emission, check_gait_spider, check_held_tool_rest, check_item_bars, check_pig_saddle,
+    check_element_emission, check_entity_relative_trajectory, check_gait_spider, check_held_tool_rest,
+    check_item_bars, check_pig_saddle,
     check_placed_head, check_player_head, check_player_head_registry, check_shade_override,
     check_baby_armor, check_entity_bogged, check_entity_stray, check_wither_skull_selection, check_pufferfish_uv, check_item_pose, check_entity_fire, check_entity_tnt, check_entity_falling_block, check_entity_lightning,
     check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
@@ -102,6 +103,7 @@ NAMED_FIXTURES = {
     "native-village-open-air-home": "village_open_air_home_scene.json",
     "native-village-stair-penetration": "village_stair_penetration_scene.json",
     "native-village-exit-foliage": "village_exit_foliage_scene.json",
+    "native-entity-relative-trajectory": "entity_relative_trajectory_scene.json",
     "native-kelp-ocean-floor": "kelp_ocean_floor_scene.json",
     "native-settlement-radius-growth": "settlement_radius_scene.json",
     "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
@@ -440,6 +442,8 @@ def run(
                 check_dynamic_context(probe, artifact)
             elif ctx.scenario_id == "native-gait-spider":
                 check_gait_spider(probe, artifact)
+            elif ctx.scenario_id == "native-entity-relative-trajectory":
+                check_entity_relative_trajectory(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     except Exception as error:
         # Keep the scenario's own report for the failure receipt: `assertions` says whether an

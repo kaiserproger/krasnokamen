@@ -1237,6 +1237,22 @@ SCENARIOS: dict[str, Scenario] = {
         proves="same-frame walk phase, visible dark spider body and no death-tinted zombie pixels in its camera ROI",
         limits="fixed native gait fixture, night vision and camera; not arbitrary entity occlusion",
     ),
+    "native-entity-relative-trajectory": _entry(
+        id="native-entity-relative-trajectory",
+        summary="A closed +/-0.01 entity trajectory leaves the native client on the server's endpoint",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-entity-relative-trajectory", requires=("xvfb",),
+        sources=("tools/harness/entity_relative_trajectory_scene.json",
+                 "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client on seed 100; one gravity-free armour stand on a stone pad, "
+                "driven 192 times up +0.01 and back to the same y by console tp, each endpoint held "
+                "four client ticks so it is its own relative move",
+        proves="the client's own received entity y after the closed trajectory is within 0.02 blocks "
+               "of the y the server last set; flooring the raw displacement instead loses 1/4096 per "
+               "cycle (0.047 blocks here, 0.25 at the cargo oracle's 1024)",
+        limits="one entity type, one axis, no rotation-only trajectory; the drift is read from the "
+               "client's entity list, not from its rendered frame",
+    ),
     "java-gait-sidecar": _entry(
         id="java-gait-sidecar", summary="Java gait screenshots retain the rendered zombie and spider phases",
         owner="core:harness", evidence="graphical", profile="scene-shot",
