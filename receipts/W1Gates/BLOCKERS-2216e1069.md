@@ -1,0 +1,12 @@
+# The four ledger blockers at `2216e1069` (2026-11-28 17:10)
+
+| row | area / repro | fix | why it is still open | next step that closes it |
+|---|---|---|---|---|
+| `BATTLE-STEEL-ARMOUR-OBSCURES-TEAM` | client / manual | none | The A1 readability defect (steel armour hides team accents from front and rear) is a design plus visual acceptance item; the owner ruled no retake without approval after GO-17c-A failed. | Owner-approved Horizon take with red/blue soldiers in steel, front and rear frames, judged by the owner's own criterion. |
+| `LOADER-SOUND-MIXIN` | gameplay / manual | `432d29d` on unmerged Loader branch; ledger `fix_commit` unset | The reported Fabric 26.1.2 crash came from `ScreenSoundEngineMixin` on Loader's `monitor-fabric` branch. Loader `main` has no such mixin and does not contain `432d29d`, which removes it. The ledger row remains open for a valid control; this is not a known startup failure on Loader `main`. | Follow the row's Loader-owner path: backport `MixinConfigTest` from Loader `main` to `monitor-fabric` and verify its mixin-config assertion on the exact reversal, or integrate the branch before proving it from Loader `main`. |
+| `LOADER-ZOMBIE-SHIELD-MIXIN` | client / client | none | Control proven: reversal `5de8afaa1d1f` fails `everyShippedMixinSelectorExistsInTheGameJar` on the missing `getArmPose`, restore `d50869792617` passes 2/2 (`receipts/D145Client/LOADER-ZOMBIE-SHIELD-MIXIN/`). The current-tree Fabric admission has no result: two gate attempts waited on occupied scene slots (900 s and 1500 s) and never started. | One Fabric admission run on the current tree through `scene-slot.sh` with no wrapper timeout. |
+| `WINDOWS-CLIENT-BUILD-BROKEN` | client / source | `client:1ecc7e9060832d3d` | The fix is in tree (`loopback.rs` no longer reads a PROPVARIANT field windows-core 0.58 lacks), but the proof needs a Windows/MSVC build: the host has no MSVC toolchain and the D149 VM is excluded, Docker socket access is denied (`receipts/D145Client/WINDOWS-CLIENT-BUILD-BROKEN/blocker.md`). | A Windows host or CI runner that runs `cargo build --release --locked --target x86_64-pc-windows-msvc --workspace` on this head. |
+
+Two are external to this repository or host (Loader mixin, Windows toolchain), one
+needs the owner's approval (the armour take), and one needs a free scene slot
+(zombie shield). None of the four is waiting on source work by Main.
