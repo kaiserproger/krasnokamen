@@ -15,6 +15,19 @@ from .backends.probe_steps import ProbeSteps
 
 
 class NativeV2ProbeTests(unittest.TestCase):
+    def test_frozen_witness_refuses_failed_capture_and_restores_timeout(self) -> None:
+        from types import SimpleNamespace
+        from .backends import native_frozen_witness
+
+        client = SimpleNamespace(request_timeout_seconds=90.0)
+        steps = SimpleNamespace(client=client, artifact_dir=Path("/tmp/witness/steps"), report={})
+        with mock.patch.object(native_frozen_witness.native_client, "capture",
+                               side_effect=TimeoutError("frame incomplete")):
+            with self.assertRaisesRegex(RuntimeError, "inconclusive.*frame incomplete"):
+                native_frozen_witness._capture(steps, "frozen-falling")
+        self.assertEqual(client.request_timeout_seconds, 90.0)
+        self.assertIn("frame incomplete", steps.report["capture_errors"]["frozen-falling"])
+
     def test_destroyed_chest_scenario_is_graphical_and_registered(self) -> None:
         name = "native-v2-destroyed-chest"
         self.assertIn(name, native_v2.RUNNERS)

@@ -1,0 +1,139 @@
+gate tree=/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail server=/run/media/kaiserroman/games/solaris-work/pins/2f4d802c08eb-server-x86_64-unknown-linux-gnu-incr client=/run/media/kaiserroman/games/solaris-work/pins/c879f0ae38b7-client-x86_64-unknown-linux-gnu-incr mode=scenario name=native-v2-input-menus avail=  305G
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x718c6fdf1200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+mem-run: scope -p MemoryMax=12G -p MemorySwapMax=1G -p CPUQuota=800% -p CPUWeight=500 nice=19 exclusive=0 perf=0 cpus=all slice=solaris-heavy.slice target=/run/media/kaiserroman/games/solaris-work/targets/slot-f expect=3800MiB key='python3 -m tools.harness run scenario native-v2-input-menus --client native --windowed'
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x7203ed3ce200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:     0.018 s
+   process: user: 0.011 s, system: 0.006 s, faults: 0, rss: 13.1 MiB
+mimalloc: process done: 0x7203ed3ce200
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x786853510200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+[harness] run scenario=native-v2-input-menus profile=entities evidence=graphical artifact=/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T083614-native-v2-input-menus-vqut3yq1
+[harness] PASS profile=entities status=passed artifact=/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T083614-native-v2-input-menus-vqut3yq1 in 93.7s
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:    93.900 s
+   process: user: 1.543 s, system: 0.424 s, faults: 18, rss: 144.6 MiB
+mimalloc: process done: 0x786853510200

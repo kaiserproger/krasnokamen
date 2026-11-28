@@ -35,8 +35,8 @@ def _load15() -> float:
     return float(Path("/proc/loadavg").read_text().split()[2])
 
 
-def _capture(steps: ProbeSteps, label: str) -> dict[str, Any] | None:
-    """One bounded capture; a slow frame is recorded, never waited out."""
+def _capture(steps: ProbeSteps, label: str) -> dict[str, Any]:
+    """One bounded capture; a missing frame makes the run inconclusive."""
     client = steps.client
     previous = getattr(client, "request_timeout_seconds", None)
     try:
@@ -45,9 +45,9 @@ def _capture(steps: ProbeSteps, label: str) -> dict[str, Any] | None:
         frame = native_client.capture(client, steps.artifact_dir.parent, label)
         steps.report.setdefault("captures", {})[label] = frame
         return frame
-    except Exception as error:  # noqa: BLE001 - a slow frame is an outcome, not a failure
+    except Exception as error:
         steps.report.setdefault("capture_errors", {})[label] = f"{type(error).__name__}: {error}"
-        return None
+        raise RuntimeError(f"inconclusive: capture {label} failed: {error}") from error
     finally:
         if previous is not None:
             client.request_timeout_seconds = previous
