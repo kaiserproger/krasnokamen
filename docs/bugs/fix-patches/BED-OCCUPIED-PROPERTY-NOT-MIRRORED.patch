@@ -83,7 +83,7 @@ index 0771976d9..eb1bc3aaf 100644
 +        return;
 +    };
 +    // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
-+    let other = crate::placement::other_half(&state.registry.blocks, head, current)
++    let other = mc_placement::other_half(&state.registry.blocks, head, current)
 +        .map_or(head, |(other, _)| other);
 +    if written.contains(&head) || written.contains(&other) {
 +        return;
