@@ -216,6 +216,15 @@ def run(ctx: ProfileContext) -> dict:
                         # (SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE).
                         final = probe.observe()
                     probe.report["slow_final_observation"] = final
+                    # The row's own symptom: the client must not come back to the world list with the
+                    # fixed-deadline report. It stays observable whether or not the aborted start also
+                    # stopped the server, so a control cannot be carried by a downstream setup check.
+                    _local = final.get("singleplayer") or {}
+                    start_error = " ".join(str(part or "") for part in (
+                        _local.get("error"), final.get("disconnect_reason")))
+                    probe.report["slow_start_error"] = start_error
+                    probe.check("startup_not_aborted_by_a_deadline",
+                                "did not start in time" not in start_error)
                     probe.check("slow_server_listened", result == "listening")
                     probe.check("slow_entered_world", final.get("in_play") is True)
                     probe.report["play_to_first_view_seconds"] = time.monotonic() - started

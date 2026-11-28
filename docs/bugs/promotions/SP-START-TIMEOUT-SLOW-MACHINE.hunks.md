@@ -49,7 +49,7 @@ Test hunks and `README.md` are outside `non_test_patch` and need no entry.
 | `src/local_config.rs` | `@@ -209`, `@@ -217`, `@@ -312`, `@@ -323` | (a) weak-hardware settings defaults |
 | `src/render.rs` | `@@ -113`, `@@ -139`, `@@ -184`, `@@ -437`, `@@ -543`, `@@ -783`, `@@ -861`, `@@ -882` | (a) software-adapter defaults and far-terrain backend selection |
 | `src/render/far_generate.rs` | `@@ -3`, `@@ -23` | (a) far-terrain generation on a software adapter |
-| `src/session.rs` | `@@ -159`, `@@ -261` | (b) the `startup_progress` field and its setter are called by the kept base test `startup_pushes_progress_before_waiting_for_server_readiness` and by the session observation path; reversing it stops the control from compiling |
+| `src/session.rs` | `@@ -159`, `@@ -261` | (a) the weak-hardware `client_defaults` field and its initializer |
 | `src/session/actions.rs` | `@@ -5`, `@@ -729`, `@@ -746`, `@@ -779`, `@@ -847` | (a) the UI/session progress publication behaviour |
 | `src/session/local_server.rs` | `@@ -168` | (a) progress propagation from the local-server launch path |
 | `src/singleplayer.rs` | `@@ -477,7 +476,7 @@` | (a) a comment in the generated singleplayer config (share_terrain_keys wording) |
