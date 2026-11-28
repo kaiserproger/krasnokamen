@@ -18,5 +18,7 @@ repro_check = ["`cargo nextest run -p mc-core --lib every_pending_village_takes_
 # compile rather than one that goes red. The control must drive `autonomy::tick` through state a
 # preimage also accepts (generated sites plus villager markers in the queue) and assert two things:
 # every pending village's gate runs within the rotation window, and no tick steps more than
-# VILLAGES_PER_TICK villages. On the preimage the first assertion fails for villages 4..7 of eight.
+# VILLAGES_PER_TICK villages. The clock-only reversal of 44aa3d95a stepped all eight villages
+# on tick 0 and failed the batch bound, not the progress assertion. The original starvation
+# preimage is 9d1da7f8306e (bcd7ac471^); the retained live fixture has not yet run on that preimage.
 
