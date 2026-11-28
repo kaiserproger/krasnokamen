@@ -17,3 +17,7 @@ No graphical run was performed for either row; neither is claimed fixed.
 
 - NATIVE-FREEZE-CAMERA: open. The shared witness now refuses a missing capture, with a focused red/green harness control; the requested camera-specific pair has not run. The observed host load (15-minute load 22.60) exceeded that witness's budget of 12, so it was not started. See [evidence](NATIVE-FREEZE-CAMERA/evidence.md).
 - NATIVE-FROZEN-FALLING-DRAWN-LATE: fixed-unproven on integration. The real-client control failed the row assertion and the restored client passed it on core 4722b06a; Main must repeat the pair on integration HEAD. See [evidence and logs](NATIVE-FROZEN-FALLING-DRAWN-LATE/evidence.md).
+
+## Player head model
+
+- MODEL-OPUS-N3: fixed-unproven on integration. The real-client control failed the hat-pixel assertion and the restored client passed on core 6d3f1306; Main owns promotion. See [evidence and logs](MODEL-OPUS-N3/evidence.md).
