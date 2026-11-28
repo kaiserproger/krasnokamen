@@ -1,32 +1,24 @@
 {
   "id": "BED-OCCUPIED-PROPERTY-NOT-MIRRORED",
   "verdict": "promoted",
-  "fix_commit": "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
-  "fix_commit_full": "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
-  "promoted_at": "2026-11-24T20:56:05+00:00",
-  "tree_head": "0a785659af4c6e1a842cc0a8b77a0e6cc328d823",
+  "fix_commit": "patch:c8992851bda50fd2f9dfd2356123a90a6f7a43e9017cd6b9352d4dc550e53a4e",
+  "fix_commit_full": "patch:c8992851bda50fd2f9dfd2356123a90a6f7a43e9017cd6b9352d4dc550e53a4e",
+  "promoted_at": "2026-11-28T08:41:46+00:00",
+  "tree_head": "cc250e5ebead1f533e3cbf7c774b0907d461b604",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
+  "control_tree_sha256": "b58df045c23fb00aa49303960536336c1681591740b687cc177b9018287e52b2",
+  "control_tree_head": "cc250e5ebead1f533e3cbf7c774b0907d461b604",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": "fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
+  "fix_patch_sha256": "c8992851bda50fd2f9dfd2356123a90a6f7a43e9017cd6b9352d4dc550e53a4e",
   "reversed_files": [
     "crates/mc-core/src/sleep.rs",
     "crates/mc-core/src/tick/dimension.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it": {
-      "state": "red",
-      "detail": "FAIL",
-      "assertion": {
-        "file": "crates/mc-core/src/sleep_tests.rs",
-        "line": 1321,
-        "error": "panic",
-        "class": "unknown"
-      }
-    },
     "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it": {
       "state": "red",
       "detail": "FAIL",
@@ -34,34 +26,85 @@
         "file": "crates/mc-core/src/sleep_tests.rs",
         "line": 1300,
         "error": "panic",
-        "class": "unknown"
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/sleep_tests.rs",
+        "line": 1321,
+        "error": "panic",
+        "class": "assertion"
       }
     },
     "harness:scene-shot:native-bed-occupied-state": {
-      "state": "unrunnable",
-      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-bed-occupied-state --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/regressions-client-6.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/client-artifacts/20261128T083156-native-bed-occupied-state-w86saa7r/result.json",
+      "assertion": {
+        "name": "bed_head_occupied_contains_0"
+      }
+    },
+    "harness:scene-shot:native-village-occupied-bed": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-occupied-bed --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/regressions-client-7.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/client-artifacts/20261128T083221-native-village-occupied-bed-lomxjddk/result.json",
+      "assertion": {
+        "name": "resident_bed_head_occupied_contains_0"
+      }
     }
   },
   "restored": {
+    "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it": {
+      "state": "green",
+      "detail": ""
+    },
     "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it": {
+    "harness:scene-shot:native-bed-occupied-state": {
       "state": "green",
-      "detail": ""
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/client-artifacts/20261128T083945-native-bed-occupied-state-d3iee73j/result.json"
+    },
+    "harness:scene-shot:native-village-occupied-bed": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v/client-artifacts/20261128T084019-native-village-occupied-bed-xj4a8wat/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T204850-native-bed-occupied-state-vrfd0gew/result.json",
-    "tree_head": "0a785659af4c6e1a842cc0a8b77a0e6cc328d823",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T081512-native-bed-occupied-state-r5_cpbb5/result.json",
+    "tree_head": "cc250e5ebead1f533e3cbf7c774b0907d461b604",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "269eeaf00723e73edcb3324b7ce7a74493d956f859b453815d58f8bf693714c3",
+    "server_binary_sha256": "df6bd41cfa7cb40b6e2e0a133f357319ea0270cd41da0c8973ca487add7887ce",
     "covers": [
       "harness:scene-shot:native-bed-occupied-state"
     ],
     "profile": "scene-shot"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T205132-ledger-promote-x9e6a0hj"
+  "test_guard": {
+    "packages": [
+      "mc-core"
+    ],
+    "tests": {
+      "baseline": 11002,
+      "after": 11002,
+      "lost": [],
+      "newly_ignored": [],
+      "added": []
+    },
+    "lock": {
+      "removed": [],
+      "rerecorded": [],
+      "added_cases": []
+    },
+    "verdict": "pass",
+    "problems": []
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/BEDLane/.analysis/validation/20261128T082623-ledger-promote-c5l3737v"
 }
