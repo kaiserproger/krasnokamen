@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/settlements/buildings.rs b/crates/mc-core/src/settlements/buildings.rs
+index 55753523..98a736c9 100644
+--- a/crates/mc-core/src/settlements/buildings.rs
++++ b/crates/mc-core/src/settlements/buildings.rs
+@@ -502,6 +502,7 @@ pub(crate) fn upgrade(state: &mut TickState, id: BuildingId) -> Result<(), CertE
+         .expect("validated settlement");
+     record.revision = record.revision.saturating_add(1);
+     let building = record.buildings.get_mut(&id).expect("validated building");
++    building.level += 1;
+     building.revision = building.revision.saturating_add(1);
+     building.work_points = points;
+     building.natural_zone = false;

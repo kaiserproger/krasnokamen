@@ -1,0 +1,179 @@
+{
+  "client": "native",
+  "client_binary": {
+    "dirty": false,
+    "head": "529ed2dfe4c1ec9cbcf5f43b7489f09625dc5d5a",
+    "manifest_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/manifest.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5"
+  },
+  "commands": [
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-303e19a0-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+      "--config",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/scene-shot.toml",
+      "--no-console"
+    ],
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+      "play",
+      "--profile",
+      "offline-test",
+      "--server",
+      "127.0.0.1:43723",
+      "--username",
+      "SceneShot",
+      "--automation",
+      "--mcp-http",
+      "127.0.0.1:0",
+      "--windowed",
+      "--data-dir",
+      "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data",
+      "--runtime-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/runtime",
+      "--artifact-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/artifacts"
+    ]
+  ],
+  "details": {
+    "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/artifacts",
+    "binary_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "binary_sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5",
+    "binary_status": "ready",
+    "command_index": 1,
+    "descriptor": {
+      "endpoint": "http://127.0.0.1:43219/mcp",
+      "instance_id": "native-3703628-1795862364441923213",
+      "pid": 3703628,
+      "profile": "offline-test",
+      "protocol_versions": [
+        "2025-11-25"
+      ],
+      "started_unix_ms": "1795862366696",
+      "token_file": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/runtime/native-3703628-1795862364441923213.token"
+    },
+    "descriptor_path": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/runtime/native-3703628-1795862364441923213.json",
+    "failure": {
+      "client_binary": {
+        "path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+        "sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5"
+      },
+      "exit_code": null,
+      "logs": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/server.log",
+        "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/xvfb.log",
+        ".analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/native-client.log"
+      ],
+      "phase": "assertion",
+      "server_binary": {
+        "path": "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-303e19a0-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+        "sha256": "06fd200056b556b605315739d146e3678cd8358fa043825b3eebaed5378a9ce9"
+      },
+      "signal": null
+    },
+    "headless": false,
+    "initialized": true,
+    "launch_status": "ready",
+    "log": "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/native-client.log",
+    "named_scenario": {
+      "commands_cwd": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09",
+        "/run/media/kaiserroman/games/solaris-work/solaris-client"
+      ],
+      "does_not_prove": "chat commands, not the Buildings dialog Upgrade button (army-qa presses that); does not build with Builders (buildings-qa) or cover level 3, gates or other workshop kinds",
+      "evidence": "graphical",
+      "expected_tests": [],
+      "fixture": "private world; flat stone pad; hand-built stone wall, tower, barracks with two beds and a farmer workshop with composters inside `/settlement create buildqa 32`",
+      "id": "native-settlement-buildings-upgrade",
+      "manifest": null,
+      "prerequisites": [
+        "xvfb"
+      ],
+      "profile": "scene-shot",
+      "proves": "the native player receives a certificate for each of the four kinds (fortification, military, production) and the upgrade replies `Upgraded building #<id> to level 2.` for the expanded wall and the farmer workshop given a second composter",
+      "repo_revisions": {
+        "krasnokamen": "af014f2d7788bc9164fc6b4c2accf35c81945c39",
+        "krasnokamen-default-plugins": "635a05dc93552df3e0e69c96970cf3402c94caf7",
+        "krasnokamen-loader": "d508697926173402fb8b52ca4a2d90492127c675"
+      },
+      "scenario_id": "native-settlement-buildings-upgrade",
+      "seed": null,
+      "selector": [],
+      "sources": [
+        "tools/harness/backends/scene_shot.py",
+        "tools/harness/settlement_buildings_scene.json"
+      ]
+    },
+    "operator_fixture": [
+      {
+        "bypassesPlayerLimit": false,
+        "level": 4,
+        "name": "SceneShot",
+        "uuid": "313555a5-c3e0-3d79-b235-d5e2250f2842"
+      }
+    ],
+    "operator_fixture_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/ops.json",
+    "pid": 3703628,
+    "protocol_version": "2025-11-25",
+    "resource_paths": {
+      "KRASNOKAMEN_CLIENT_ASSET_INDEX": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets/asset-index.json",
+      "KRASNOKAMEN_CLIENT_ASSET_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets",
+      "KRASNOKAMEN_CLIENT_DATA_DIR": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/data/vanilla",
+      "KRASNOKAMEN_CLIENT_RESOURCE_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/resources"
+    },
+    "root": "/run/media/kaiserroman/games/solaris-work/solaris-client",
+    "runtime_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-48uofge2/runtime",
+    "scenario": {
+      "error": "scene-shot assertion failed: wall_upgraded_to_level_2",
+      "scenario": {
+        "assertions": {
+          "chat_received_Certified wall #": true,
+          "chat_received_Founded buildqa": true,
+          "in_play": true,
+          "teleport_arrived": true,
+          "wall-certified_contains_0": true,
+          "wall_certification_reply": true,
+          "wall_one_certified_building": true,
+          "wall_upgraded_to_level_2": false
+        },
+        "error": "RuntimeError: scene-shot assertion failed: wall_upgraded_to_level_2",
+        "fixture_commands": [],
+        "id": "scene-shot",
+        "passed": false
+      }
+    },
+    "server_binary_path": "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-303e19a0-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+    "server_binary_sha256": "06fd200056b556b605315739d146e3678cd8358fa043825b3eebaed5378a9ce9",
+    "settings_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/xdg/krasnokamen-client/client-settings.json",
+    "settings_sha256": "760e77013809907b4444c29b41ba6cb28163ba547ccee2a2ed7f938f21980a99",
+    "validation_mode": "graphical",
+    "window_focus": {
+      "display": ":113",
+      "mechanism": "XRaiseWindow+XSetInputFocus",
+      "pid": 3703628,
+      "window_id": 2097154,
+      "x_server_focus_verified": true
+    }
+  },
+  "duration_seconds": 38.096,
+  "ended_at": "2026-11-28T10:39:53+00:00",
+  "error": "scene-shot assertion failed: wall_upgraded_to_level_2",
+  "exits": [
+    0,
+    -15
+  ],
+  "logs": [
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/server.log",
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Ctl09/.analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/xvfb.log",
+    ".analysis/validation/20261128T103915-native-settlement-buildings-upgrade-0_4hnwar/native-client.log"
+  ],
+  "profile": "scene-shot",
+  "scope": "real-client",
+  "started_at": "2026-11-28T10:39:13+00:00",
+  "status": "failed",
+  "tree": {
+    "dirty": true,
+    "head": "af014f2d7788bc9164fc6b4c2accf35c81945c39",
+    "sha256": "303e19a07f5a88a154e8a4d709842b90c0defe4fbbf00b2c337f097e4ef33e91"
+  }
+}

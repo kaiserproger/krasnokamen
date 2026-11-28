@@ -124,3 +124,19 @@ Both merges were rehearsed and rolled back without touching `main`:
 clean merges as evidence; `wt/IntegSp` is back at the shared head. F2's merged
 tree passed its own 85 founding tests (`20261128T100631-test-fozz2wzf`), so the
 amend work is about the review findings, not about the merge mechanics.
+
+## F5 review and the unassigned families (2026-11-28 17:55 host)
+
+| family | port head | state |
+|---|---|---|
+| F5 released carry | `wt/SpainF5` `cefaf35e2` | ported (7 carry tests, each red with its own hunk reverted; fmt and code-health green), review `ReviewSpainF5` running |
+| F3 construction supply | `wt/SpainF3` (base `af9094c23`) | lane `SpainF3` porting `2e2213ce7`, `1fd4bc9f6`, `ed0697168`, `6fb805771` |
+| F4 builder shun | `wt/SpainF4` (base `af9094c23`) | lane `SpainF4` porting `0cd64cdbe`, `e1d84f9c5` |
+| F6 perimeter route | `wt/SpainF6` (base `af9094c23`) | lane `SpainF6` porting `702bb6e41` plus the harness budget/finalize commits `d8f9990f6`, `696379ab6`, `d46fe2af6` |
+
+F3 and F4 were previously queued behind F1 on `wt/SpainD7Re`; that lane is now
+amending review findings, so both moved to their own worktrees rather than wait.
+No family is unowned: F7 diagnostics still waits for a free slot and keeps its
+row (`SPAININTEG-F7-DIAGNOSTICS`). The decision of this file is unchanged and
+now executed family by family: nothing is merged wholesale and nothing is
+dropped.

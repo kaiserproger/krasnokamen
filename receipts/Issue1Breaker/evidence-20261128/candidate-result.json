@@ -1,0 +1,172 @@
+{
+  "client": "native",
+  "client_binary": {
+    "dirty": false,
+    "head": "529ed2dfe4c1ec9cbcf5f43b7489f09625dc5d5a",
+    "manifest_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/manifest.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5"
+  },
+  "commands": [
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+      "--config",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/scene-shot.toml",
+      "--no-console"
+    ],
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+      "play",
+      "--profile",
+      "offline-test",
+      "--server",
+      "127.0.0.1:37371",
+      "--username",
+      "SceneShot",
+      "--automation",
+      "--mcp-http",
+      "127.0.0.1:0",
+      "--windowed",
+      "--data-dir",
+      "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data",
+      "--runtime-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/runtime",
+      "--artifact-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/artifacts"
+    ]
+  ],
+  "details": {
+    "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/artifacts",
+    "binary_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "binary_sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5",
+    "binary_status": "ready",
+    "client_latency_ms": 0,
+    "command_index": 1,
+    "descriptor": {
+      "endpoint": "http://127.0.0.1:45597/mcp",
+      "instance_id": "native-3697305-1795862318895366329",
+      "pid": 3697305,
+      "profile": "offline-test",
+      "protocol_versions": [
+        "2025-11-25"
+      ],
+      "started_unix_ms": "1795862321099",
+      "token_file": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/runtime/native-3697305-1795862318895366329.token"
+    },
+    "descriptor_path": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/runtime/native-3697305-1795862318895366329.json",
+    "headless": false,
+    "initialized": true,
+    "launch_status": "ready",
+    "log": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/native-client.log",
+    "named_scenario": {
+      "commands_cwd": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2",
+        "/run/media/kaiserroman/games/solaris-work/solaris-client"
+      ],
+      "does_not_prove": "chat commands, not the Buildings dialog Upgrade button (army-qa presses that); does not build with Builders (buildings-qa) or cover level 3, gates or other workshop kinds",
+      "evidence": "graphical",
+      "expected_tests": [],
+      "fixture": "private world; flat stone pad; hand-built stone wall, tower, barracks with two beds and a farmer workshop with composters inside `/settlement create buildqa 32`",
+      "id": "native-settlement-buildings-upgrade",
+      "manifest": null,
+      "prerequisites": [
+        "xvfb"
+      ],
+      "profile": "scene-shot",
+      "proves": "the native player receives a certificate for each of the four kinds (fortification, military, production) and the upgrade replies `Upgraded building #<id> to level 2.` for the expanded wall and the farmer workshop given a second composter",
+      "repo_revisions": {
+        "krasnokamen": "af014f2d7788bc9164fc6b4c2accf35c81945c39",
+        "krasnokamen-default-plugins": "635a05dc93552df3e0e69c96970cf3402c94caf7",
+        "krasnokamen-loader": "d508697926173402fb8b52ca4a2d90492127c675"
+      },
+      "scenario_id": "native-settlement-buildings-upgrade",
+      "seed": null,
+      "selector": [],
+      "sources": [
+        "tools/harness/backends/scene_shot.py",
+        "tools/harness/settlement_buildings_scene.json"
+      ]
+    },
+    "operator_fixture": [
+      {
+        "bypassesPlayerLimit": false,
+        "level": 4,
+        "name": "SceneShot",
+        "uuid": "313555a5-c3e0-3d79-b235-d5e2250f2842"
+      }
+    ],
+    "operator_fixture_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/ops.json",
+    "pid": 3697305,
+    "protocol_version": "2025-11-25",
+    "resource_paths": {
+      "KRASNOKAMEN_CLIENT_ASSET_INDEX": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets/asset-index.json",
+      "KRASNOKAMEN_CLIENT_ASSET_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets",
+      "KRASNOKAMEN_CLIENT_DATA_DIR": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/data/vanilla",
+      "KRASNOKAMEN_CLIENT_RESOURCE_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/resources"
+    },
+    "root": "/run/media/kaiserroman/games/solaris-work/solaris-client",
+    "runtime_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-4b1b5xrk/runtime",
+    "scenario": {
+      "assertions": {
+        "barracks-certified_contains_0": true,
+        "chat_received_Certified barracks #": true,
+        "chat_received_Certified farmer #": true,
+        "chat_received_Certified tower #": true,
+        "chat_received_Certified wall #": true,
+        "chat_received_Founded buildqa": true,
+        "farmer-certified_contains_0": true,
+        "farmer_certification_reply": true,
+        "farmer_one_certified_building": true,
+        "farmer_upgraded_to_level_2": true,
+        "in_play": true,
+        "teleport_arrived": true,
+        "tower-certified_contains_0": true,
+        "wall-certified_contains_0": true,
+        "wall_certification_reply": true,
+        "wall_one_certified_building": true,
+        "wall_upgraded_to_level_2": true
+      },
+      "fixture_commands": [],
+      "id": "scene-shot",
+      "passed": true
+    },
+    "screenshots": [
+      "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/screenshots/separate-buildings.png"
+    ],
+    "seed": 100,
+    "server_binary_path": "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+    "server_binary_sha256": "d9f6264ffcc2e2e423ff37fce990c20567b2fdf11ef4ecded0b2ed425e08acc2",
+    "settings": {},
+    "settings_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/xdg/krasnokamen-client/client-settings.json",
+    "settings_sha256": "760e77013809907b4444c29b41ba6cb28163ba547ccee2a2ed7f938f21980a99",
+    "validation_mode": "graphical",
+    "window_focus": {
+      "display": ":113",
+      "mechanism": "XRaiseWindow+XSetInputFocus",
+      "pid": 3697305,
+      "window_id": 2097154,
+      "x_server_focus_verified": true
+    }
+  },
+  "duration_seconds": 43.546,
+  "ended_at": "2026-11-28T10:39:13+00:00",
+  "error": null,
+  "exits": [
+    0,
+    -15
+  ],
+  "logs": [
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/server.log",
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/xvfb.log",
+    ".analysis/validation/20261128T103829-native-settlement-buildings-upgrade-lzbdsyv2/native-client.log"
+  ],
+  "profile": "scene-shot",
+  "scope": "real-client",
+  "started_at": "2026-11-28T10:38:28+00:00",
+  "status": "passed",
+  "tree": {
+    "dirty": false,
+    "head": "af014f2d7788bc9164fc6b4c2accf35c81945c39",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
