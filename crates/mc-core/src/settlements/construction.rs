@@ -3536,6 +3536,10 @@ pub(super) fn validate_pending(
 pub(crate) mod tests;
 
 #[cfg(test)]
+#[path = "construction_carry_release_tests.rs"]
+pub(crate) mod carry_release_tests;
+
+#[cfg(test)]
 #[path = "construction_culture_tests.rs"]
 mod culture_tests;
 
