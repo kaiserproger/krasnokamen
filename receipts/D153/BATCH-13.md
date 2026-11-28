@@ -1,18 +1,13 @@
 # Batch 13 — landing receipt
 
-Pushed `241bf6a9a..84af5aa67` to `origin/main` (`git@github.com:kaiserproger/krasnokamen.git`),
-signal `solaris-main-landed` sent. Under the owner rule that a not-yet-green
+Pushed `241bf6a9a..84af5aa67` to `origin/main` (the push used `kaiserproger/solaris.git`,
+which GitHub redirects to `kaiserproger/krasnokamen.git`); signal `solaris-main-landed` sent. Under the owner rule that a not-yet-green
 commit may land with a fix-forward, the L2 below was still running at push time.
 
 ## Commits
 
 | commit | subject |
 |---|---|
-| `6c14f3002` | fix(dev): key client pins on the embedded asset models |
-| `4af5cd8d3` | docs(batch12): record the push and the open L2 verdict |
-| `580ffd51a` | docs(ledger): the spear row has no promotable evidence yet |
-| `bb3edbe86` | fix(harness): read a JUnit 5 assertion as a red control |
-| `241bf6a9a` | docs(ledger): promote JAVA-BATTLE-SPEAR-PLAIN-ATTACK |
 | `fce0a1f00` | docs(bugs): CmdBlocks command/block row controls (furnace, harvest, lumber, mine) |
 | `43bff7de8` | Merge branch `wt/CmdBlocks` |
 | `aeda9aadc` | test(harness): capture fixture acceptance before damage and scene shots |
@@ -33,8 +28,9 @@ commit may land with a fix-forward, the L2 below was still running at push time.
 ## L2
 
 `python3 -m tools.harness run correctness` in
-`.analysis/validation/20261128T093209-correctness-uwlz_vpd/` on this tree,
-started 16:32 and still running at the push (clippy stage at 16:52). The earlier
+`.analysis/validation/20261128T093209-correctness-uwlz_vpd/` started at 16:32:09
+on `86ec8d5ec`, before the docs-only commit `84af5aa67` (16:32:47). It was still
+running at the push; the exact start fingerprint will be in its `result.json`. The earlier
 batch-12 L2 (`.analysis/validation/20261128T084217-correctness-_i94jl4b/`) was
 abandoned after its push when main moved under it: it reported fmt, clippy and
 code-health green and 2028 of 9546 tests with zero failures before it was

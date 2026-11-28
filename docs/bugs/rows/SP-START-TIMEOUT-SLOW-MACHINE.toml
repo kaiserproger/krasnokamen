@@ -4,9 +4,11 @@ title = "On a slow machine, singleplayer Play on a new world fails with 'Server 
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
 regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
-proving_assertions = { "harness:singleplayer-regressions:native-sp-slow-machine" = "slow_entered_world" }
+proving_assertions = { "harness:singleplayer-regressions:native-sp-slow-machine" = "startup_not_aborted_by_a_deadline" }
 failing_first = "reported"
-repro_check = "candidate: START_TIMEOUT (180 s) was removed by 6a8d255a but that hunk no longer reverse-applies (file drifted) and no cargo ref observes the absence of a deadline - only harness:singleplayer-regressions:native-sp-slow-machine does; area=client, real-client check required"
+repro_check = 'candidate: committed client reversal pair 7d5ce3e9 (restores the 180 s START_TIMEOUT) -> c80d1ffe (re-lands the fix); git diff 7d5ce3e9 c80d1ffe is exactly the deadline hunk (patch-id bc53ef29) and the re-land tree equals client c879f0ae. Real-client pair on this candidate (core d03fe0b, tree sha e3b0c442, server pin ded4679c): restore client c80d1ffe PASSED native-sp-slow-machine with server_wait_seconds 493.8 and startup_not_aborted_by_a_deadline true (receipts/LedgerClientNet/restore/result.json); control client 7d5ce3e9 FAILED the same scenario at startup_not_aborted_by_a_deadline with the client error Server did not start in time while server_wait_seconds 473.2 shows the server still listened afterwards (receipts/LedgerClientNet/control/result.json). ledger promote --dry-run ok. Harness: startup_not_aborted_by_a_deadline reads the final observation singleplayer.error/disconnect_reason and is evaluated whether or not the aborted start also stopped the server; a failed singleplayer run records its assertion map (ctx.failure_scenario). Map: docs/bugs/promotions/SP-START-TIMEOUT-SLOW-MACHINE.hunks.md.'
+fix_commit = "client:c80d1feffa9a0ad989cdcd92b72f27aa0c8ff952"
+promotion = "docs/bugs/promotions/SP-START-TIMEOUT-SLOW-MACHINE.json"

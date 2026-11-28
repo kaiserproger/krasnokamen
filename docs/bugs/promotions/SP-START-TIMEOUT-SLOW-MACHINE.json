@@ -1,0 +1,60 @@
+{
+  "id": "SP-START-TIMEOUT-SLOW-MACHINE",
+  "verdict": "promoted",
+  "fix_commit": "client:c80d1feffa9a0ad989cdcd92b72f27aa0c8ff952",
+  "fix_commit_full": "c80d1feffa9a0ad989cdcd92b72f27aa0c8ff952",
+  "promoted_at": "2026-11-28T09:46:23+00:00",
+  "tree_head": "d03fe0bd5c9c20765b529b4b38155d432f8f2bc8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/LedgerClientNet/control/result.json",
+    "client_head": "7d5ce3e949c167882e80765abd57ea3efd2a5a74",
+    "server_binary_sha256": "ded4679c14807023acfd26cc81cf2152163d3735c76bdb27569a0e70b2080a1c",
+    "red": [
+      "harness:singleplayer-regressions:native-sp-slow-machine"
+    ],
+    "states": {
+      "harness:singleplayer-regressions:native-sp-slow-machine": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/LedgerClientNet/restore/result.json",
+    "client_head": "c80d1feffa9a0ad989cdcd92b72f27aa0c8ff952",
+    "server_binary_sha256": "ded4679c14807023acfd26cc81cf2152163d3735c76bdb27569a0e70b2080a1c",
+    "green": [
+      "harness:singleplayer-regressions:native-sp-slow-machine"
+    ],
+    "states": {
+      "harness:singleplayer-regressions:native-sp-slow-machine": "green"
+    },
+    "tree_head": "d03fe0bd5c9c20765b529b4b38155d432f8f2bc8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/LedgerClientNet/restore/result.json",
+    "client_head": "c80d1feffa9a0ad989cdcd92b72f27aa0c8ff952",
+    "server_binary_sha256": "ded4679c14807023acfd26cc81cf2152163d3735c76bdb27569a0e70b2080a1c",
+    "green": [
+      "harness:singleplayer-regressions:native-sp-slow-machine"
+    ],
+    "states": {
+      "harness:singleplayer-regressions:native-sp-slow-machine": "green"
+    },
+    "tree_head": "d03fe0bd5c9c20765b529b4b38155d432f8f2bc8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "bc53ef2908f318c2f14447b73376e86f5ed2f519",
+    "paths": [
+      "src/singleplayer.rs"
+    ]
+  },
+  "candidate_refs": {},
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerClientNet/.analysis/validation/20261128T094623-ledger-promote-digbp7s6"
+}
