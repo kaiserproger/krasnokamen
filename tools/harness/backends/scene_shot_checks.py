@@ -1785,6 +1785,10 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
     # The pad top is y=160; every subject is summoned standing on it.
     ground = 160.0
 
+    def rig_id(rig) -> str:
+        """The authored model id a binding's rig key names (`minecraft:cold_cow#main` -> `cold_cow`)."""
+        return str(rig or "").removeprefix("minecraft:").split("#")[0]
+
     def subject(name: str, types: tuple[str, ...], rig: str):
         frame = shots[name][0]
         extraction = frame.get("entity_extraction") or {}
@@ -1794,7 +1798,7 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
         if dump.is_file():
             dumped = (json.loads(dump.read_text()).get("entities") or [])
         record = next((entry for entry in records
-                       if entry.get("entity_type") in types and entry.get("rig") == rig), None)
+                       if entry.get("entity_type") in types and rig_id(entry.get("rig")) == rig), None)
         layers = [layer for layer in (extraction.get("entity_layer_geometry") or [])
                   if str(layer.get("material") or "") == "EntityCutout"
                   and int(layer.get("indices") or 0) > 0]
