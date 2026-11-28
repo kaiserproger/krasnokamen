@@ -230,6 +230,19 @@ Start a failing gate from its receipt
 and classify it (fixture, environment, stale binary, product) before you change
 product code.
 
+**The snapshot variable pointed at the server binary.** A civilization gate
+(2026-11-28, `receipts/GateProgram/CIV2-ENV-ERROR.md`) ran 55 live minutes and then
+died at the birth snapshot with `unexpected argument '--addr'`: the launch set
+`KRASNOKAMEN_SNAPSHOT_BINARY` to the pinned `krasnokamen` **server**, while
+`village_autonomy_qa.py:705-733` runs that step through `player-scale-bots`, whose hash
+check only compares whatever path it is given. Probe the binary's own `--help` for
+`--native-snapshot` at launch, and give the bots pin to `KRASNOKAMEN_SNAPSHOT_BINARY`
+and `KRASNOKAMEN_BOTS_BINARY`. The reader's spec must be the run's own
+`birth-snapshot-spec.json` (`native_seed` 24 here, not an invented 100, which fails as
+`invalid native record: identity mismatch`); test it against a retained stopped world
+before booking another slot. Check: `player-scale-bots --help | grep -- --native-snapshot`
+and one offline snapshot that prints `success True`.
+
 **A gate ran a stale or foreign binary.** `cargo test` does not rebuild the
 `krasnokamen` binary; pooled target directories once served another tree's
 artifacts (an `unresolved import` of a known symbol, new tests silently
