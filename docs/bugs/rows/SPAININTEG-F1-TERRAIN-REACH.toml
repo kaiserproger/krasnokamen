@@ -1,0 +1,9 @@
+[[bug]]
+id = "SPAININTEG-F1-TERRAIN-REACH"
+title = "Inside the territory a deep fill or a hillside cut is refused instead of being built from storage by one reach rule; the parked wt/SpainInteg family-1 commits are unported on current main"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Family 1 of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143 decision: re-port feature by feature, no wholesale merge). Source commits on wt/SpainInteg 99b3bf0154da: d5123e2e1 (one reach rule builds deep fill and hillside cut inside the territory, owner D7/D45), ccc408d56 (terrain ramps for deep fills and high cuts), 83e97e4e8 (D7 review: admit terrain work by the executor's own rules, check live cuts, bill real work). The disposition table marks the added symbols missing on main: TERRAIN_REACH, MAX_BLUEPRINT_RESERVED_HEIGHT, UNITS_PER_LOT, and the named tests (a_fill_thirty_blocks_deep_is_paid_from_storage_and_completed, a_fill_twelve_blocks_deep_is_paid_from_storage_and_completed, a_hillside_far_above_the_roof_is_cut_into_storage_and_the_building_completes, a_cut_under_a_late_falling_block_is_refused_without_debit, a_cut_under_the_builders_feet_is_refused_without_debit, a_fill_is_served_only_from_above, a_fluid_source_that_needs_the_ramp_is_a_named_refusal, a_ramp_step_outside_the_territory_is_refused). Port lane: wt/SpainD7Re (receipts/SpainD7Re/REPORT.md)."
+regression = []
