@@ -74,9 +74,10 @@ the record the owner asked for, so the branch does not hang undecided.
 
 - F1 terrain — lane `wt/SpainD7Re` (row `SPAININTEG-F1-TERRAIN-REACH`), porting.
 - F3 construction supply, F4 builder shun — queued behind F1 on the same lane.
-- F2 founding outposts, F5 released carry — **no owner yet**; they wait for a
-  free lane slot (fleet is at the 10-live cap). Not dropped: their rows exist
-  and name the source commits.
+- F2 founding outposts — lane `wt/SpainF2` (row `SPAININTEG-F2-FOUNDING-OUTPOSTS`),
+  porting since 15:52; source files under edit, no commit yet.
+- F5 released carry — **no owner yet**; waits for a free lane slot. Not dropped:
+  its row exists and names the source commits.
 - F6 villager perimeter — queued after F4.
 
 ## Closure (D142 final, 2026-11-28)
@@ -88,7 +89,7 @@ ledger row that names its source commits.
 | family | commits | row | state |
 |---|---|---|---|
 | F1 territory terrain | `d5123e2e1`, `ccc408d56`, `83e97e4e8` | `SPAININTEG-F1-TERRAIN-REACH` | in port (lane `wt/SpainD7Re`) |
-| F2 founding outposts and daughter split | `7e9ad6c24`, `2195981eb`, `98eab23e3`, `a0ae2b282` | `SPAININTEG-F2-FOUNDING-OUTPOSTS` | no owner yet, waits for a lane slot |
+| F2 founding outposts and daughter split | `7e9ad6c24`, `2195981eb`, `98eab23e3`, `a0ae2b282` | `SPAININTEG-F2-FOUNDING-OUTPOSTS` | in port (lane `wt/SpainF2`) |
 | F3 construction supply | `2e2213ce7`, `1fd4bc9f6`, `ed0697168`, `6fb805771` | `SPAININTEG-F3-CONSTRUCTION-SUPPLY` | queued behind F1 on `wt/SpainD7Re` |
 | F4 builder shun and stall | `0cd64cdbe`, `e1d84f9c5` | `SPAININTEG-F4-BUILDER-SHUN` | queued behind F3 |
 | F5 released-carry custody | `18ea1a5c3`, `33554901a` | `SPAININTEG-F5-RELEASED-CARRY` | no owner yet, waits for a lane slot |
