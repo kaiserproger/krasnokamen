@@ -177,7 +177,7 @@ fn production_and_builder_assignment_exclude_each_other_and_paused_debt_cannot_b
             &mut state,
             uuid,
             "no-project",
-            [1, 201, 1],
+            crate::plugin_structures::settlement_builds::Pickup::bank([1, 201, 1]),
             wheat
         ),
         Err(mc_script::ScriptOperationFailure::Busy)

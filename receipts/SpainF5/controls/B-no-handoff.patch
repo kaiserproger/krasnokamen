@@ -1,0 +1,12 @@
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -1688,7 +1688,8 @@
+     match pickup.source {
+         // A debtor is debited by identity: the route's cell never chooses the
+         // body that pays.
+-        PickupSource::Debtor(donor) => released_carry::take(state, id, uuid, donor, item, *wanted),
++        // pre-port: a resident route never debited, the bank gate refused it
++        PickupSource::Debtor(_) => Err(Failure::Forbidden),
+         PickupSource::Bank => {
+             let haul = bank_haul(state, id, &request, pickup.at, item)?;
+             let changes: Vec<_> = haul

@@ -950,6 +950,9 @@ mod game_clock_tests;
 #[path = "native_clock_conversion_drill_tests.rs"]
 mod clock_conversion_tests;
 
+#[path = "native_construction_carry_drill_tests.rs"]
+mod construction_carry_tests;
+
 #[path = "native_dimension_clock_drill_tests.rs"]
 mod dimension_clock_tests;
 

@@ -4,6 +4,9 @@ pub(crate) use super::portions::PortionKind;
 use super::*;
 use crate::settlements::{SettlementId, inventory};
 
+#[path = "settlement_builds_carry.rs"]
+pub(crate) mod released_carry;
+
 pub(crate) fn owner(id: SettlementId) -> String {
     format!("@settlement:{}", id.0)
 }
@@ -1664,7 +1667,7 @@ pub(crate) fn fetch(
     state: &mut TickState,
     uuid: uuid::Uuid,
     handle: &str,
-    position: [i32; 3],
+    pickup: Pickup,
     item: u32,
 ) -> Result<(), Failure> {
     let slot = state.entities.slot_of_uuid(uuid).ok_or(Failure::NotFound)?;
@@ -1678,53 +1681,113 @@ pub(crate) fn fetch(
     if crate::settlements::economy::worker_reserved(state, Some(id), uuid) {
         return Err(Failure::Busy);
     }
-    let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
-    let (plan, mut remaining_bill) = {
-        let ledger = ledger(state)?;
-        // Only the builder bound to this project hauls for it, and only against
-        // that project's remaining bill (S1b/S2: carry is per project).
-        let project = state
-            .settlements
-            .get(id)
-            .and_then(|record| {
-                crate::settlements::construction::project_for_structure(record, handle)
-            })
-            .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
-            .ok_or(Failure::Forbidden)?;
-        let record = structure(&ledger, &owner(id), &project.structure)?;
-        let mut bill = remaining(record)
-            .into_iter()
-            .map(|material| {
-                let name = mc_data::Identifier::parse(&material.resource)
-                    .map_err(|_| Failure::InvalidRequest)?;
-                let item = state
-                    .registry
-                    .items
-                    .id_of(&name)
-                    .ok_or(Failure::InvalidRequest)?;
-                Ok((
-                    item,
-                    u32::try_from(material.quantity).map_err(|_| Failure::Capacity)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, Failure>>()?;
-        for stack in carry.slots.iter().filter(|stack| stack.count > 0) {
-            if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
-                *count = count.saturating_sub(stack.count as u32);
-            }
-        }
-        let mut plan = haul_plan(state, record, &carry.slots);
-        crate::settlements::construction::order_storage_haul(
-            state,
-            id,
-            &project.blueprint,
-            &mut plan,
-        );
-        (plan, bill)
-    };
-    if !plan.iter().any(|(planned, _)| *planned == item) {
+    let request = haul_request(state, id, uuid, handle)?;
+    let Some((_, wanted)) = request.plan.iter().find(|(planned, _)| *planned == item) else {
         return Err(Failure::Blocked);
+    };
+    match pickup.source {
+        // A debtor is debited by identity: the route's cell never chooses the
+        // body that pays.
+        PickupSource::Debtor(donor) => released_carry::take(state, id, uuid, donor, item, *wanted),
+        PickupSource::Bank => {
+            let haul = bank_haul(state, id, &request, pickup.at, item)?;
+            let changes: Vec<_> = haul
+                .images
+                .into_iter()
+                .zip(haul.stock_after)
+                .filter_map(|(before, after)| {
+                    (before.slots != after).then_some(inventory::Change { before, after })
+                })
+                .chain(std::iter::once(inventory::Change {
+                    before: haul.carry,
+                    after: haul.carry_after,
+                }))
+                .collect();
+            let crafting = crafting_receipt(state, handle, haul.crafting_delta)?;
+            inventory::commit(state, changes)?;
+            if let Some(ledger) = crafting {
+                save(state, ledger);
+            }
+            Ok(())
+        }
     }
+}
+
+/// The bound builder's remaining bill and this trip's plan, before any stock is
+/// touched. Shared by the real bank debit and the pre-route admissibility probe.
+struct HaulRequest {
+    carry: inventory::Image,
+    plan: Vec<(u32, u32)>,
+    bill: Vec<(u32, u32)>,
+    handle: String,
+}
+
+fn haul_request(
+    state: &TickState,
+    id: SettlementId,
+    uuid: uuid::Uuid,
+    handle: &str,
+) -> Result<HaulRequest, Failure> {
+    let carry = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
+    let ledger = ledger(state)?;
+    // Only the builder bound to this project hauls for it, and only against
+    // that project's remaining bill (S1b/S2: carry is per project).
+    let project = state
+        .settlements
+        .get(id)
+        .and_then(|record| crate::settlements::construction::project_for_structure(record, handle))
+        .filter(|project| project.builder.map(|(bound, _)| bound) == Some(uuid))
+        .ok_or(Failure::Forbidden)?;
+    let record = structure(&ledger, &owner(id), &project.structure)?;
+    let mut bill = remaining(record)
+        .into_iter()
+        .map(|material| {
+            let name = mc_data::Identifier::parse(&material.resource)
+                .map_err(|_| Failure::InvalidRequest)?;
+            let item = state
+                .registry
+                .items
+                .id_of(&name)
+                .ok_or(Failure::InvalidRequest)?;
+            Ok((
+                item,
+                u32::try_from(material.quantity).map_err(|_| Failure::Capacity)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, Failure>>()?;
+    for stack in carry.slots.iter().filter(|stack| stack.count > 0) {
+        if let Some((_, count)) = bill.iter_mut().find(|(item, _)| *item == stack.item_id) {
+            *count = count.saturating_sub(stack.count as u32);
+        }
+    }
+    let mut plan = haul_plan(state, record, &carry.slots);
+    crate::settlements::construction::order_storage_haul(state, id, &project.blueprint, &mut plan);
+    Ok(HaulRequest {
+        carry,
+        plan,
+        bill,
+        handle: handle.to_owned(),
+    })
+}
+
+/// What one bank haul would move, computed without mutating anything. A route
+/// picks the bank only when this succeeds for the real plan, not merely when a
+/// one-unit craft probe does.
+struct Haul {
+    images: Vec<inventory::Image>,
+    stock_after: Vec<Vec<mc_data::ItemStack>>,
+    carry: inventory::Image,
+    carry_after: Vec<mc_data::ItemStack>,
+    crafting_delta: BTreeMap<u32, i64>,
+}
+
+fn bank_haul(
+    state: &TickState,
+    id: SettlementId,
+    request: &HaulRequest,
+    position: [i32; 3],
+    item: u32,
+) -> Result<Haul, Failure> {
     let images = source_images(state, id);
     if !images.iter().any(|image| {
         matches!(&image.endpoint,
@@ -1734,18 +1797,20 @@ pub(crate) fn fetch(
     }
     let mut stock_after: Vec<Vec<mc_data::ItemStack>> =
         images.iter().map(|image| image.slots.clone()).collect();
-    let mut carry_after = carry.slots.clone();
+    let mut carry_after = request.carry.slots.clone();
     let rules = state.registry.item_rules();
     // The rest of the settlement's active bills are not this haul's to spend
     // (D8 review SOL-3).
-    let Some(neighbours) = crate::settlements::construction::other_active_bill(state, id, handle)
+    let Some(neighbours) =
+        crate::settlements::construction::other_active_bill(state, id, &request.handle)
     else {
         // Another project's bill cannot be read, so its materials cannot be
         // reserved: refuse the haul instead of spending them (SOL-3b).
         return Err(Failure::Blocked);
     };
+    let mut remaining_bill = request.bill.clone();
     let mut crafting_delta = BTreeMap::<u32, i64>::new();
-    for (planned, wanted) in plan {
+    for (planned, wanted) in request.plan.iter().copied() {
         // Craft the whole haul; on a shortfall settle for what stock can give.
         let mut amount = wanted;
         let mut crafted = None;
@@ -1760,6 +1825,7 @@ pub(crate) fn fetch(
                     None => future.push((*item, *count)),
                 }
             }
+            released_carry::deduct(state, id, &mut future);
             let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
             let reserved = if specific {
                 Default::default()
@@ -1899,23 +1965,13 @@ pub(crate) fn fetch(
             *count = count.saturating_sub(moved as u32);
         }
     }
-    let changes: Vec<_> = images
-        .into_iter()
-        .zip(stock_after)
-        .filter_map(|(before, after)| {
-            (before.slots != after).then_some(inventory::Change { before, after })
-        })
-        .chain(std::iter::once(inventory::Change {
-            before: carry,
-            after: carry_after,
-        }))
-        .collect();
-    let crafting = crafting_receipt(state, handle, crafting_delta)?;
-    inventory::commit(state, changes)?;
-    if let Some(ledger) = crafting {
-        save(state, ledger);
-    }
-    Ok(())
+    Ok(Haul {
+        images,
+        stock_after,
+        carry: request.carry.clone(),
+        carry_after,
+        crafting_delta,
+    })
 }
 
 /// Preflight canonical recipe facts before publishing custody or its receipt.
@@ -2089,7 +2145,105 @@ pub(crate) fn return_carry_of(
     }
 }
 
+/// Which custody pool a route debits. The cell is a destination, not an
+/// identity: two debtors, or a bank and a resident, can share one cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PickupSource {
+    /// Pooled settlement storage at the route's cell.
+    Bank,
+    /// Exactly this released resident's owed construction carry.
+    Debtor(uuid::Uuid),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Pickup {
+    pub(crate) source: PickupSource,
+    /// Cell to stand at: the bank container's or the debtor's floored cell.
+    pub(crate) at: [i32; 3],
+}
+
+impl Pickup {
+    pub(crate) fn bank(at: [i32; 3]) -> Self {
+        Self {
+            source: PickupSource::Bank,
+            at,
+        }
+    }
+
+    pub(crate) fn debtor(uuid: uuid::Uuid, at: [i32; 3]) -> Self {
+        Self {
+            source: PickupSource::Debtor(uuid),
+            at,
+        }
+    }
+}
+
+/// Prefer bank stock or bank crafting only when this builder's real haul from
+/// that bank is admissible; the one-unit craft probe ignores reservations and
+/// the shared wood account.
+pub(crate) fn bank_admissible(
+    state: &TickState,
+    id: SettlementId,
+    uuid: uuid::Uuid,
+    handle: &str,
+    position: [i32; 3],
+    item: u32,
+) -> bool {
+    let Ok(request) = haul_request(state, id, uuid, handle) else {
+        return false;
+    };
+    if !request.plan.iter().any(|(planned, _)| *planned == item) {
+        return false;
+    }
+    bank_haul(state, id, &request, position, item).is_ok()
+}
+
+/// The route this bound builder should take for `item`: an admissible bank, or
+/// else one addressable debtor carried by identity to the debit.
 pub(crate) fn pickup_point(
+    state: &TickState,
+    id: SettlementId,
+    uuid: uuid::Uuid,
+    handle: &str,
+    item: u32,
+    origin: [f64; 3],
+) -> Option<Pickup> {
+    let images = source_images(state, id);
+    let has_item = |image: &inventory::Image| {
+        image
+            .slots
+            .iter()
+            .any(|stack| stack.item_id == item && stack.count > 0)
+    };
+    let exact = images.iter().any(has_item);
+    let probe = exact || crate::settlements::construction_crafting::can_craft(state, item, &images);
+    if probe {
+        let bank = images
+            .iter()
+            .filter(|image| !exact || has_item(image))
+            .filter_map(|image| {
+                let inventory::Endpoint::Container { position, .. } = &image.endpoint else {
+                    return None;
+                };
+                let distance = (origin[0] - f64::from(position[0])).powi(2)
+                    + (origin[2] - f64::from(position[2])).powi(2);
+                Some((*position, distance))
+            })
+            .min_by(|(_, a), (_, b)| a.total_cmp(b))
+            .map(|(point, _)| point);
+        if let Some(position) = bank
+            && bank_admissible(state, id, uuid, handle, position, item)
+        {
+            return Some(Pickup::bank(position));
+        }
+    }
+    released_carry::pickup_point(state, id, item, origin)
+        .map(|(donor, at)| Pickup::debtor(donor, at))
+}
+
+/// Display-only route for diagnostics: the best material cell without a real
+/// haul probe. Never used to debit.
+pub(crate) fn pickup_cell(
     state: &TickState,
     id: SettlementId,
     item: u32,
@@ -2104,7 +2258,7 @@ pub(crate) fn pickup_point(
     };
     let exact = images.iter().any(has_item);
     if !exact && !crate::settlements::construction_crafting::can_craft(state, item, &images) {
-        return None;
+        return released_carry::pickup_point(state, id, item, origin).map(|(_, at)| at);
     }
     images
         .iter()
@@ -2121,6 +2275,44 @@ pub(crate) fn pickup_point(
         .map(|(point, _)| point)
 }
 
+/// Whether this route must be approached exactly: a debtor is transferred
+/// body-to-body, so standing at the cell centre is not enough.
+pub(crate) fn needs_approach(
+    state: &TickState,
+    id: SettlementId,
+    slot: crate::entities::EntitySlot,
+    pickup: &Pickup,
+    item: u32,
+) -> bool {
+    match pickup.source {
+        PickupSource::Bank => false,
+        PickupSource::Debtor(donor) => !released_carry::in_reach(state, id, slot, donor, item),
+    }
+}
+
+/// The pre-existing container reach (cell centre, body feet).
+fn bank_reached(state: &TickState, slot: crate::entities::EntitySlot, at: [i32; 3]) -> bool {
+    let p = state.entities.pos(slot);
+    (p[0] - f64::from(at[0]) - 0.5).powi(2)
+        + (p[1] - f64::from(at[1])).powi(2)
+        + (p[2] - f64::from(at[2]) - 0.5).powi(2)
+        <= 2.5_f64.powi(2)
+}
+
+/// Actual reach for the tick's transfer gate: the bank keeps its container
+/// reach, a debtor uses the exact body-to-body fence.
+pub(crate) fn pickup_reached(
+    state: &TickState,
+    id: SettlementId,
+    slot: crate::entities::EntitySlot,
+    pickup: &Pickup,
+    item: u32,
+) -> bool {
+    match pickup.source {
+        PickupSource::Bank => bank_reached(state, slot, pickup.at),
+        PickupSource::Debtor(donor) => released_carry::in_reach(state, id, slot, donor, item),
+    }
+}
 /// A durable outpost reserves its full future site before its first structure.
 pub(crate) fn expedition_reserved(
     state: &TickState,

@@ -6,4 +6,59 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Re-port family of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143: port feature by feature, no wholesale merge; branch wt/SpainInteg 99b3bf0154da vs main 2123 commits ahead). Source commits: 18ea1a5c3 (keep released construction carry available in full villages), 33554901a (align released-carry routing with the custody fence). Added symbols the disposition table marks missing on main: released_carry (git grep released_carry main is empty), a_return_duty_reserves_only_its_addressable_physical_stock, physical_handoff_is_bounded_by_the_duty_and_preserves_stack_components, a_smaller_duty_caps_the_handoff_before_the_remaining_haul, bank_crafting_is_preferred_to_a_released_resident_pickup, donor_arrival_and_handoff_share_the_exact_body_distance, released_construction_handoff_replays_both_carries_and_the_return_duty, handoff_cut, near_bodies. Nothing is retired from the branch and nothing is merged yet."
-regression = []
+regression = [
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_return_duty_reserves_only_its_addressable_physical_stock",
+  "cargo:mc-core:settlements::construction::carry_release_tests::physical_handoff_is_bounded_by_the_duty_and_preserves_stack_components",
+  "cargo:mc-core:settlements::construction::carry_release_tests::donor_arrival_and_handoff_share_the_exact_body_distance",
+  "cargo:mc-core:settlements::construction::carry_release_tests::bank_crafting_is_preferred_to_a_released_resident_pickup",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_handoff_leaves_the_unpaid_part_of_the_duty_recorded",
+  "cargo:mc-core:settlements::construction::carry_release_tests::released_fences_unblock_full_bank_storehouse_next_cell",
+  "cargo:mc-core:settlements::construction::carry_release_tests::worksite_release_returns_26_planks_and_the_next_builder_collects_all_four_fences",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_smaller_duty_caps_the_handoff_before_the_remaining_haul",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_bank_and_a_resident_in_one_cell_debit_the_selected_body",
+  "cargo:mc-core:settlements::construction::carry_release_tests::two_debtors_in_one_cell_debit_only_the_selected_body",
+  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::released_construction_handoff_replays_both_carries_and_the_return_duty",
+  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::unpublished_construction_handoff_recovers_the_original_custody_and_duty",
+]
+repro_check = """Ported onto main 3d5dd3f40 in wt/SpainF5, not cherry-picked. Reviewed changes
+(2026-11-28, committee-sol) applied on cefaf35e2:
+1. Typed custody source. The route now carries Pickup { PickupSource::Bank | Debtor(uuid), at }:
+   pickup_point picks the bank only when bank_admissible runs the builder's real haul plan,
+   otherwise it returns the debtor uuid, and fetch/take debit exactly that uuid. A cell is a
+   destination, never an identity.
+2. Bank preference has a debit check. can_craft still gates the probe, but the chosen bank must
+   also pass bank_haul (same plan, reservations and shared wood account as fetch); a probe that
+   passes while the spend is refused now routes to and debits the debtor.
+3. Tests assert the debit, not the coordinate: bank_crafting_is_preferred_to_a_released_resident_pickup
+   checks the bank fences leave the bank in one phase and stay untouched while the debtor pays in the
+   refused phase. New: a_bank_and_a_resident_in_one_cell_debit_the_selected_body,
+   two_debtors_in_one_cell_debit_only_the_selected_body.
+4. Non-zero duty. a_handoff_leaves_the_unpaid_part_of_the_duty_recorded keeps 2 of 4 owed after a
+   2-fence trip; the published WAL drill now carries 6, owes 6, moves 4 and must replay Some(2),
+   remaining >= 0. The drill no longer asserts the in-memory duty, so the E control reds at replay.
+5. Tick boundary. donor_arrival_and_handoff_share_the_exact_body_distance ticks at [16.34,201,16.34]:
+   inside the 2.5 body radius (1.907) and outside the old cell-centre predicate (2.602).
+Green on the final tree: 20261128T114246-test-9frmob8c carry_release 10/10 passed;
+20261128T114418-test-du0hnx2j construction_carry 2/2 passed; fmt 20261128T114426-fmt-gze4ald1;
+code-health 20261128T114441-code-health-bu1ejhk7.
+Controls are reverse patches generated from the pre-port 3d5dd3f40 text for one hunk each, stored in
+receipts/SpainF5/controls/ with the patch sha256 bound to its red receipt:
+- A-no-deduct.patch c22c9a6831958cb533db4a3f057d61cd87988767cacb5d2ffdc0b4b271a9ec4e,
+  20261128T113102-test-_9d9u92n: released_fences, a_return_duty (its addressable fourth case:
+  "an addressable duty funds future work: InsufficientItems"), donor_arrival, worksite red.
+- B-no-handoff.patch 94999179cffeada5af3bff60c7fc5edc08476febd1c8247f6de25a6246939b4f,
+  20261128T113254-test-yucyus3j: 8 of 10 red (physical, smaller duty, unpaid remainder, worksite,
+  bank priority, colliding, two debtors, donor_arrival); the debtor route refuses as pre-port did.
+- C-no-pickup-route.patch fe60706fccc8dc6ce3164504fbb04a40004b6ffa3a62fba99b528a6e428e234b,
+  20261128T113446-test-7ghow4nt: worksite, bank priority, colliding, donor_arrival red.
+- D1-work-exact-false.patch 1094a10412531658c728e23b7c8fc4e2f84855c7bb5525de781d9ce6378ce904,
+  20261128T113635-test-er_2rb5w: donor_arrival red only, at target.exact.
+- D2-tick-cell-centre.patch c75fe1ee2468b0f8fd2f394a7f738241d13abb04213df940cdb04b9be147cd66,
+  20261128T113801-test-cpjruvh5: donor_arrival red only, at the final duty-cleared assert, so the
+  work hunk and the tick hunk are each covered by a distinct control.
+- E-no-duty-update.patch 189e708d448a57114198224f9c91bdaee5ac8c6cafa841b9da58aafeaf7d965f,
+  20261128T113918-test-gjpmm_n6: the published drill reds after crash() on
+  "the unpaid duty replays": Some([(fence,6)]) vs Some([(fence,2)]); the unpublished case passes.
+Behaviour not ported: nothing behavioural; the style-only ece50bfc5 commit stays unported.
+Row stays open: repro = "client", so promotion needs a real-client run before fixed.
+"""

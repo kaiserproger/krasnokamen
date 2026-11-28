@@ -1,0 +1,11 @@
+--- a/crates/mc-core/src/villager/building.rs
++++ b/crates/mc-core/src/villager/building.rs
+@@ -656,7 +656,7 @@
+         {
+             if step == 0
+                 && let Some(pickup) = storage_target(state, slot, id, &project.structure, item)
+-                && executor::pickup_reached(state, id, slot, &pickup, item)
++                && super::mining::near(state, slot, block_pos(pickup.at), 2.5)
+             {
+                 let uuid = state.entities.row(slot).uuid;
+                 if let Err(reason) = executor::fetch(state, uuid, &project.structure, pickup, item)

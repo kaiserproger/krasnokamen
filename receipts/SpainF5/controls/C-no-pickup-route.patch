@@ -1,0 +1,12 @@
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -2237,8 +2237,7 @@
+             return Some(Pickup::bank(position));
+         }
+     }
+-    released_carry::pickup_point(state, id, item, origin)
+-        .map(|(donor, at)| Pickup::debtor(donor, at))
++    None
+ }
+ 
+ /// Display-only route for diagnostics: the best material cell without a real

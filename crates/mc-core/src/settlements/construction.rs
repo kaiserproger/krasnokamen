@@ -2429,7 +2429,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     });
     let pickup = material
         .zip(position)
-        .and_then(|((item, _), pos)| executor::pickup_point(state, id, item, pos));
+        .and_then(|((item, _), pos)| executor::pickup_cell(state, id, item, pos));
     let navigation = villager.and_then(|v| v.navigation_target);
     let navigation_failed = villager.map(|v| v.navigation_search_failed);
     // A failed first recovery (another window without a cell) gives back the
@@ -3641,6 +3641,10 @@ pub(super) fn validate_pending(
 #[cfg(test)]
 #[path = "construction_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "construction_carry_release_tests.rs"]
+pub(crate) mod carry_release_tests;
 
 #[cfg(test)]
 #[path = "construction_culture_tests.rs"]

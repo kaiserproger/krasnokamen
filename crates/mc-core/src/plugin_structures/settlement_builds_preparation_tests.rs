@@ -36,7 +36,7 @@ fn a_native_haul_journals_recipe_changes_but_not_custody_transfers() {
     let handle = project.structure.clone();
     let before = counts(&state);
     let next = next_material(&state, id, &handle).unwrap().unwrap().0;
-    fetch(&mut state, uuid, &handle, [1, 201, 1], next).unwrap();
+    fetch(&mut state, uuid, &handle, Pickup::bank([1, 201, 1]), next).unwrap();
     let mut physical_delta: BTreeMap<_, i64> = counts(&state)
         .into_iter()
         .map(|(item, count)| (item, i64::from(count)))

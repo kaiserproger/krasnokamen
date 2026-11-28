@@ -1,0 +1,15 @@
+--- a/crates/mc-core/src/villager/building.rs
++++ b/crates/mc-core/src/villager/building.rs
+@@ -363,10 +363,9 @@
+     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
+         && !carried(v, item, count)
+     {
+-        let pickup = storage_target(state, slot, id, &project.structure, item)?;
+         return Some(WorkTarget {
+-            pos: block_pos(pickup.at),
+-            exact: executor::needs_approach(state, id, slot, &pickup, item),
++            pos: block_pos(storage_target(state, slot, id, &project.structure, item)?.at),
++            exact: false,
+         });
+     }
+     // Already outside the footprint and in reach of the next cell: keep
