@@ -88,6 +88,17 @@ on the new HEAD. Keep the candidate frozen until promotion and continue other
 work in a separate tree. Check that the receipt's HEAD and working-state hash
 match the tree being promoted.
 
+**A "already on main" claim was read from a dirty worktree.** (2026-11-28)
+A stopped lane reported that F4's builder-shun hunks already sat on `af9094c23`,
+citing line numbers; it had read the owner lane's worktree with uncommitted
+edits, and Main passed the claim on as an instruction to port tests only.
+`git show af9094c23:crates/mc-core/src/settlements/construction.rs` still had
+`let tick = state.tick;` at 2205 and `construction_builders.rs` still built
+`Vec<(u32, EntitySlot)>` candidates at 257. A claim about a tree quotes
+`git show <sha>:<path>`; a worktree file with uncommitted edits describes a
+candidate, not the head. Check: the cited line under `git show` matches the
+claim.
+
 **The shared checkout advanced after its candidate was frozen.**
 (2026-11-28 16:48) The `main` reflog records three client-test cherry-picks
 (`d1b0da59f`, `afaabc4b9`, `3d5dd3f40`) after `2216e1069`. It does not identify
