@@ -89,7 +89,7 @@ client agent.
 
 ## First connection and permissions
 
-When the server requires Loader content, it sends a manifest during the
+When the server negotiates Loader content, it sends a manifest during the
 Configuration phase. On the first connection for an exact normalized server
 address and requested permission set, Loader opens a confirmation screen:
 
@@ -115,8 +115,8 @@ window focus, reset on reconnect; no rebinding, chords or mouse/gamepad actions)
 Schema-2 overlays may declare `view_request_bindings: [{key, view}]`; the key
 sends the additive `view_request` message and the server accepts it only for a
 connection that completed Loader negotiation, from an owner with the `views` and
-`present_views` capabilities. The native settlements bundle is appended to an
-already-required plugin Loader manifest and never makes Loader mandatory by
+`present_views` capabilities. The native settlements bundle is optional and
+included in the Loader manifest; it never makes Loader mandatory by
 itself; its overview is bound to <kbd>C</kbd> and opens the same dialog as
 `/settlement menu`. Sound bundles request `play_sounds` with `load_assets` and
 support personal and world-positioned one-shots with volume and pitch; loops and
@@ -124,13 +124,15 @@ moving sources are not implemented.
 
 ## Required-client behavior
 
-A server with no client bundles sends no Loader payload and works with a vanilla
-client. If any selected plugin declares `[client].bundles`, the deployment is
-`server_and_client` and Loader is required. A missing Loader, wrong
-platform/version, denied permission, missing acknowledgement, invalid bundle,
-size/hash mismatch or activation failure stops login during Configuration; the
-disconnect reason names the supported platforms and required bundle identities
-where available. Krasnokamen never silently substitutes vanilla content.
+The native settlements bundle is always offered as optional content. A plugin
+bundle is `required` unless its `[client]` table says `required = false`
+(`crates/mc-plugin-host/src/client_bundle.rs` defaults it to `true`). When every
+bundle is optional, the server probes for Loader and vanilla clients continue
+without Loader content. If any bundle is required, every client must negotiate
+it and vanilla clients are refused. For a client negotiating
+Loader content, an unsupported platform/version, denied permission, missing
+acknowledgement, invalid bundle, size/hash mismatch or activation failure stops
+login during Configuration. Krasnokamen never silently substitutes vanilla content.
 
 Negotiation timing: the server probes every client (required content too). A client
 that sends no Loader hello, request or ack within 10 s of the manifest, such as a

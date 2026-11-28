@@ -11,4 +11,4 @@ regression = []
 # hunks to reverse"), so it closes only when its families close. The decision itself is final and
 # lives in receipts/D142/SPAIN-DISPOSITION.md ("Closure (D142 final)"): 21 of the branch's 22 non-merge
 # commits are assigned to SPAININTEG-F1..F7, one style-only commit is dropped, and a wholesale merge
-# stays refused. tools/harness/test_spaninteg_disposition.py keeps that record complete.
+# stays refused. The table in that file is the record; the family rows are the queue.

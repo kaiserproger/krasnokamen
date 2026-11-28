@@ -101,5 +101,5 @@ dropped as unportable formatting, 0 unassigned, branch retained at
 `99b3bf0154da`.
 
 The branch is a patch series and is not merged wholesale, and no family merges
-until its own row carries a control and a live check. tools/harness/test_spaninteg_disposition.py
-holds this record to the commits and the row files.
+until its own row carries a control and a live check. This table is the record:
+each family row names its commits, and the ledger is the queue.
