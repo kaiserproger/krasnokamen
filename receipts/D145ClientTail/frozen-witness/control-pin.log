@@ -1,0 +1,1 @@
+mem-run: 299G free, below 300G: running slot-gc --delete on idle slots

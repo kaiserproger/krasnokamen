@@ -1709,7 +1709,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-v2-input-sand", requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
         fixture="sand 30 blocks above a private obsidian pad; stepped at one tick per second, then running world",
-        proves="frozen server holds the falling block between steps; falling entity predicts vanilla gravity between position updates, source clears, sand lands; retained airborne/descent/landing frames",
+        proves="frozen server holds the falling block between steps; falling entity predicts vanilla gravity and is presented at its current predicted tick between position updates, source clears, sand lands; retained airborne/descent/landing frames",
         limits="frames require visual review; not Windows/VNC transport",
     ),
     "native-v2-frozen-witness": _entry(
@@ -1719,7 +1719,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_frozen_witness.py"),
         fixture="admin tick freeze; declared summoned item and falling-block witnesses with fixed UUIDs",
         proves="presented_position equals the received position after one stepped tick under freeze",
-        limits="needs a quiet host (load15 < 12); bounds each capture and records a slow frame",
+        limits="needs a quiet host (load15 < 12); a failed bounded capture makes the run inconclusive",
     ),
     "native-v2-map-markers": _entry(
         id="native-v2-map-markers", summary="The held map draws the frame marker the server decorated, in its own region",

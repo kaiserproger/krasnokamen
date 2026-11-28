@@ -7,7 +7,8 @@ severity = "minor"
 status = "open"
 source = "solaris-client src/session.rs:1165 sets presentation_partial to 0 while server_frozen and src/entities/physical.rs:818-828 (fall_step) leaves the stepped tick as previous->transform at lerp_progress 0. Vanilla 26.3 LevelExtractor.extractVisibleEntities passes !TickRateManager.isEntityFrozen(entity) to DeltaTracker.getGameTimeDeltaPartialTick, which returns 1.0f while frozen (DeltaTracker$Timer). Evidence: native-v2-input-sand receipts on client 13f1f28b, e.g. .analysis/validation/20261111T163719-native-v2-input-sand-2gazssgv falling_after_step presented 106.76314 = previous predicted, predicted 106.60788; receipts/LedgerInputSand/REPORT.md. Received-interpolated mobs are unaffected (their lerp starts on packet receipt)."
 regression = ["client:krasnokamen-client:session::cpu_hotpath_tests::frozen_world_presents_entities_at_their_current_tick", "harness:entities:native-v2-input-sand"]
+proving_assertions = { "harness:entities:native-v2-input-sand" = "frozen_falling_presented_current_tick" }
 failing_first = "reported"
-fix_commit = "client:51fda1e2"
+fix_commit = "client:51fda1e25803436b85bfe7c68c59355ec2652888"
 proving_refs = ["harness:entities:native-v2-input-sand"]
-repro_check = "real-hunk control red; real gate harness:entities:native-v2-input-sand (whose hold check is HARNESS-SAND-GATE-NO-HOLD-CHECK); area=client, candidate"
+repro_check = "The sand scene now compares the captured falling block's presented and predicted Y after a stepped frozen window; the previous sand_presents_predicted_descent check also allowed the previous-tick pose. Historical real-hunk unit control was red, but the new graphical assertion has not yet passed a fix-only client control and restore pair, so this row remains open. The related frozen-witness capture fail-closed regression and its focused control are recorded in receipts/D145ClientTail/frozen-witness/evidence.md."
