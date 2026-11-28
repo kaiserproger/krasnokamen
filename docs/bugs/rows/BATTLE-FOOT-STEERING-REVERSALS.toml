@@ -16,3 +16,9 @@ repro_check = [
   "Remaining positional baseline, actual-client1k/side windows advance/engaged/mid/late:7 archers each window and1/27/21/31 melee. Whole-take visible positional foot+archer union64, yaw-sway union134, overlap10 (no overlap among the7 positional archers): count yaw separately. Auxiliary S0 strict native fullspeed cohorts, not client-window acceptance: baseline8 archers+10 foot, experimental GR1 archer+0 foot; residual member800 has1781 consecutive reversal edges and142.2 blocks path, excluded because the probe has not reached its target. Full20k first-angular foot attribution engaged/late: first keep_gap11559/32896, terrain23100/41285; separate raw-foot branch cohorts34801/76326 have clear-way12504/40312 and stationary turn goals beyond2 blocks2116/8639. No GR post-fix population/client claim is made; moving goals, routing/pursuit/wounded/close_on, rock escape and mounted units remain outside GR scope.",
   "Next: a post-freeze design that handles unreachable formation slots explicitly while preserving progress to reachable slots, under the B-backlog review conditions. Keep far/unreachable slots, clear-way, first-gap, moving goals and mounted classes visible; require eventual rest/progress and anti-period-shift metrics, only-fix-reverted controls, real-client evidence and independent battle-core review. Main's fixed S0 stop forbids GR code or another steering mechanism before freeze; yaw02e3867f9 does not close positional shuffle."
 ]
+
+# Closure path (Main, 2026-11-28): the current fix is test-only, so `ledger promote` has nothing to
+# reverse and the row cannot close as it stands. Replace the 400 ms sleep ordering with a
+# deterministic signal (a latch the test releases when the append failure has been observed), so the
+# pre-fix code fails the assertion every run and the fixed code passes every run; then the fix has a
+# non-test hunk and a control that goes red at its own assertion. Repo rule: no sleeps as signals.
