@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import subprocess
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -45,10 +46,21 @@ PACK_FILES = {
 }
 ZIP_PACK = "zipgems"
 ZIP_ID = f"file/{ZIP_PACK}.zip"
+# A new pack on disk whose worldgen inputs this server cannot prepare (the same trigger as the
+# cargo oracle `start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest`): a worldgen
+# entry under a namespace the vanilla gameplay cache does not describe. At a start it must be
+# skipped and named, never refuse the start (DATAPACK-NEW-PACK-WORLDGEN-SKIP).
+WORLDGEN_PACK = "newwg"
+WORLDGEN_ID = f"file/{WORLDGEN_PACK}"
+WORLDGEN_FILES = {
+    "pack.mcmeta": json.dumps({"pack": {"description": "Worldgen skip gate", "min_format": 121, "max_format": 121}}),
+    "data/mod/worldgen/structure_set/a.json": "{}",
+}
+
 TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_play", "minecraft_wait_for_state_change",
                    "minecraft_send_chat", "minecraft_wait_for_inventory", "minecraft_open_inventory",
                    "minecraft_click_container_slot", "minecraft_close_screen",
-                   "minecraft_read_recipe_book"})
+                   "minecraft_read_recipe_book", "minecraft_disconnect", "minecraft_connect"})
 
 
 def validate_args(ctx: ProfileContext) -> float:
@@ -68,6 +80,34 @@ def write_pack(world: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text + "\n")
     return root
+
+
+def write_worldgen_pack(world: Path) -> Path:
+    """A new pack on disk whose worldgen inputs this server cannot prepare."""
+    root = world / "datapacks" / WORLDGEN_PACK
+    for relative, text in WORLDGEN_FILES.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text + "\n")
+    return root
+
+
+def wait_log_lines(path: Path, needles: list[str], timeout: float) -> bool:
+    """True once every needle is in the server's own log, bounded by `timeout`.
+
+    The start's warning lines are written by the server before it accepts connections; a
+    file tail is the only read of them the harness owns, and it ends at the deadline
+    instead of hanging the scenario."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            text = ""
+        if all(needle in text for needle in needles):
+            return True
+        time.sleep(0.2)
+    return False
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
@@ -118,9 +158,29 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                                               USERNAME, timeout, display=display)
         mcp.p4_window = ctx.client_evidence.get("window_focus")
         mcp.request_timeout_seconds = min(timeout + 10, 300.0)
+        def restart_with_worldgen_pack() -> dict[str, Any]:
+            """Stop the server, put the worldgen pack in its world, start it again from the same config."""
+            nonlocal server, log
+            write_worldgen_pack(world)
+            runtime.stop_process(server, interrupt=True)
+            if log is not None:
+                log.close()
+            second = artifact / "server-worldgen-skip.log"
+            log = second.open("wb")
+            ctx.logs.append(str(second))
+            server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
+                cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            started = True
+            try:
+                runtime.wait_port(port, min(timeout, 180.0), server, log_path=second)
+            except Exception:
+                started = False
+            named = started and wait_log_lines(
+                second, [f"Skipping new datapack {WORLDGEN_ID}", "gameplay cache"], min(60.0, timeout))
+            return {"started": started, "named": named, "log": str(second)}
         with ProbeSteps(mcp, artifact / "datapack-reload", timeout, "native-datapack-reload") as probe:
             require_tools(mcp.list_tools(), TOOLS, "datapack-reload")
-            scenario(probe, artifact, world)
+            scenario(probe, artifact, world, address, restart_with_worldgen_pack)
         return {"scenario": probe.report}
     finally:
         if mcp is not None:
@@ -145,7 +205,8 @@ def chat_says_after(recent_chat: list[Any], after: str, *markers: str) -> bool:
     return fence is not None and any(all(m in line for m in markers) for line in lines[:fence])
 
 
-def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
+def scenario(probe: ProbeSteps, artifact: Path, world: Path, address: str,
+             restart_with_worldgen_pack: Any = None) -> None:
     probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
     probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     probe.fixture(f"give @s {BONE} 1")
@@ -296,3 +357,18 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     fenced("Round4Begin")
     probe.fixture("datapack list enabled")
     says_after("list_keeps_a_selected_pack_that_no_longer_reads", "Round4Begin", "enabled", "file/madeit")
+
+    # DATAPACK-NEW-PACK-WORLDGEN-SKIP: a pack newly found on disk whose worldgen inputs this
+    # server cannot prepare is skipped and named, so it stops neither a start nor a reload. The
+    # server is restarted from the same config with the pack in its own world: pre-fix the
+    # caller trial returns the error and the port never opens, which is this assertion's red.
+    if restart_with_worldgen_pack is not None:
+        restart = restart_with_worldgen_pack()
+        probe.report["worldgen_skip_start"] = restart
+        probe.check("new_worldgen_pack_skipped_and_named", bool(restart["started"] and restart["named"]))
+        probe.call("minecraft_disconnect", {})
+        probe.call("minecraft_connect", {"server_addr": address})
+        probe.wait(lambda state: isinstance((state.get("player") or {}).get("x"), float),
+                   "client_rejoins_after_the_skipped_pack")
+        probe.fixture("datapack list available")
+        says("skipped_worldgen_pack_is_listed_as_available", "available", WORLDGEN_ID)
