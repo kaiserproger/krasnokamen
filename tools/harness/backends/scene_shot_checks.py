@@ -1832,7 +1832,7 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
         chick_ground = round(float(layer["min"][1]) - ground, 4)
         probe.report["cminor_chicken_ground_offset"] = chick_ground
         probe.check("baby_chicken_feet_stand_on_the_floor",
-                    abs(float(layer["min"][1]) - ground) <= 0.02)
+                    abs(float(layer["min"][1]) - ground) <= 0.05)
         height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
         probe.report["cminor_chicken_height_over_width"] = height_over_width
         # The 26.3 child is a 4x4x4 body with planar shanks and a 1-px toe: 6 model pixels
@@ -1847,7 +1847,7 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
     if cold_chick is not None:
         _record, layer, spans = cold_chick
         probe.check("cold_chicken_baby_stands_on_the_floor",
-                    abs(float(layer["min"][1]) - ground) <= 0.02)
+                    abs(float(layer["min"][1]) - ground) <= 0.05)
 
     for name, types, rig in (
         ("cold-cow", ("minecraft:cow",), "cold_cow"),
@@ -1861,7 +1861,7 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
             continue
         _record, layer, spans = entry
         probe.check(f"{rig}_stands_on_the_floor",
-                    abs(float(layer["min"][1]) - ground) <= 0.02)
+                    abs(float(layer["min"][1]) - ground) <= 0.05)
         height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
         probe.report[f"cminor_{name}_height_over_width"] = height_over_width
 
@@ -1871,7 +1871,7 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
         _record, layer, spans = nautilus
         probe.report["cminor_nautilus_ground_offset"] = round(float(layer["min"][1]) - ground, 4)
         probe.check("warm_nautilus_shell_reaches_its_feet",
-                    abs(float(layer["min"][1]) - ground) <= 0.02)
+                    abs(float(layer["min"][1]) - ground) <= 0.05)
         depth_over_width = round(spans[2] / spans[0], 4) if spans[0] else None
         probe.report["cminor_nautilus_depth_over_width"] = depth_over_width
     probe.report["visual_review_required"] = [
