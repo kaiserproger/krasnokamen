@@ -3,6 +3,9 @@
 
 CLAIMS      unreleased task leases (task-claim): agent, start, timebox left or overrun,
             lease end; an expired lease can be taken over.
+            Latest agent check-in phase and provisional age, not utilization.
+--task ID   JSON for one lease (including a released lease), with closed phase
+            totals and an optional, separate --harness-receipt result.json.
 TOKENS      mem-run build tokens: holder pid, age, command and tree (cwd); commands
             waiting for one.
 SCENES      scene-slot.sh slots, the same way.
@@ -28,6 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import wtlib as w  # noqa: E402
+import fleet_timing as timing  # noqa: E402
 
 
 def build_token_limit() -> int | None:
@@ -130,29 +134,64 @@ def slot_lines(title: str, lock_dir: Path, pattern: str, wait_dir: Path, limit: 
     return lines
 
 
+def read_claim(path: Path) -> dict:
+    claim = json.loads(path.read_bytes())
+    if (not isinstance(claim, dict) or claim.get("task") != path.stem
+            or not isinstance(claim.get("agent"), str)
+            or any(type(claim.get(k)) is not int
+                   for k in ("start", "lease_start", "expires", "timebox_min", "grace_min"))):
+        raise ValueError("malformed lease")
+    return claim
+
+
+def snapshot(fleet: Path, task: str | None) -> tuple[list[dict], dict[str, timing.Timing], timing.Clock]:
+    claims_dir = fleet / "claims"
+
+    def read() -> tuple[list[dict], dict[str, timing.Timing], timing.Clock]:
+        sampled = timing.clock()
+        claims = []
+        paths = [claims_dir / f"{task}.json"] if task is not None else sorted(claims_dir.glob("*.json"))
+        for path in paths:
+            try:
+                claim = read_claim(path)
+            except (OSError, ValueError):
+                if task is not None:
+                    raise w.ToolError(f"{task} has no readable claim") from None
+                continue
+            if task is not None or claim.get("released") is None:
+                claims.append(claim)
+        return claims, timing.fold(fleet, claims), sampled
+
+    try:
+        lock = (claims_dir / ".lock").open("rb")
+    except FileNotFoundError:
+        if task is not None:
+            raise w.ToolError(f"{task} has no readable claim") from None
+        return [], {}, timing.clock()
+    with lock:
+        fcntl.flock(lock, fcntl.LOCK_SH)
+        return read()
+
+
 def claim_lines(fleet: Path) -> list[str]:
-    at = now()
-    claims = []
-    for path in sorted((fleet / "claims").glob("*.json")) if (fleet / "claims").is_dir() else []:
-        try:
-            claim = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        if claim.get("released") is None:
-            claims.append(claim)
+    claims, timings, sampled = snapshot(fleet, None)
     claims.sort(key=lambda c: c["start"])
-    expired = sum(1 for c in claims if at >= c["expires"])
+    expired = sum(1 for c in claims if timing.lease_state(c, sampled) == "expired")
     lines = [f"CLAIMS ({len(claims) - expired} live, {expired} expired)"]
     if claims:
-        lines.append(f"  {'TASK':<24} {'AGENT':<20} {'START':<11} {'TIMEBOX':<8} {'LEFT':<14} LEASE")
+        lines.append(f"  {'TASK':<24} {'AGENT':<20} {'START':<11} {'TIMEBOX':<8} {'LEFT':<14} LEASE / PHASE")
     for claim in claims:
-        left = claim["lease_start"] + claim["timebox_min"] * 60 - at
+        remaining = timing.lease_left(claim, sampled) // timing.NS
+        left = remaining - claim["grace_min"] * 60
         left_text = f"{minutes(left)} left" if left >= 0 else f"OVERRUN {minutes(-left)}"
-        lease = (f"until {clock(claim['expires'])}" if at < claim["expires"]
+        lease = (f"until {clock(sampled.at + remaining)}" if timing.lease_state(claim, sampled) == "live"
                  else f"EXPIRED {clock(claim['expires'])}, can be taken over")
         renewed = f" (renewed {claim['renewals']}x)" if claim.get("renewals") else ""
+        report = timing.summary(claim, timings[claim["task"]], sampled)
+        age = report["phase_age_s"]
+        phase = report["phase"] if age is None else f"{report['phase']} {age:g}s (unconfirmed)"
         lines.append(f"  {claim['task']:<24} {claim['agent']:<20} {clock(claim['start']):<11} "
-                     f"{str(claim['timebox_min']) + 'm':<8} {left_text:<14} {lease}{renewed}")
+                     f"{str(claim['timebox_min']) + 'm':<8} {left_text:<14} {lease}{renewed} | {phase}")
     return lines
 
 
@@ -168,9 +207,22 @@ def host_line(mem_dir: Path) -> str:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="fleet-status", description=__doc__.split("\n\n")[0])
     parser.add_argument("--mem-dir", type=Path, default=Path("/tmp/solaris-mem-slots"))
+    parser.add_argument("--task", help="report one task lease and its timing edges as JSON")
+    parser.add_argument("--harness-receipt", type=Path, help="show a result.json separately from task timings")
     args = parser.parse_args(argv)
     scene_dir = Path(os.environ.get("KRASNOKAMEN_SCENE_SLOT_DIR") or "/tmp")
     fleet = Path(os.environ.get("KRASNOKAMEN_FLEET_DIR") or w.WORK / "fleet")
+    if args.harness_receipt is not None and args.task is None:
+        parser.error("--harness-receipt requires --task")
+    if args.task is not None:
+        if not timing.ID.fullmatch(args.task):
+            parser.error("invalid task id")
+        claims, timings, sampled = snapshot(fleet, args.task)
+        report = timing.summary(claims[0], timings[args.task], sampled)
+        if args.harness_receipt is not None:
+            report["harness_evidence"] = timing.harness_evidence(args.harness_receipt)
+        print(json.dumps(report, indent=2))
+        return
     lines = [f"fleet-status {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now()))}"]
     lines += claim_lines(fleet)
     lines += slot_lines("BUILD TOKENS", args.mem_dir / "tokens", "token-*.lock", args.mem_dir / "tokens" / "wait",

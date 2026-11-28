@@ -21,3 +21,7 @@
 2026-11-19T20:00/2026-11-19T22:00
 # W14 requires every freeze-pin matrix cell; unrun cells remain blocked.
 2026-11-20T01:00/2026-11-20T05:00
+# D74: matched Perf1M AB/BA/AB only; dispatch requires the unchanged series to fit before END.
+2026-11-22T23:00/2026-11-23T11:00
+# D78: exact D76 host RC6 weak-hw benchmark only; no reuse by Perf1M or other jobs.
+2026-11-23T23:00/2026-11-24T11:00

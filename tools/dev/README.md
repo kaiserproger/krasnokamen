@@ -15,12 +15,40 @@ These Linux host tools are intended for coordinated Krasnokamen development, not
 - `heavy-watchdog.py` monitors slice memory pressure and freezes eligible builds, then thaws them. The runner launches it as `solaris-heavy-watchdog.service`.
 - `slot-lock.py` is the one host slot mechanism: it runs a command holding one of N flock slots, blocking on all of them at once and taking whichever frees first (no polling), records the holder in the lock file and waiters in a wait dir, and leaves the lock with the command. `scene-slot.sh` limits graphical scene runs to two slots through it; `mem-run.sh` takes its build tokens through it.
 - `reserve-cpus <cpu-list> -- <command>` (owner 2026-11-16, Spain trials) holds `<cpu-list>` (taskset syntax; CPU n and n+8 are one physical core here) while `<command>` runs: every new `mem-run.sh` scope is pinned to the other CPUs (the perf lane to its own CPUs minus the reserved ones) unless it runs with `KRASNOKAMEN_RESERVED_CPUS=use`; running scopes keep their placement and `-x` windows are not restricted. The reservation file `/tmp/solaris-mem-slots/reserved-cpus` is removed when the command ends; a second reservation is refused.
-- `task-claim <task-id> --agent <name> --timebox <min>` (`--renew`, `--grace`) and `task-release <task-id>` keep task leases in `<work>/fleet/claims/` (log: `<work>/fleet/claims.log`); a live lease refuses a second claim naming the holder, a released or expired one is taken over and logged. `fleet-status` prints claims, build-token and scene-slot holders and waiters, and host load on one screen. See [claims and fleet status](../../docs/development/agent-fleet.md#claims-and-fleet-status).
+- `task-claim`, `task-release` and `fleet-status` own the [lease and check-in workflow](../../docs/development/agent-fleet.md#claims-and-fleet-status) on the owner host.
 - `instrumentation-guard.py -- COMMAND ...` runs trusted instrumentation under the runner and Linux Landlock, allowing writes only in a private `/dev/shm` directory. Preserve that directory while inspecting outputs.
 - `test-server/` contains the local metrics collector and remote fresh-world deployment, service, and soak tools; see `test-server/README.md` before use.
 - `winqa/` contains a noVNC driver; run `npm install --prefix tools/dev/winqa` once, then `node tools/dev/winqa/cs-daemon.js`, and follow `winqa/RECIPE.md`.
 - `wt-new`, `wt-done`, `wt-gc`, `pin-release` (with the shared `wtlib.py`) create, archive and audit agent worktrees and pin release binaries; `in-use` marks paths other agents rely on, `slot-gc` clears dead artifacts from idle target slots, `main-guard` reports unexpected changes in Main's source dirs; see [Worktree and release-pin tools](#worktree-and-release-pin-tools-owner-host).
 - `bytecheck*` pins deterministic and real-image persistence comparisons; see the [CoreUnload byte oracle](../../docs/architecture/persistence.md#coreunload-byte-oracle).
+
+## Fleet timing storage
+
+`task-claim <task-id> --agent <name> --timebox <min>` and `task-release <task-id>`
+still own the lease JSON in `<work>/fleet/claims/`. A claim or takeover has a
+fresh generation even when the agent name is reused; renewal of an expired
+lease also starts a new generation. A legacy live claim can opt in with the
+identity printed by `fleet-status --task`, without rewriting its old record.
+Existing wall times stay readable; on the same boot new or renewed leases use
+Linux `CLOCK_BOOTTIME` for expiry, with wall expiry as a legacy/after-reboot
+ownership fallback.
+
+`task-claim ... --check-in <event> --lease <id> --session <id> --seq <n>`
+writes only to the existing `<work>/fleet/claims.log` under `claims/.lock`,
+with the owner, generation, sequence and clock checked inside that lock.
+An exact retry or byte-for-byte replay of the last accepted edge is a no-op;
+conflicting replay leaves attribution incomplete. Stale generations,
+out-of-order sequences and terminal edges without a start are refused. A
+torn row is preserved but never interpreted as a terminal event. Queries use
+same-boot monotonic edges and account for gaps separately. A session restart
+cannot extend an observation cutoff within the same boot and renewal epoch,
+including when a wall deadline bootstrapped that cutoff. A real lease renewal
+can permit a new observation; it never extends an already-started one.
+`fleet-status --task <task-id>`
+returns one current-generation JSON report, including released claims.
+Previous generations remain in the log, not the task totals. Normal
+`fleet-status` still shows unreleased leases, build tokens, scene slots and host
+load, with a short phase/age column. Test: `python3 tools/dev/test_task_claim.py`.
 
 ## Fresh machine setup
 
