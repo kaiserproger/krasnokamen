@@ -140,3 +140,23 @@ No family is unowned: F7 diagnostics still waits for a free slot and keeps its
 row (`SPAININTEG-F7-DIAGNOSTICS`). The decision of this file is unchanged and
 now executed family by family: nothing is merged wholesale and nothing is
 dropped.
+
+## Per-commit state (2026-11-28 18:25 host)
+
+The decision of this file is executed family by family. Every one of the branch's 22
+non-merge commits appears exactly once:
+
+| source commit | family | state |
+|---|---|---|
+| `d5123e2e1`, `cccc408d56`, `83e97e4e8` | F1 territory terrain | ported on `wt/SpainD7Re` `187775ced`; committee-sol says **changes**; amending on `wt/SpainF1Fix` |
+| `7e9ad6c24`, `2195981eb`, `98eab23e3`, `a0ae2b282` | F2 founding outposts | ported on `wt/SpainF2` `04911e5570`; committee-sol says **changes**; amending on `wt/SpainF2Fix` |
+| `2e2213ce7`, `1fd4bc9f6`, `ed0697168`, `6fb805771` | F3 construction supply | ported on `wt/SpainD7Re` (`2ae829c13`, `3aaa431fd`, `bb0d35c7b`, `fa677430d`); no separate lane needed |
+| `0cd64cdbe`, `e1d84f9c5` | F4 builder shun | lane `SpainF4` on `wt/SpainF4`; production hunks confirmed absent from `af9094c23` by `git show` |
+| `18ea1a5c3`, `33554901a` | F5 released carry | ported on `wt/SpainF5` `cefaf35e2`; review `receipts/SpainF5/REVIEW.md` says **changes**; amending |
+| `702bb6e41`, `d8f9990f6`, `696379ab6`, `d46fe2af6` | F6 perimeter route + harness | lane `SpainF6` on `wt/SpainF6` |
+| `a2ec37ac2` | F7 planner/courtship diagnostics | lane `SpainF7` on `wt/SpainF7` |
+| `ece50bfc5` | style only | dropped (rustfmt call, D142) |
+
+No commit is unassigned and none is merged wholesale; the tracking row
+`SPAININTEG-REPORT-UNPORTED-WORK` closes when the family rows close, and it names this
+table as its record.
