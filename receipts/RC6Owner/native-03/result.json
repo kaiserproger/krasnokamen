@@ -1,0 +1,61 @@
+{
+  "player_path": {
+    "verdict": "pass",
+    "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D145Release/receipts/RC6Owner/native-03/player-world",
+    "persisted_blocks": [
+      [
+        127,
+        70,
+        320
+      ],
+      [
+        127,
+        70,
+        321
+      ],
+      [
+        127,
+        71,
+        319
+      ]
+    ]
+  },
+  "restart_custody": {
+    "verdict": "pass",
+    "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D145Release/receipts/RC6Owner/native-03/player-world",
+    "inventory": [
+      {
+        "count": 1,
+        "damage": 0,
+        "enchantments": [],
+        "foil": false,
+        "item_id": "minecraft:dirt",
+        "max_damage": 0,
+        "name": "Dirt",
+        "origin": "server_observed",
+        "selected": true,
+        "slot": 0
+      },
+      {
+        "count": null,
+        "item_id": null,
+        "origin": "server_observed",
+        "selected": false,
+        "slot": 41,
+        "state": "unknown"
+      },
+      {
+        "count": null,
+        "item_id": null,
+        "origin": "server_observed",
+        "selected": false,
+        "slot": 42,
+        "state": "unknown"
+      }
+    ],
+    "wal_scope": "graceful restart; recovery log retained; no forced-crash replay claimed"
+  },
+  "owner_package": {
+    "verdict": "not run"
+  }
+}

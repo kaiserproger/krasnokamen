@@ -1,0 +1,16 @@
+{
+  "candidate": "e1f87c207ee826706e0a4b1f684565d93b6150c4",
+  "build": "candidate binary from retained pin (build identity recorded at release time)",
+  "server": {
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/e1f87c207ee8-server-x86_64-unknown-linux-gnu/krasnokamen",
+    "sha256": "b485f3feb31dc8b08bc091f621be606cd8ce26f1e1bb6b0d61befca18252fb23"
+  },
+  "client": {
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/9252cc625802-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client",
+    "sha256": "b1101043148dd6125e6385796c415056477db28c0e2c11e13747aecb7a3b346d"
+  },
+  "archive": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/RC6Owner/private-linux/krasnokamen-rc6-private-e1f87c207ee8-x86_64-unknown-linux-gnu.tar.gz",
+    "sha256": "e2f458a74638816e12a8e92910582cee4629763daed67171b6d80023e919a559"
+  }
+}
