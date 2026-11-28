@@ -2419,3 +2419,211 @@ fn every_pending_village_takes_its_gate_clock_turn() {
         );
     }
 }
+
+/// Eight generated villages in separate, isolated loaded chunks. Each site has
+/// a town-centre piece holding a real bell, so `autonomy::tick` adopts it on its
+/// first step, and a house piece whose bounds sit in an unloaded chunk, so the
+/// pending village never finishes its certification work and stays in the queue
+/// for the whole window. Only the eight site chunks are loaded, so every natural
+/// zone probe reaches unloaded ground: the mine search refuses and no candidate
+/// ever interrupts the probe cursor.
+struct RotationVillages {
+    base: VillageGenerator,
+    sites: Vec<mc_world::GeneratedVillageSite>,
+}
+
+impl mc_world::ChunkGenerator for RotationVillages {
+    fn generate(&self, position: mc_world::ChunkPos) -> mc_world::Chunk {
+        mc_world::ChunkGenerator::generate(&self.base, position)
+    }
+
+    fn surface_height(&self, x: i32, z: i32) -> Option<i32> {
+        mc_world::ChunkGenerator::surface_height(&self.base, x, z)
+    }
+
+    fn village_sites_in_region(
+        &self,
+        _min: (i32, i32),
+        _max: (i32, i32),
+    ) -> Vec<mc_world::GeneratedVillageSite> {
+        self.sites.clone()
+    }
+}
+
+/// Four chunks apart, so neither a natural-zone search box nor the neighbour of
+/// a site's own chunk is loaded.
+const ROTATION_CHUNKS: [(i32, i32); 8] = [
+    (100, 100),
+    (104, 100),
+    (108, 100),
+    (112, 100),
+    (100, 104),
+    (104, 104),
+    (108, 104),
+    (112, 104),
+];
+
+fn rotation_fixture() -> (TickState, Vec<ChunkPos>) {
+    let registry = Arc::new(CoreRegistry::load(None).unwrap());
+    let mut bells = Vec::new();
+    let mut villagers = Vec::new();
+    let mut sites = Vec::new();
+    for &(cx, cz) in &ROTATION_CHUNKS {
+        let bell = [cx * 16 + 7, 202, cz * 16 + 7];
+        let min = mc_world::BlockPos {
+            x: cx * 16 + 4,
+            y: 201,
+            z: cz * 16 + 4,
+        };
+        let max = mc_world::BlockPos {
+            x: cx * 16 + 12,
+            y: 205,
+            z: cz * 16 + 12,
+        };
+        bells.push(bell);
+        villagers.push((
+            generated_claim("minecraft:village/plains/town_centers", bell),
+            [f64::from(bell[0]) + 0.5, 202.0, f64::from(bell[2]) + 0.5],
+            "none".to_string(),
+        ));
+        let unloaded = mc_world::BlockPos {
+            x: 600,
+            y: 202,
+            z: 600,
+        };
+        sites.push(mc_world::GeneratedVillageSite {
+            start_chunk: (cx, cz),
+            structure: mc_data::Identifier::parse("minecraft:village_plains").expect("static id"),
+            min,
+            max,
+            pieces: vec![
+                mc_world::GeneratedVillagePiece {
+                    template: Some(
+                        "minecraft:village/plains/town_centers/plains_meeting_point_1".into(),
+                    ),
+                    position: mc_world::BlockPos {
+                        x: bell[0],
+                        y: bell[1],
+                        z: bell[2],
+                    },
+                    rotation: 0,
+                    entity_owner: Some("minecraft:village/plains/town_centers".into()),
+                    bounds: Some((min, max)),
+                },
+                mc_world::GeneratedVillagePiece {
+                    template: Some("minecraft:village/plains/houses/plains_house_1".into()),
+                    position: unloaded,
+                    rotation: 0,
+                    entity_owner: Some("minecraft:village/plains/houses".into()),
+                    bounds: Some((
+                        unloaded,
+                        mc_world::BlockPos {
+                            x: 610,
+                            y: 205,
+                            z: 610,
+                        },
+                    )),
+                },
+            ],
+        });
+    }
+    let generator = Arc::new(RotationVillages {
+        base: VillageGenerator {
+            terrain: mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
+            registry: Arc::clone(&registry),
+            bells,
+            villagers,
+            logs: Vec::new(),
+            furniture: Vec::new(),
+        },
+        sites,
+    });
+    let mut world = crate::world::ChunkWorld::new(
+        42,
+        generator,
+        &registry,
+        mc_world::BlockStateId(registry.states.air),
+        [8, 201, 8],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let chunks: Vec<ChunkPos> = ROTATION_CHUNKS
+        .iter()
+        .map(|&(x, z)| ChunkPos { x, z })
+        .collect();
+    world.ensure_blocking(&chunks.iter().map(|chunk| (*chunk, 0)).collect());
+    let mut state = TickState::new(registry, world, 2, 512);
+    state.refresh_active_chunks(0);
+    (state, chunks)
+}
+
+/// The starvation control: eight pending villages mean the fixed batch of four
+/// visits [0..3] on even ticks and [4..7] on odd ones, so a gate written against
+/// the world tick (`tick % 20 == 0`) never runs for half of them. This drives the
+/// production `autonomy::tick` over generated sites and villager markers and
+/// names nothing the gate fix introduced, so the preimage of that fix compiles
+/// and fails here on progress instead of on the batch bound.
+#[test]
+fn every_pending_village_gate_steps_within_the_rotation_window() {
+    const WINDOW: usize = 120;
+    let (mut state, chunks) = rotation_fixture();
+    let mut changes = ChangeSet::default();
+    crate::villager::generated::load(&mut state, &chunks, &mut changes);
+    changes.chunks_loaded.extend_from_slice(&chunks);
+    tick(&mut state, &mut changes);
+
+    let queue = |state: &TickState| -> Vec<(i32, i32)> {
+        state
+            .autonomy_queue
+            .villages
+            .iter()
+            .map(|pending| pending.site.start_chunk)
+            .collect()
+    };
+    assert_eq!(
+        queue(&state).len(),
+        ROTATION_CHUNKS.len(),
+        "every loaded village site is pending before the window starts"
+    );
+
+    let mut worst_batch = 0;
+    for _ in 0..WINDOW {
+        let before = queue(&state);
+        state.tick += 1;
+        state.tick_budget.reset(state.tick);
+        tick(&mut state, &mut ChangeSet::default());
+        let after = queue(&state);
+        assert_eq!(
+            after.len(),
+            before.len(),
+            "a pending village left the queue inside the window: {before:?} -> {after:?}"
+        );
+        let stepped = (1..=before.len())
+            .find(|&step| {
+                (0..before.len()).all(|index| after[index] == before[(index + step) % before.len()])
+            })
+            .unwrap_or_else(|| {
+                panic!("the queue changed by more than its rotation: {before:?} -> {after:?}")
+            });
+        assert!(
+            stepped <= super::VILLAGES_PER_TICK,
+            "one tick stepped {stepped} pending villages, above the {}-village batch: {before:?} -> {after:?}",
+            super::VILLAGES_PER_TICK
+        );
+        worst_batch = worst_batch.max(stepped);
+    }
+
+    let starved: Vec<_> = state
+        .autonomy_queue
+        .villages
+        .iter()
+        .filter(|pending| pending.zone_cursor < 2 * super::ZONE_PROBES_PER_PASS)
+        .map(|pending| (pending.site.start_chunk, pending.zone_cursor))
+        .collect();
+    assert!(
+        starved.is_empty(),
+        "every pending village must take a gate turn inside the rotation window, but \
+         (chunk, zone_cursor) {starved:?} never got past the ungated first probe pass \
+         (cursor {} = ZONE_PROBES_PER_PASS); the batch bound held at {worst_batch} villages a tick",
+        super::ZONE_PROBES_PER_PASS
+    );
+}
