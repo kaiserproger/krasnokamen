@@ -35,7 +35,7 @@ pub(super) mod site_refusals;
 // The funded site search and the off-cadence step live beside the sweeps they
 // drive (code-health ratchet, 2026-11-26); the planner, `start_build` and the
 // tick read them through these names.
-use site_refusals::{FundedSite, SitePass, scan_sites, site_project, step_sites};
+use site_refusals::{FundedSite, ScanRequest, SitePass, scan_sites, site_project, step_sites};
 
 #[path = "construction_site_turn.rs"]
 pub(super) mod site_turn;
@@ -1739,8 +1739,10 @@ fn plan_pass_observed(
             &images,
             &mut sweeps,
             budget,
-            diagnostic.as_deref_mut(),
-            None,
+            ScanRequest {
+                diagnostic: diagnostic.as_deref_mut(),
+                step: None,
+            },
         )
     };
     // Only a pass that ended with no candidate while a walk it advanced still

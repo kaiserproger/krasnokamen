@@ -993,6 +993,14 @@ fn funded_memo(
 /// priority House's walk while it is unfinished, else the funded kinds), and
 /// nothing is materialized. `None` is the admission pass, which takes one slice
 /// per pass (the D42 planner budget) and materializes its winner.
+/// What a single pass is asked for: where it reports and, for an off-cadence
+/// step, the slice the caller already took. `None` diagnostic is the stepped
+/// path, `None` step is the admission path.
+pub(super) struct ScanRequest<'a> {
+    pub(super) diagnostic: Option<&'a mut decision_log::Plan>,
+    pub(super) step: Option<u32>,
+}
+
 pub(super) fn scan_sites(
     state: &TickState,
     id: SettlementId,
@@ -1000,9 +1008,12 @@ pub(super) fn scan_sites(
     images: &[super::super::inventory::Image],
     sweeps: &mut Sweeps,
     budget: &mut site_turn::SiteBudget,
-    mut diagnostic: Option<&mut decision_log::Plan>,
-    step: Option<u32>,
+    request: ScanRequest<'_>,
 ) -> SiteScan {
+    let ScanRequest {
+        mut diagnostic,
+        step,
+    } = request;
     let admit = step.is_none();
     // In a step the priority House is scanned only while its own walk is
     // unfinished; a finished (parked) one waits for the admission pass and
@@ -1110,7 +1121,7 @@ pub(super) fn scan_sites(
                     "funded kinds found no legal site"
                 );
             }
-            if let Some(log) = diagnostic.as_deref_mut() {
+            if let Some(log) = diagnostic {
                 log.ordinary_site = Some(pass.summary());
                 if log.ordinary_house_funded == Some(true) {
                     log.ordinary_house_sweep = pass.house_outcome;
@@ -1174,8 +1185,10 @@ pub(super) fn step_sites(state: &mut TickState, budget: &mut site_turn::SiteBudg
                 &images,
                 &mut sweeps,
                 budget,
-                None,
-                Some(slice),
+                ScanRequest {
+                    diagnostic: None,
+                    step: Some(slice),
+                },
             )
         };
         // A finished walk waits for the settlement's next admission pass. An
