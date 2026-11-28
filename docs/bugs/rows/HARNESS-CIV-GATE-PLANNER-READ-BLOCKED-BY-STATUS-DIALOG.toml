@@ -17,4 +17,4 @@ repro_check = [
   "Next gate run: when `cannot establish planner or storage state` fires, the error names whether a `dialog/*` element was on top and which id/label it was; a run that reaches the same point without a dialog must not report it.",
   "unittest: tools.harness.test_civilization_seed_qa gains a case where the planner snapshot contains a dialog and the harness dismisses it (Close) before retrying the read once, then reports the refusal only if the second read still fails.",
 ]
-fix_commit = "a0c0f89026e9b1bd6b6d09fbfc54fedda2ee1d9c"
+fix_commit = "patch:9e81b641578ba5c7b9824d836e993ce2678166a8c2e77d458f016e9a1338ec03"

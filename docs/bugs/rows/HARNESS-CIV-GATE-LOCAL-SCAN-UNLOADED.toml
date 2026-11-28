@@ -9,4 +9,4 @@ source = "civilization-seed-qa artifact wt/D123Gate47/.analysis/validation/20261
 failing_first = "reported"
 regression = ["python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_local_building_waits_for_its_chunks_before_the_scan", "harness:civilization-seed-qa:all"]
 repro_check = ["python3 -m unittest tools.harness.test_civilization_seed_qa -k local_building_waits (green with the wait; red with the pre-fix local branch, where the scan is the first call)"]
-fix_commit = "457d777785256049be238a0244249b16db27347c"
+fix_commit = "patch:344c62641f2471e86d163ad2b47b1451691668ba31c950fff660d32ba2822496"

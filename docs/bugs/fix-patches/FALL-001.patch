@@ -1,0 +1,97 @@
+diff --git a/crates/mc-core/src/vanilla_interact.rs b/crates/mc-core/src/vanilla_interact.rs
+index 6a547c699..b34e1b49e 100644
+--- a/crates/mc-core/src/vanilla_interact.rs
++++ b/crates/mc-core/src/vanilla_interact.rs
+@@ -94,11 +94,87 @@ fn in_border(state: &TickState, target: BlockPos) -> bool {
+         || f64::from(target.z) >= border.center_z + border.size / 2.0)
+ }
+ 
+-pub(crate) fn dragon_egg(state: &mut TickState, _actor: EntityId, pos: BlockPos) -> bool {
+-    // FALL-001 before the fix: using a dragon egg is unhandled, so the block
+-    // stays where it is and no teleport is ever attempted.
+-    let _ = (state, pos);
+-    false
++pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) -> bool {
++    let Some(current) = state.world.block_at(pos.x, pos.y, pos.z) else {
++        return false;
++    };
++    if !state
++        .registry
++        .blocks
++        .by_id(BlockStateId(current))
++        .is_some_and(|b| b.block.id.path() == "dragon_egg")
++    {
++        return false;
++    }
++    if state.players.get(&actor).is_none_or(|p| p.spectator()) {
++        return true;
++    }
++    // DragonEggBlock.teleport: 1000 attempts, differences of uniform [0,16)
++    // horizontal and [0,8) vertical samples. In-border air wins; a target whose
++    // chunk is not resident yet is requested and landed when it arrives.
++    let mut random = mc_data::loot::chest_26_1_2::ChestRng::new(
++        state.tick
++            ^ (actor.0 as u64)
++            ^ (pos.x as u64).rotate_left(17)
++            ^ (pos.z as u64).rotate_left(31),
++    );
++    for _ in 0..1000 {
++        let mut sample = |bound| random.next_bounded(bound) as i32;
++        let target = BlockPos {
++            x: pos.x + sample(16) - sample(16),
++            y: pos.y + sample(8) - sample(8),
++            z: pos.z + sample(16) - sample(16),
++        };
++        if !in_border(state, target) || crate::spawn_protection::protected(state, actor, target) {
++            continue;
++        }
++        // Vanilla's `Level.getChunk` loads the sampled target and the egg lands
++        // there. Here residency is the world's own demand path: a target whose
++        // chunk is not resident is recorded (it enters `desired_chunks` while the
++        // record lives) and the move completes once it is resident.
++        //
++        // The sample cannot be judged before then: a non-resident cell reads as
++        // `None`, never as air or as a solid block, so the air, plugin and
++        // protection checks run again at completion for the loaded cell.
++        // Divergence from vanilla, recorded on the row: vanilla samples on past a
++        // loaded non-air cell; here such a sample is dropped at completion and the
++        // egg stays, as the cold-overlay row already required.
++        if !state
++            .world
++            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
++        {
++            state
++                .pending_egg_teleports
++                .retain(|(origin, _)| *origin != pos);
++            state.pending_egg_teleports.push((
++                pos,
++                EggTeleport {
++                    target,
++                    source: current,
++                    actor,
++                    deadline_tick: state.tick + EGG_TELEPORT_BUDGET_TICKS,
++                },
++            ));
++            return true;
++        }
++        if !state
++            .world
++            .block_at(target.x, target.y, target.z)
++            .is_some_and(|id| id == state.registry.states.air)
++            || !crate::plugin_player::allows_block(state, actor, target)
++        {
++            continue;
++        }
++        state.world.set_block(target.x, target.y, target.z, current);
++        state
++            .world
++            .set_block(pos.x, pos.y, pos.z, state.registry.states.air);
++        state
++            .merge_block_writes
++            .extend([(pos, state.registry.states.air), (target, current)]);
++        return true;
++    }
++    true
+ }
+ 
+ /// How long a dragon egg's request for a cold target chunk lives. Vanilla has no

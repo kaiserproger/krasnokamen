@@ -1,0 +1,55 @@
+diff --git a/crates/mc-core/src/settlements/construction_preparation.rs b/crates/mc-core/src/settlements/construction_preparation.rs
+index 5f02ac000..b07401ba5 100644
+--- a/crates/mc-core/src/settlements/construction_preparation.rs
++++ b/crates/mc-core/src/settlements/construction_preparation.rs
+@@ -701,6 +701,11 @@ pub(super) fn upgrade_project(
+     record: &SettlementRecord,
+     images: &[crate::plugin_inventories::native::Image],
+ ) -> Option<(Project, String, u8)> {
++    // One joint bill and one House reserve per call: both walk the projects,
++    // the POIs and the recipe index, and the per-building loop below must not
++    // repeat that work once per candidate.
++    let joint = super::joint_active_bill(state, record.id).unwrap_or_default();
++    let reserved = super::house_reserve_bill(state, record, images);
+     record
+         .buildings
+         .values()
+@@ -727,14 +732,32 @@ pub(super) fn upgrade_project(
+             // village passes and a bill already promised away does not.
+             let bill =
+                 super::selected_bill(state, record.id, &blueprint.level(level)?.materials, images)?;
+-            let joint = super::joint_active_bill(state, record.id).unwrap_or_default();
+             // The priority House's own bill is reserved while the village is
+             // short of roofed beds: an upgrade never spends the stock the
+-            // House lane is waiting on (runs 2-3 of the final civ series).
+-            let reserved = super::house_reserve_bill(state, record, images);
+-            let joint = super::with_joint(joint, &reserved);
+-            let netted = super::with_joint(bill.into_owned(), &joint);
+-            if !crate::settlements::construction_crafting::missing_base(state, &netted, images)
++            // House lane is waiting on (runs 2-3 of the final civ series). The
++            // check is per item of the UPGRADE's own bill - `upgrade + joint +
++            // reserve <= stock` for each item it needs - because the House bill
++            // carries a bed nobody stocks autonomously (autocraft is
++            // owner-command-only, the executor crafts at haul): a whole-bill
++            // union would refuse every upgrade, forever, while a bed is short.
++            // An upgrade OF a house adds beds and is the documented fallback
++            // when no new House has a legal lot, so it is not reserved against
++            // itself.
++            let exempt = building.kind == super::BuildingKind::House;
++            let promised = |item: u32| -> u32 {
++                let of = |bill: &[(u32, u32)]| {
++                    bill.iter()
++                        .filter(|(known, _)| *known == item)
++                        .map(|(_, count)| *count)
++                        .sum()
++                };
++                of(&joint) + if exempt { 0 } else { of(&reserved) }
++            };
++            let own: Vec<(u32, u32)> = bill
++                .iter()
++                .map(|&(item, count)| (item, count.saturating_add(promised(item))))
++                .collect();
++            if !crate::settlements::construction_crafting::missing_base(state, &own, images)
+                 .is_empty()
+             {
+                 return None;

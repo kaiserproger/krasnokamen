@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/battle/cavalry.rs b/crates/mc-core/src/battle/cavalry.rs
+index 108ca943e..6efc4302a 100644
+--- a/crates/mc-core/src/battle/cavalry.rs
++++ b/crates/mc-core/src/battle/cavalry.rs
+@@ -285,6 +285,7 @@ fn sweep_drives(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Combat
+                     Sweep::Flank(_) => Plan::Flank,
+                 };
+                 battle.exposure.exposed(m.id, bi, pos, kind);
++                continue;
+             }
+             let slot = super::formation::slot_position(
+                 &r.spec,

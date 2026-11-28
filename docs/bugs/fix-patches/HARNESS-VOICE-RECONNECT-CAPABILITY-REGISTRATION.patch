@@ -1,0 +1,19 @@
+diff --git a/tools/harness/backends/screens_voice_qa.py b/tools/harness/backends/screens_voice_qa.py
+index c3111e22a..6f393a142 100644
+--- a/tools/harness/backends/screens_voice_qa.py
++++ b/tools/harness/backends/screens_voice_qa.py
+@@ -831,8 +831,12 @@ def voice_reconnect(native: ProbeSteps, quiet_address: str, leg: dict[str, Any])
+     leg["native_on_non_voice_server"] = {"voice": after["voice"], "voice_hud": voice_hud(after),
+                                          "screenshot": native_shot(native, "native-non-voice-server")}
+     # Registration advertises this client's capability anew on every Play connection,
+-    # even when the next server has no voice support.
+-    return (after["voice"] == {"registered": False, "server_enabled": False, "listening": False}
++    # even when the next server has no voice support. Prove the old state cleared first.
++    return (disconnected.get("in_play") is False
++            and disconnected["voice"] == {"registered": False, "server_enabled": False, "listening": False}
++            and not voice_hud(disconnected)
++            and after["voice"]["server_enabled"] is False
++            and after["voice"]["listening"] is False
+             and not voice_hud(after))
+ 
+ 

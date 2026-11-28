@@ -9,7 +9,7 @@ source = "Opus round-3 review of wt/D123CivQ (receipts/D123/D123Civ/REVIEW-QUEUE
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::autonomy::tests::every_pending_village_takes_its_gate_clock_turn"]
 
-fix_commit = "44aa3d95a"
+fix_commit = "patch:3edbf86e2524b88de0fa1ad8f17a27e76d9c82ef9a5098f268e33ae64315e3b0"
 repro_check = ["`cargo nextest run -p mc-core --lib every_pending_village_takes_its_gate_clock_turn`: simulates the `pop_front`/`push_back` rotation for 1..=16 pending villages over 400 ticks and asserts every village took a turn on a `tick % 20 == 0` tick. Reversal control observed red with the plain `min(pending, VILLAGES_PER_TICK)` batch (queue of 5 starves)."]
 # fix_commit is 44aa3d95a, the commit that is an ancestor of main; b6cd4918b is the same change on a
 # side line (its diff against 44aa3d95a for autonomy.rs and autonomy_tests.rs is empty).

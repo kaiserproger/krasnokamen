@@ -26,4 +26,4 @@ source = "Owner host 2026-11-14 18:53-19:48: receipts/BvItemCache/g2x/chain-V2.s
 repro = "manual"
 regression = ["python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_refuses_new_slot", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_nested_runner_preserves_window_marker", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_reuses_outer_slot", "python:tools.dev.test_scene_slot:SceneSlot.test_refuses_to_take_a_slot_inside_an_exclusive_window", "python:tools.dev.test_scene_slot:SceneSlot.test_window_inside_a_held_slot_reuses_it"]
 failing_first = "reported"
-fix_commit = "c7fc3ab52"
+fix_commit = "patch:2128a2f69e10b9a435c8b693c5a6e47323180c3fa639b939f92583e722690781"

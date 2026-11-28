@@ -9,4 +9,4 @@ source = "java-matrix row tr.dupe.destroy_during_interaction:death_respawn.keep_
 regression = ["python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener", "python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener", "python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock"]
 repro_check = "candidate: receipts/XHarnessJava/NC-R1-reverse-ef508fc78.log reverses the runtime.py hunks (readiness must not be a bare accept, the ref fails); the java_matrix.py lease hunks do not reverse on HEAD so the lease ref is candidate-only; client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "ef508fc78"
+fix_commit = "patch:fcbce6db90833d90b57f75c66afe5868c021fb25ca90bc21af08500b4667ef1c"

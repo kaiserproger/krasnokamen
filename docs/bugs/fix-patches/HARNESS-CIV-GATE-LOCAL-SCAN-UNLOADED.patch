@@ -1,0 +1,49 @@
+diff --git a/tools/harness/backends/civilization_seed_qa.py b/tools/harness/backends/civilization_seed_qa.py
+index 4a04d9703..0720b86cc 100644
+--- a/tools/harness/backends/civilization_seed_qa.py
++++ b/tools/harness/backends/civilization_seed_qa.py
+@@ -897,6 +897,22 @@ def move_observer(probe: ProbeSteps, destination: dict[str, float]) -> bool:
+             return _observer_horizontal(probe, destination)
+ 
+ 
++def _wait_scan_loaded(probe: ProbeSteps, lo: list[int], hi: list[int]) -> None:
++    """Wait, event-driven, until the client holds every chunk the scan will read.
++
++    `minecraft_wait_for_loaded_block` blocks on the client's own chunk event; it
++    is the same wait the remote branch always used, now applied to local scans
++    too, because locality is about the observer's distance, not about whether the
++    client has streamed the chunk yet.
++    """
++    for x in range(lo[0] // 16, hi[0] // 16 + 1):
++        for z in range(lo[2] // 16, hi[2] // 16 + 1):
++            probe.call("minecraft_wait_for_loaded_block", {
++                "x": max(lo[0], x * 16), "y": lo[1], "z": max(lo[2], z * 16),
++                "timeout_seconds": min(120.0, probe.remaining()),
++            })
++
++
+ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[dict[str, Any]]:
+     evidence = []
+     for building in village._listed_buildings(lines)[:30]:
+@@ -925,12 +941,15 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
+                                "y": hi[1] + 3, "z": (lo[2] + hi[2]) / 2}
+                 item_merge._console(server, f"tp {village.USERNAME} {destination['x']} {destination['y']} {destination['z']}")
+                 moved = move_observer(probe, destination)
+-                for x in range(lo[0] // 16, hi[0] // 16 + 1):
+-                    for z in range(lo[2] // 16, hi[2] // 16 + 1):
+-                        probe.call("minecraft_wait_for_loaded_block", {
+-                            "x": max(lo[0], x * 16), "y": lo[1], "z": max(lo[2], z * 16),
+-                            "timeout_seconds": min(120.0, probe.remaining()),
+-                        })
++                _wait_scan_loaded(probe, lo, hi)
++            else:
++                # A local building is not auto-loaded: the client can still be
++                # streaming chunks right after join, and a scan of a cell it has
++                # not received fails with "client chunk is not loaded" (HANDOFF-47
++                # run 3: a house 13 blocks from the bell, 122 s into the run). Ask
++                # for each scanned chunk the same way the remote path does - an
++                # event-driven MCP wait, never a sleep.
++                _wait_scan_loaded(probe, lo, hi)
+             scan = probe.call("minecraft_scan_blocks", {
+                 "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
+                 "max_x": hi[0], "max_y": hi[1], "max_z": hi[2],

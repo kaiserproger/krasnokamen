@@ -1,0 +1,108 @@
+diff --git a/tools/harness/backends/village_autonomy_qa.py b/tools/harness/backends/village_autonomy_qa.py
+index 02744c268..edebcfe29 100644
+--- a/tools/harness/backends/village_autonomy_qa.py
++++ b/tools/harness/backends/village_autonomy_qa.py
+@@ -2451,6 +2451,27 @@ def _wait_autonomous_progress(
+     return further, upgraded
+ 
+ 
++def _screen_on_top(probe: ProbeSteps) -> str | None:
++    """The screen class covering the game view, or None when the game view is shown."""
++    try:
++        screen = (probe.observe() or {}).get("screen") or {}
++    except Exception:
++        return None
++    if not screen.get("open"):
++        return None
++    return str(screen.get("class") or "screen")
++
++
++def _clear_covering_screen(probe: ProbeSteps) -> str | None:
++    """Close a screen left over the game view; return the class that survived the close."""
++    covering = _screen_on_top(probe)
++    if covering is None:
++        return None
++    probe.call("minecraft_close_screen", {})
++    probe.call("minecraft_wait_ticks", {"ticks": 10})
++    return _screen_on_top(probe)
++
++
+ def _planner_status(
+     probe: ProbeSteps, detail: dict[str, Any], chest_pos: tuple[int, int, int],
+     read_container: Callable[[tuple[int, int, int]], dict[str, int]],
+@@ -2461,31 +2482,52 @@ def _planner_status(
+     A failed read lands in `projects_error`/`storage_error` instead of raising here:
+     the owner-order checks only record the status, while the civilization gate raises
+     on either key (civilization_seed_qa.scenario) because its milestones and its stall
+-    oracle both read these fields - so this read gates that profile."""
++    oracle both read these fields - so this read gates that profile.
++
++    Both reads are retried once, bounded: the first attempt can fail on a screen the
++    gate itself opened (`Status`, HARNESS-CIV-GATE-PLANNER-READ-BLOCKED-BY-STATUS-DIALOG)
++    or on a console reply that landed mid-line in the server log
++    (HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT). A screen that survives the close is named
++    in the error, so a second failure explains the gate instead of hiding it."""
+     status: dict[str, Any] = {}
+-    try:
+-        observed = _project_status(probe, capture)
+-        # The live Construction dialog clips its body to the client viewport: a settlement
+-        # with four projects showed three and "Active projects: 4/8"
+-        # (20261123T223724-civilization-seed-qa-wyc2jdia). The visible projects are what the
+-        # caller can act on, so a body the client cut at the viewport edge is accepted here;
+-        # `_project_progress` without the flag (the checks that need every project) refuses it.
+-        status["projects"] = _project_progress(observed, clipped_ok=True)
+-        status["project_ui"] = observed.get("ui_nodes", [])
+-    except Exception as exc:
+-        # Keep the raw dialog next to the failure: the label the parser refused is the
+-        # only client-side trace of a project whose blueprint id no name table knows
+-        # (2026-11-24: an unnamed one-cell project at [132, 82, -219]).
+-        body = "\n".join(node.get("label", "") for node in observed.get("ui_nodes", [])) \
+-            if isinstance(observed, dict) else ""
+-        status["projects_error"] = (str(exc) + (" · dialog: " + body[:600] if body else ""))[:900]
++    observed: dict[str, Any] = {}
++    for attempt in (1, 2):
++        try:
++            observed = _project_status(probe, capture if attempt == 1 else None)
++            # The live Construction dialog clips its body to the client viewport: a settlement
++            # with four projects showed three and "Active projects: 4/8"
++            # (20261123T223724-civilization-seed-qa-wyc2jdia). The visible projects are what the
++            # caller can act on, so a body the client cut at the viewport edge is accepted here;
++            # `_project_progress` without the flag (the checks that need every project) refuses it.
++            status["projects"] = _project_progress(observed, clipped_ok=True)
++            status["project_ui"] = observed.get("ui_nodes", [])
++            status.pop("projects_error", None)
++            break
++        except Exception as exc:
++            # Keep the raw dialog next to the failure: the label the parser refused is the
++            # only client-side trace of a project whose blueprint id no name table knows
++            # (2026-11-24: an unnamed one-cell project at [132, 82, -219]).
++            body = "\n".join(node.get("label", "") for node in observed.get("ui_nodes", [])) \
++                if isinstance(observed, dict) else ""
++            status["projects_error"] = (str(exc) + (" · dialog: " + body[:600] if body else ""))[:900]
++            left = _clear_covering_screen(probe)
++            if attempt == 2 and left is not None:
++                status["projects_error"] = (
++                    f"{status['projects_error']} · screen stayed open: {left}")[:900]
+     status["buildings_now"] = _recent_chat(_send(probe, "settlement building list"), 25)
+-    try:
+-        status["storage_now"] = _settlement_stock(
+-            probe, detail, chest_pos, status["buildings_now"], read_container,
+-        )
+-    except Exception as exc:
+-        status["storage_error"] = str(exc)[:300]
++    for attempt in (1, 2):
++        try:
++            status["storage_now"] = _settlement_stock(
++                probe, detail, chest_pos, status["buildings_now"], read_container,
++            )
++            status.pop("storage_error", None)
++            break
++        except Exception as exc:
++            status["storage_error"] = str(exc)[:300]
++            left = _clear_covering_screen(probe)
++            if attempt == 2 and left is not None:
++                status["storage_error"] = (
++                    f"{status['storage_error']} · screen stayed open: {left}")[:900]
+     return status
+ 
+ 

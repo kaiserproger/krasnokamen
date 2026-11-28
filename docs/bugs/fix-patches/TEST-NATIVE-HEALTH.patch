@@ -1,0 +1,33 @@
+diff --git a/tools/harness/backends/native_matrix.py b/tools/harness/backends/native_matrix.py
+index 8b5021409..02bdbd5a8 100644
+--- a/tools/harness/backends/native_matrix.py
++++ b/tools/harness/backends/native_matrix.py
+@@ -255,17 +255,24 @@ class HealthInterval:
+         tick, skipped, instance = self.baseline
+         data = self._snapshot(tick)
+         samples = data.get('samples')
+-        if not isinstance(samples, list) or not samples:
++        if (data.get('instance_started_unix_ns') != instance or data.get('after_tick') != tick
++                or type(data.get('source_skipped_ticks_total')) is not int
++                or data['source_skipped_ticks_total'] != skipped
++                or data.get('overrun') is not False or not isinstance(samples, list) or not samples):
+             raise MissingCapability('always_oracle:incomplete_load_metrics')
+         expected = tick + 1
+         for sample in samples:
+-            if not isinstance(sample, dict) or type(sample.get('wall_us')) is not int or sample['wall_us'] < 0:
++            if (not isinstance(sample, dict) or type(sample.get('tick')) is not int
++                    or sample['tick'] != expected or type(sample.get('wall_us')) is not int
++                    or sample['wall_us'] < 0):
+                 raise MissingCapability('always_oracle:gapped_load_metrics')
+             if sample['wall_us'] >= 50_000:
+-                raise RuntimeError(f"always_oracle:tick_mspt_at_least_50:{sample.get('tick')}:{sample['wall_us']}")
++                raise RuntimeError(f"always_oracle:tick_mspt_at_least_50:{sample['tick']}:{sample['wall_us']}")
+             expected += 1
++        if data.get('latest_tick') != expected - 1:
++            raise MissingCapability('always_oracle:incomplete_load_metrics')
+         self.segments.append({'first_tick': tick + 1, 'last_tick': expected - 1,
+-                              'samples': [{'tick': sample.get('tick'), 'wall_us': sample['wall_us']} for sample in samples],
++                              'samples': [{'tick': sample['tick'], 'wall_us': sample['wall_us']} for sample in samples],
+                               'source_skipped_ticks_total': skipped})
+ 
+     def verify_log(self) -> None:
