@@ -734,56 +734,54 @@ pub(super) fn upgrade_project_observed(
         else {
             continue;
         };
-            // Stock-only admission policy (docs settlements/construction.md):
-            // the executor crafts bill items at haul (`reserve_wood` +
-            // `ensure_units`), so `funded_variant` alone admits an upgrade that
-            // is only *craftable* now; this rule instead skips an upgrade whose
-            // bill cannot be hauled from store as it stands, because such a
-            // site holds the planner (and the only builder) in the meantime -
-            // the adopted village kept `lumber_camp:2` bound at 2 work units
-            // from tick 5,420 with `oak_log` 140 and `oak_planks` 2, starving
-            // Storage and House. The consequence is documented: an upgrade
-            // whose bill contains crafted items waits until those items are in
-            // store (a later pass admits it).
-            // Checked on the CHOSEN bill, exactly what `begin` will build: the
-            // selected species and bed colour (`selected_bill`), netted of what
-            // other active projects are promised (`with_joint`, the rule
-            // `jointly_fundable` applies to a new site), so a birch or spruce
-            // village passes and a bill already promised away does not.
-            let Some(bill) = super::selected_bill(state, record.id, &next.materials, images)
-            else {
-                continue;
+        // Stock-only admission policy (docs settlements/construction.md):
+        // the executor crafts bill items at haul (`reserve_wood` +
+        // `ensure_units`), so `funded_variant` alone admits an upgrade that
+        // is only *craftable* now; this rule instead skips an upgrade whose
+        // bill cannot be hauled from store as it stands, because such a
+        // site holds the planner (and the only builder) in the meantime -
+        // the adopted village kept `lumber_camp:2` bound at 2 work units
+        // from tick 5,420 with `oak_log` 140 and `oak_planks` 2, starving
+        // Storage and House. The consequence is documented: an upgrade
+        // whose bill contains crafted items waits until those items are in
+        // store (a later pass admits it).
+        // Checked on the CHOSEN bill, exactly what `begin` will build: the
+        // selected species and bed colour (`selected_bill`), netted of what
+        // other active projects are promised (`with_joint`, the rule
+        // `jointly_fundable` applies to a new site), so a birch or spruce
+        // village passes and a bill already promised away does not.
+        let Some(bill) = super::selected_bill(state, record.id, &next.materials, images) else {
+            continue;
+        };
+        // The priority House's own bill is reserved while the village is
+        // short of roofed beds: an upgrade never spends the stock the
+        // House lane is waiting on (runs 2-3 of the final civ series). The
+        // check is per item of the UPGRADE's own bill - `upgrade + joint +
+        // reserve <= stock` for each item it needs - because the House bill
+        // carries a bed nobody stocks autonomously (autocraft is
+        // owner-command-only, the executor crafts at haul): a whole-bill
+        // union would refuse every upgrade, forever, while a bed is short.
+        // An upgrade OF a house adds beds and is the documented fallback
+        // when no new House has a legal lot, so it is not reserved against
+        // itself.
+        let exempt = building.kind == super::BuildingKind::House;
+        let promised = |item: u32| -> u32 {
+            let of = |bill: &[(u32, u32)]| {
+                bill.iter()
+                    .filter(|(known, _)| *known == item)
+                    .map(|(_, count)| *count)
+                    .sum()
             };
-            // The priority House's own bill is reserved while the village is
-            // short of roofed beds: an upgrade never spends the stock the
-            // House lane is waiting on (runs 2-3 of the final civ series). The
-            // check is per item of the UPGRADE's own bill - `upgrade + joint +
-            // reserve <= stock` for each item it needs - because the House bill
-            // carries a bed nobody stocks autonomously (autocraft is
-            // owner-command-only, the executor crafts at haul): a whole-bill
-            // union would refuse every upgrade, forever, while a bed is short.
-            // An upgrade OF a house adds beds and is the documented fallback
-            // when no new House has a legal lot, so it is not reserved against
-            // itself.
-            let exempt = building.kind == super::BuildingKind::House;
-            let promised = |item: u32| -> u32 {
-                let of = |bill: &[(u32, u32)]| {
-                    bill.iter()
-                        .filter(|(known, _)| *known == item)
-                        .map(|(_, count)| *count)
-                        .sum()
-                };
-                of(&joint) + if exempt { 0 } else { of(&reserved) }
-            };
-            let own: Vec<(u32, u32)> = bill
-                .iter()
-                .map(|&(item, count)| (item, count.saturating_add(promised(item))))
-                .collect();
-            if !crate::settlements::construction_crafting::missing_base(state, &own, images)
-                .is_empty()
-            {
-                continue;
-            }
+            of(&joint) + if exempt { 0 } else { of(&reserved) }
+        };
+        let own: Vec<(u32, u32)> = bill
+            .iter()
+            .map(|&(item, count)| (item, count.saturating_add(promised(item))))
+            .collect();
+        if !crate::settlements::construction_crafting::missing_base(state, &own, images).is_empty()
+        {
+            continue;
+        }
         let project = Project {
             settlement: record.id,
             blueprint: blueprint.id.clone(),

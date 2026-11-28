@@ -1059,8 +1059,7 @@ pub(super) fn scan_sites(
                 .flatten()
                 .any(|blueprint| blueprint.kind == BuildingKind::House);
             if let Some(log) = diagnostic.as_deref_mut()
-                && candidate_kinds(state, record, images)
-                    .any(|kind| kind == BuildingKind::House)
+                && candidate_kinds(state, record, images).any(|kind| kind == BuildingKind::House)
             {
                 log.ordinary_house_funded = Some(funded_house);
             }

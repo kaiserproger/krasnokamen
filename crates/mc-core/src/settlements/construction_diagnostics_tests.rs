@@ -62,10 +62,7 @@ fn planner_and_courtship_records_reach_the_phase_log() {
     // holds a legal lot, so it takes the `sweep_waiting` branch. The label and
     // the two lane facts below are what `finish!`/`SitePass::summary` record;
     // an unset verdict, a missed branch or a dropped house outcome fails here.
-    assert!(
-        planner[0].contains("verdict=\"sweep_waiting\""),
-        "{text}"
-    );
+    assert!(planner[0].contains("verdict=\"sweep_waiting\""), "{text}");
     assert!(planner[0].contains("started=false"), "{text}");
     assert!(
         planner[0].contains("ordinary_house_funded=Some(true)")
@@ -84,5 +81,8 @@ fn planner_and_courtship_records_reach_the_phase_log() {
             && courtship[0].contains(&format!("tick={tick}")),
         "{text}"
     );
-    assert!(courtship[0].contains("pairing_bed_no_candidate=1"), "{text}");
+    assert!(
+        courtship[0].contains("pairing_bed_no_candidate=1"),
+        "{text}"
+    );
 }
