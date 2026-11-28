@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The shared real-client stand (owner D150). Source it, do not build a client per row:
+#   . tools/dev/client-stand
+#   python3 -m tools.harness run scenario <id> --client native --windowed
+# Every lane that needs a live client takes its runs from these paths.
+set -euo pipefail
+
+W=${SOLARIS_WORK:-/run/media/kaiserroman/games/solaris-work}
+export KRASNOKAMEN_CLIENT_BINARY=$W/pins/c879f0ae38b7-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client
+export KRASNOKAMEN_CLIENT_DATA_DIR=$W/qa-armada/template-data/data/vanilla
+export KRASNOKAMEN_CLIENT_RESOURCE_ROOT=$W/qa-armada/template-data/resources
+export KRASNOKAMEN_CLIENT_ASSET_ROOT=$W/qa-armada/template-data/assets
+export KRASNOKAMEN_CLIENT_ASSET_INDEX=$W/qa-armada/template-data/assets/asset-index.json
+
+for v in KRASNOKAMEN_CLIENT_BINARY KRASNOKAMEN_CLIENT_DATA_DIR KRASNOKAMEN_CLIENT_RESOURCE_ROOT \
+         KRASNOKAMEN_CLIENT_ASSET_ROOT KRASNOKAMEN_CLIENT_ASSET_INDEX; do
+    p=${!v}
+    if [ ! -e "$p" ]; then
+        echo "client-stand: $v is missing at $p" >&2
+        exit 1
+    fi
+done
+
+echo "client-stand: $KRASNOKAMEN_CLIENT_BINARY (data $KRASNOKAMEN_CLIENT_DATA_DIR)" >&2
