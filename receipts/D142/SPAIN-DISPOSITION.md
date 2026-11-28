@@ -97,9 +97,14 @@ stays intact as a patch series; it is not merged wholesale.
 | F7 diagnostics only | `a2ec37ac2`, `720176338` | `SPAININTEG-F7-DIAGNOSTICS` | no owner yet, ports last, behaviour unchanged |
 | style only | `ece50bfc5` | none | dropped: rustfmt of a debug call whose file the port rewrites |
 
-Counts: 22 non-merge commits, 21 assigned across seven family rows, 1 style-only
-dropped as unportable formatting, 0 unassigned, branch retained at
-`99b3bf0154da`.
+Counts: 26 commits in `d9c3a591..99b3bf0154da`: 22 non-merges (21 assigned
+across seven family rows, one formatting-only commit dropped) and four merges.
+`99b3bf015` and `94adae5eb` have no recorded merge-specific delta in
+`git show --remerge-diff`. The other two have manual resolutions: `b8333768b`
+combines the storehouse-capacity and executor terrain checks in
+`construction_site_refusals.rs`, and `03bc5b514` chooses `receiving_slots` over
+`free` in `construction_storage.rs`. Their equivalence in the ports has not yet
+been established; the 22-entry table does not account for those resolutions.
 
 The branch is a patch series and is not merged wholesale, and no family merges
 until its own row carries a control and a live check. This table is the record:
