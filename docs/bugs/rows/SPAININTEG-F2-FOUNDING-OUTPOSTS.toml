@@ -1,0 +1,9 @@
+[[bug]]
+id = "SPAININTEG-F2-FOUNDING-OUTPOSTS"
+title = "Independent founding outposts, their seed apron and the large-household daughter split are absent from current main; the parked wt/SpainInteg family-2 commits are unported"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Re-port family of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143: port feature by feature, no wholesale merge; branch wt/SpainInteg 99b3bf0154da vs main 2123 commits ahead). Source commits: 7e9ad6c24 (survey and prepare independent founding outposts), 2195981eb (isolate founding survey and seed apron access), 98eab23e3 (split large households for daughter founding), a0ae2b282 (advance founding survey once per site). Added symbols the disposition table marks missing on main: CLAIM_SIZE, SITE_STEP, founding_split_admission_preserves_parent_children_beds_and_every_item, founding_split_refused_site_has_no_household_or_membership_effect, forested_outpost_uses_its_own_access_and_conserves_felled_logs, forestless_outpost_requires_a_route, one_blocked_apron_column_after_admission_keeps_other_sites_startable, outpost_corridor_trees_restart_credits_each_log_once, player_touched_corridor_log_is_avoided_and_preserved, founding_split_counts_the_adult_staying_in_another_dimension, founding_split_hungry_pair_without_bread_cannot_change_civil_state, founding_split_skips_wandering_builders_and_outbound_walkers, founding_split_surveys_each_site_once_with_multiple_households. Nothing is retired from the branch and nothing is merged yet."
+regression = []
