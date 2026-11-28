@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-ENTITY-RELATIVE-CHECK-PASSES-UNDECLARED-ARG"
+title = "check_entity_relative_trajectory passes an undeclared `entity_type` argument to minecraft_list_entities, so every scene that runs the check dies before its own assertions"
+area = "harness"
+severity = "major"
+repro = "command"
+status = "open"
+source = "Main, 2026-11-28 18:10: the java-matrix-system-chat control run in wt/W1ChatCtl died with 'tool_harness/backends/scene_shot_checks.py:1779: minecraft_list_entities: arguments: undeclared entity_type' (result 20261128T110024-java-matrix-system-chat-owcn_jc_). The call is scene_shot_checks.py:1779-1780, inside check_entity_relative_trajectory, which the scene registers."
+regression = ["python:tools.harness.test_scene_shot"]
+failing_first = "recorded"
+repro_check = "The validator is tools/harness/mcp_schema.py:127-133: the server's own tool schema for minecraft_list_entities declares no entity_type and additionalProperties is false, so passing it fails before the scene touches the world. Effect: java-matrix-system-chat produces no verdicts on either side of its control pair, and ENTITY-RELATIVE-MOVEMENT-DRIFT cannot be proved by its own check. The fix belongs on one side and one side only: either the check stops passing entity_type and filters rows by the entity_type field it already reads from the reply (line 1782), or the tool declares the filter. A test must drive the check against a stub reply and fail while the argument is still sent. Do not weaken the scene."
