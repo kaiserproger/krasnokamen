@@ -125,12 +125,12 @@ moving sources are not implemented.
 ## Required-client behavior
 
 The native settlements bundle is always offered as optional content. A plugin
-bundle is `required` unless its `[client]` table says `required = false`
-(`crates/mc-plugin-host/src/client_bundle.rs` defaults it to `true`). When every
-bundle is optional, the server probes for Loader and vanilla clients continue
-without Loader content. If any bundle is required, every client must negotiate
-it and vanilla clients are refused. For a client negotiating
-Loader content, an unsupported platform/version, denied permission, missing
+bundle defaults to `required = true`; set `required = false` in its
+[`[[client.bundles]]` entry](plugins/CONTRACT.md#package-manifest) to make it
+optional. When every bundle is optional, the server probes for Loader and
+vanilla clients continue without Loader content. If any bundle is required,
+every client must negotiate it and vanilla clients are refused. For a client
+negotiating Loader content, an unsupported platform/version, denied permission, missing
 acknowledgement, invalid bundle, size/hash mismatch or activation failure stops
 login during Configuration. Krasnokamen never silently substitutes vanilla content.
 
