@@ -21,16 +21,17 @@ class FrozenFall:
     move the block; ServerEntity.sendChanges runs on every server tick and resends
     a moved falling block every 20 server ticks (UpdateInterval 20), so updates
     follow the wall clock. Each harness request costs `latency` seconds. The client
-    draws a frozen block at its previous predicted pose (the native client's
-    partial-0 presentation), which the gate must accept along with vanilla's.
-    `holds=False` models a server that keeps dropping the block while frozen. Chat
+    draws a frozen block at its current predicted pose by default. `previous_tick=True`
+    models the partial-0 client bug; `holds=False` models a server that keeps dropping
+    the block while frozen. Chat
     observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
     def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True,
-                 stale: bool = False, velocity_field: bool = True) -> None:
+                 stale: bool = False, velocity_field: bool = True, previous_tick: bool = False) -> None:
         self.latency, self.phase, self.holds, self.fields = latency, phase, holds, fields
         self.velocity_field = velocity_field
+        self.previous_tick = previous_tick
         self.stale = stale
         self.now = self.next_tick = 0.
         self.rate, self.loop = 20., 0
@@ -77,8 +78,9 @@ class FrozenFall:
             self.client_steps -= 1
             self.tick += 1
             if self.client:
-                self.presented = self.client[0]
+                previous = self.client[0]
                 fall(self.client)
+                self.presented = previous if self.previous_tick else self.client[0]
         if self.server and (self.loop + self.phase) % 20 == 0 and self.server[0] != self.sent:
             self.sent = self.server[0]
             self.received = self.client[0] = round(self.sent * 4096) / 4096
@@ -142,8 +144,8 @@ def fall(body: list[float]) -> None:
 class SandGateTests(unittest.TestCase):
     def run_gate(self, latency: float, phase: int, holds: bool = True,
                  fields: bool = True, stale: bool = False,
-                 velocity_field: bool = True) -> FrozenFall:
-        world = FrozenFall(latency, phase, holds, fields, stale, velocity_field)
+                 velocity_field: bool = True, previous_tick: bool = False) -> FrozenFall:
+        world = FrozenFall(latency, phase, holds, fields, stale, velocity_field, previous_tick)
         with tempfile.TemporaryDirectory() as directory:
             frames = []
             for color in ("red", "blue"):
@@ -167,6 +169,10 @@ class SandGateTests(unittest.TestCase):
                     world = self.run_gate(latency, phase)
                     self.assertTrue(all(world.report["assertions"].values()))
                     self.assertIn("tick rate 20", world.report["fixture_commands"])
+
+    def test_previous_tick_presentation_turns_the_gate_red(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "frozen_falling_presented_current_tick"):
+            self.run_gate(.05, 0, previous_tick=True)
 
     def test_a_server_that_keeps_dropping_a_frozen_block_turns_the_gate_red(self) -> None:
         for latency in (.05, .25, .5):

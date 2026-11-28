@@ -7,3 +7,5 @@ Client control commit `1f6faef59865f34f6510339424c319fa3c0a68e4` reverses the pr
 Control binary SHA-256 `0d6344fd0ccb48085f580efb9172685650c60398d39e7331c0d1fbf76e9691c4`; the stand source binary SHA-256 is `31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5`.
 
 Restore pin `pins/51fda1e25803-client-x86_64-unknown-linux-gnu-incr`, SHA-256 `9a18728d3081ba26efc46beb5b132ea5f5b8d8d0f2dfb7464f139f2427dbc4c6`; build log `../frozen-witness/restore-pin.log`. This is a separately built re-land of the exact control hunk, not the stand binary.
+
+Focused harness tests: `mem-run.sh -m 8G python3 -m unittest tools.harness.test_native_player_input` passed (`sand-unit.log`). With only the new strict assertion removed, `... test_native_player_input.SandGateTests.test_previous_tick_presentation_turns_the_gate_red` failed `RuntimeError not raised` (`sand-unit-control.log`); restoring the assertion passed (`sand-unit-restored.log`). The model exercises the shared scene guard, not a real client and not a ledger promotion control.
