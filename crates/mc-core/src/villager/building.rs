@@ -59,9 +59,17 @@ fn storage_target(
     state: &TickState,
     slot: EntitySlot,
     id: SettlementId,
+    handle: &str,
     item: u32,
-) -> Option<BlockPos> {
-    executor::pickup_point(state, id, item, state.entities.pos(slot)).map(block_pos)
+) -> Option<executor::Pickup> {
+    executor::pickup_point(
+        state,
+        id,
+        state.entities.row(slot).uuid,
+        handle,
+        item,
+        state.entities.pos(slot),
+    )
 }
 
 fn preparation_footing(
@@ -355,11 +363,10 @@ pub(crate) fn work(
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
     {
-        let pos = storage_target(state, slot, id, item)?;
+        let pickup = storage_target(state, slot, id, &project.structure, item)?;
         return Some(WorkTarget {
-            pos,
-            exact: executor::released_carry::in_reach(state, id, slot, [pos.x, pos.y, pos.z], item)
-                == Some(false),
+            pos: block_pos(pickup.at),
+            exact: executor::needs_approach(state, id, slot, &pickup, item),
         });
     }
     // Already outside the footprint and in reach of the next cell: keep
@@ -648,24 +655,12 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
             )
         {
             if step == 0
-                && let Some(point) = storage_target(state, slot, id, item)
-                && executor::released_carry::in_reach(
-                    state,
-                    id,
-                    slot,
-                    [point.x, point.y, point.z],
-                    item,
-                )
-                .unwrap_or_else(|| super::mining::near(state, slot, point, 2.5))
+                && let Some(pickup) = storage_target(state, slot, id, &project.structure, item)
+                && executor::pickup_reached(state, id, slot, &pickup, item)
             {
                 let uuid = state.entities.row(slot).uuid;
-                if let Err(reason) = executor::fetch(
-                    state,
-                    uuid,
-                    &project.structure,
-                    [point.x, point.y, point.z],
-                    item,
-                ) {
+                if let Err(reason) = executor::fetch(state, uuid, &project.structure, pickup, item)
+                {
                     construction::note_build_refusal(state, id, &project.structure, reason);
                 }
             }
