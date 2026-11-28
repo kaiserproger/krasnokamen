@@ -1,0 +1,8 @@
+[[bug]]
+id = "RC6-RELEASE-GATES"
+title = "The RC6 private owner candidate e1f87c2 has no measured host benchmark and no gate receipt; its remaining gates (host benchmark, same-tree player path, restart and custody, owner package smoke) are unrun."
+area = "harness"
+repro = "manual"
+severity = "blocker"
+status = "open"
+source = "receipts/D147/D147-RC6-QUEUE.md; candidate pin e1f87c2 (receipts/RC6Owner/). The host benchmark waits for a registered quiet -x window, which is a condition of this row, not a deferral: no second pin without a documented identity suffix, and no rebuild while the saved pin's hash is what the gates name."

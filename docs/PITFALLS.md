@@ -106,6 +106,16 @@ and "not run" for an unrun platform. Check: `.analysis/releases/<tag>/claims.md`
 maps each sentence to a receipt before review
 ([release text](development/release-and-tags.md#core-release-cut)).
 
+**A stale queue document beat the live ledger.** On 2026-11-28 Main ran from
+`.analysis/QUEUE.md` (last touched 2026-11-11) and `.analysis/MEMORY.md`
+(2026-11-16), whose tail marked the remaining work deferred and blocked, while
+`docs/bugs/rows` held 198 open rows (4 blockers); with no active row after the
+last landing, Main idled 13 hours. The queue is the ledger, counted by
+`python3 -m tools.harness ledger list`, and a turn ends only after naming the
+next rows and their owners; a stale cursor is deleted, not appended (D147,
+incident receipt receipts/D147/D147-QUEUE-SINGLE-SOURCE.md, ledger rows).
+Check: the closing report quotes `ledger list`'s open count and three rows.
+
 ## The owner host
 
 **A relative path edited Main instead of the worktree.** File tools resolve a
