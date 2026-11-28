@@ -355,9 +355,11 @@ pub(crate) fn work(
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
     {
+        let pos = storage_target(state, slot, id, item)?;
         return Some(WorkTarget {
-            pos: storage_target(state, slot, id, item)?,
-            exact: false,
+            pos,
+            exact: executor::released_carry::in_reach(state, id, slot, [pos.x, pos.y, pos.z], item)
+                == Some(false),
         });
     }
     // Already outside the footprint and in reach of the next cell: keep
@@ -647,7 +649,14 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
         {
             if step == 0
                 && let Some(point) = storage_target(state, slot, id, item)
-                && super::mining::near(state, slot, point, 2.5)
+                && executor::released_carry::in_reach(
+                    state,
+                    id,
+                    slot,
+                    [point.x, point.y, point.z],
+                    item,
+                )
+                .unwrap_or_else(|| super::mining::near(state, slot, point, 2.5))
             {
                 let uuid = state.entities.row(slot).uuid;
                 if let Err(reason) = executor::fetch(

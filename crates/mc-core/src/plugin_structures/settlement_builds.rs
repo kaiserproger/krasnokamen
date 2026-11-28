@@ -4,6 +4,9 @@ pub(crate) use super::portions::PortionKind;
 use super::*;
 use crate::settlements::{SettlementId, inventory};
 
+#[path = "settlement_builds_carry.rs"]
+pub(crate) mod released_carry;
+
 pub(crate) fn owner(id: SettlementId) -> String {
     format!("@settlement:{}", id.0)
 }
@@ -1722,8 +1725,11 @@ pub(crate) fn fetch(
         );
         (plan, bill)
     };
-    if !plan.iter().any(|(planned, _)| *planned == item) {
+    let Some((_, wanted)) = plan.iter().find(|(planned, _)| *planned == item) else {
         return Err(Failure::Blocked);
+    };
+    if let Some(result) = released_carry::fetch(state, id, uuid, position, item, *wanted) {
+        return result;
     }
     let images = source_images(state, id);
     if !images.iter().any(|image| {
@@ -1760,6 +1766,7 @@ pub(crate) fn fetch(
                     None => future.push((*item, *count)),
                 }
             }
+            released_carry::deduct(state, id, &mut future);
             let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
             let reserved = if specific {
                 Default::default()
@@ -2104,7 +2111,7 @@ pub(crate) fn pickup_point(
     };
     let exact = images.iter().any(has_item);
     if !exact && !crate::settlements::construction_crafting::can_craft(state, item, &images) {
-        return None;
+        return released_carry::pickup_point(state, id, item, origin);
     }
     images
         .iter()
