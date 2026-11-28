@@ -537,6 +537,16 @@ lane, so the Loader source stays in its own repository. A `loader:gradle:` red c
 JUnit report says `AssertionError` and names the source line (a compile error, a NullPointerException
 or a missing report is unrunnable), and it is recorded with the test file and line.
 
+A client-surface row (`area = "client"`, or `repro` in `manual`/`client`) needs rule 3's graphical
+proof as well as the reversal: its `harness:` ref is covered by `--client-receipt`, a passed
+real-client run whose receipt records that ref's assertion as passing. Neither half substitutes for
+the other — a loader fix with no receipt on such a row refuses, and a receipt on a row that is not
+client-surface refuses too. Because both halves prove one fix, the receipt must also name the Loader
+revision the run saw (`details.named_scenario.repo_revisions`) and that revision must be the Loader
+checkout that contains the fix; a receipt from a run against another or an unnamed Loader build
+refuses. The promotion records the covered refs and their passing assertion names as
+`graphical_assertions` beside the `loader_reversal` control.
+
 ### Recording a graphical control later (backfill)
 
 A client-visible row whose promotion recorded its graphical refs `unrunnable` in

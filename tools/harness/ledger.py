@@ -2117,6 +2117,62 @@ def _receipt_identity(root, receipt_path, tree):
     return receipt, path, server, recorded
 
 
+def check_loader_client_receipt(ident, root, receipt_path, row, tree, loader_head):
+    """Validate the real-client receipt a client-surface `loader:<sha>` row carries -> info dict.
+
+    The loader reversal proves the fix's own hunks; this receipt proves the graphical symptom on a real
+    client. Both halves are one proof of one fix, so the receipt must name the Loader revision the run
+    saw and that revision must be the checkout that contains the fix: a receipt from a run against
+    another Loader build says nothing about this fix."""
+    from . import scenarios
+
+    graphical_refs = [ref for ref in row['regression'] if regressions.is_graphical_ref(ref)]
+    if not graphical_refs:
+        raise Refused(f'{ident}: a client-surface {LOADER_FIX_PREFIX}<sha> row needs a graphical harness ref '
+                      '(harness:<profile>:<scenario|verdict>) naming the real-client assertion its receipt passes')
+    info = check_client_receipt(root, receipt_path, graphical_refs, tree)
+    try:
+        data = json.loads(Path(receipt_path).read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f'{ident}: client receipt {receipt_path} unreadable: {error}')
+    details = data.get('details') or {}
+    named = details.get('named_scenario')
+    revisions = named.get('repo_revisions') if isinstance(named, dict) else None
+    if not isinstance(revisions, dict):
+        raise Refused(f'{ident}: client receipt {receipt_path} names no Loader revision '
+                      '(details.named_scenario.repo_revisions): a run that does not say which Loader it saw '
+                      f'cannot prove a {LOADER_FIX_PREFIX}<sha> fix')
+    recorded = revisions.get('krasnokamen-loader') or revisions.get('solaris-loader')
+    if not re.fullmatch(r'[0-9a-f]{40}', str(recorded or '')):
+        raise Refused(f'{ident}: client receipt {receipt_path} records Loader revision {recorded!r}, not a head: '
+                      'the graphical restore has to run the Loader checkout that contains the fix')
+    if recorded != loader_head:
+        raise Refused(f'{ident}: client receipt {receipt_path} ran against Loader {recorded[:12]}, not the '
+                      f'checkout {loader_head[:12]} that contains the fix: rerun the gate on the fixed Loader')
+    passing = sorted({name for maps in _assertion_maps(details) for name, value in maps.items() if value is True})
+    proving = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    assertions = {}
+    for ref in info['covers']:
+        _, _, check = ref.split(':', 2)
+        if check in scenarios.SCENARIOS:
+            names = list(passing)
+            if not names:
+                raise Refused(f'{ident}: client receipt {receipt_path} records no passing assertion for {ref}: a '
+                              'passed status without its scenario assertion is not graphical evidence')
+        else:
+            names = [check]
+        wanted = proving.get(ref)
+        if wanted:
+            if wanted not in names:
+                raise Refused(f'{ident}: client receipt {receipt_path} does not pass the assertion the row '
+                              f'names for {ref} ({wanted!r}): ' + (', '.join(names) or 'no assertion recorded'))
+            names = [wanted]
+        assertions[ref] = names
+    info['loader_head'] = recorded
+    info['graphical_assertions'] = assertions
+    return info
+
+
 def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree, proving_assertions):
     """Validate the negative control of a `client:<sha>` row -> info dict.
 
@@ -2786,8 +2842,12 @@ def _loader_assertion(entry, tree, ref=''):
     return bool(_TEST_PATH.search(relative))
 
 
-def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader_runner=None):
-    """A `loader:<sha>` fix: the loader python ref is red with the row's production hunks reversed."""
+def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader_runner=None,
+                        client_receipt=None):
+    """A `loader:<sha>` fix: the loader python ref is red with the row's production hunks reversed.
+
+    A client-surface row also carries a passed real-client receipt of a graphical assertion whose run
+    names the same fixed Loader revision; the receipt is its restore, never a substitute for the reversal."""
     fix_full = loader_fix_commit(fix, root)
     refs = row['regression']
     if not refs:
@@ -2807,6 +2867,9 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
     if _git(repo, 'merge-base', '--is-ancestor', fix_full, head, check=False)[0]:
         raise Refused(f'{ident}: the Loader checkout {repo} at {head[:12]} does not contain the fix '
                       f'{fix_full[:12]}')
+    client_info = None
+    if client_receipt:
+        client_info = check_loader_client_receipt(ident, root, client_receipt, row, tree_now, head)
     control_files = row.get('control_files')
     if not isinstance(control_files, list) or not control_files:
         raise Refused(f'{ident}: a {LOADER_FIX_PREFIX} row records control_files (the non-test files whose '
@@ -2847,8 +2910,13 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
             raise Refused(f'{ident}: the loader refs stayed green with the fix reversed: '
                           + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in control.items()))
         restored = runner(refs, repo)
+        if client_info:
+            for ref, names in client_info['graphical_assertions'].items():
+                restored[ref] = {'state': GREEN, 'detail': 'passed real-client receipt',
+                                 'receipt': client_info['path'], 'assertion': names}
         if not loader_runner:
-            others = [ref for ref in refs if not ref.startswith('loader:')]
+            covered = set(client_info['covers']) if client_info else set()
+            others = [ref for ref in refs if not ref.startswith('loader:') and ref not in covered]
             if others:
                 restored.update(run_refs(ctx, others, root, True))
         bad = {ref: entry for ref, entry in restored.items() if entry.get('state') != GREEN}
@@ -2863,7 +2931,8 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
         'fix_patch_sha256': hashlib.sha256(patch.encode(errors='surrogateescape')).hexdigest(),
         'reversed_files': reversed_files, 'kept_test_files': kept_tests,
         'loader_checkout': {'path': str(repo), 'head': head, 'untracked': untracked},
-        'negative_control': control, 'restored': restored, 'client_receipt': None,
+        'negative_control': control, 'restored': restored, 'client_receipt': client_info,
+        'graphical_assertions': client_info['graphical_assertions'] if client_info else None,
         'artifact_dir': str(ctx.artifact_dir),
     }
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -2913,15 +2982,20 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if fix.startswith(LOADER_FIX_PREFIX):
         if row.get('test_only_fix') is True:
             raise Refused(f'{ident}: test_only_fix is for a committed core test oracle, not a loader fix')
-        if client_receipt or client_control_receipt:
+        if client_control_receipt:
             raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix is proved by reversing its own hunks for a '
-                          'loader ref, not by real-client receipts')
-        if regressions.needs_real_client(row):
+                          'loader ref, not by a real-client control receipt')
+        client_surface = regressions.needs_real_client(row)
+        if client_receipt and not client_surface:
+            raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix on a row that is not client-surface is proved '
+                          'by reversing its own hunks for a loader ref, not by real-client receipts')
+        if client_surface and not client_receipt:
             raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix proves only its loader ref; a client-surface row '
                           '(area client, or repro manual/client) needs a graphical real-client ref and receipt, '
                           'which this promotion cannot supply')
         return _promote_loader_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
-                                   ctx=ctx, loader_runner=loader_runner)
+                                   ctx=ctx, loader_runner=loader_runner,
+                                   client_receipt=client_receipt if client_surface else None)
     if fix.startswith(CLIENT_TEST_PREFIX):
         if row.get('test_only_fix') is True:
             raise Refused(f'{ident}: test_only_fix (a core test oracle plus its defect patch) is not the '
