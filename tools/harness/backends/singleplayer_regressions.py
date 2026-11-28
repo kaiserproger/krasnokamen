@@ -134,6 +134,7 @@ def run(ctx: ProfileContext) -> dict:
     holder = None
     holder_fd = None
     world = None
+    probe = None
     try:
         xvfb, display, _ = runtime.start_xvfb(artifact)
         ctx.logs.append(str(artifact / "xvfb.log"))
@@ -190,9 +191,13 @@ def run(ctx: ProfileContext) -> dict:
                         probe.check("server_cpu_quota_1_percent",
                                     len(quota) == 2 and all(part.isdigit() for part in quota)
                                     and int(quota[0]) * 100 == int(quota[1]))
+                        # Always evaluated, before any check that only a listening server reaches:
+                        # a client that aborts the start at a deadline must be red at this row's
+                        # own assertion, not at a downstream setup check (SP-START-TIMEOUT).
+                        probe.check("startup_crossed_former_deadline",
+                                    result == "listening"
+                                    and probe.report.get("server_wait_seconds", 0.0) > 180)
                         if result == "listening":
-                            probe.check("startup_crossed_former_deadline",
-                                        probe.report["server_wait_seconds"] > 180)
                             singleplayer_slow.release_startup_quota(unit)
                             probe.report["startup_quota_released_after_listening"] = True
                     if result == "listening":
@@ -211,6 +216,15 @@ def run(ctx: ProfileContext) -> dict:
                         # (SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE).
                         final = probe.observe()
                     probe.report["slow_final_observation"] = final
+                    # The row's own symptom: the client must not come back to the world list with the
+                    # fixed-deadline report. It stays observable whether or not the aborted start also
+                    # stopped the server, so a control cannot be carried by a downstream setup check.
+                    _local = final.get("singleplayer") or {}
+                    start_error = " ".join(str(part or "") for part in (
+                        _local.get("error"), final.get("disconnect_reason")))
+                    probe.report["slow_start_error"] = start_error
+                    probe.check("startup_not_aborted_by_a_deadline",
+                                "did not start in time" not in start_error)
                     probe.check("slow_server_listened", result == "listening")
                     probe.check("slow_entered_world", final.get("in_play") is True)
                     probe.report["play_to_first_view_seconds"] = time.monotonic() - started
@@ -339,6 +353,14 @@ def run(ctx: ProfileContext) -> dict:
             native_client.capture(mcp, artifact, "singleplayer-ingame")
             probe.call("minecraft_disconnect", {})
         return {"scenario": probe.report}
+    except BaseException as error:
+        # A failed run still has to carry its own assertion map: a promotion control
+        # distinguishes a failed assertion from a timeout or a crashed client by it
+        # (ledger._client_ref_states), and a row whose only ref is this scene would be
+        # unpromotable otherwise.
+        if probe is not None and isinstance(probe.report, dict):
+            ctx.failure_scenario = dict(probe.report)
+        raise
     finally:
         if holder_fd is not None:
             try:
