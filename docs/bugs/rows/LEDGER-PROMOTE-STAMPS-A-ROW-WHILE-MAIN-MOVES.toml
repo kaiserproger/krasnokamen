@@ -1,0 +1,12 @@
+[[bug]]
+id = "LEDGER-PROMOTE-STAMPS-A-ROW-WHILE-MAIN-MOVES"
+title = "A promotion validates one frozen tree but stamps the row in whatever HEAD the repo has when it finishes, so a row can read `fixed` for a tree main no longer is."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source evidence, 2026-11-28 18:45: a promote started on main at `221b859f0` (control tree `/tmp/ledger-control-8rwgc8r1/tree`), and SpainInteg F7 was merged while that promotion was still running, so the checkout was `53380d435`. No stale stamp has been observed: the row that promotion covers was still `open` with no promotion JSON at the time of filing. The defect below is read from the code; the scenario is real and reproducible but its effect on a row is unobserved."
+failing_first = "not recorded"
+regression = []
+repro_check = "`_materialize` (tools/harness/ledger.py:1823-1838) resets the control worktree to the fingerprint captured at promote start and refuses unless the reproduction matches, so the control itself is consistent. `_record_promotion` (ledger.py:2283-2297) then writes the receipt and flips `status = \"fixed\"` without comparing `expected['head']` with `git rev-parse HEAD` in the candidate root, so later merges between the snapshot and the write are invisible to the row. The row's proof is honestly about the snapshot tree; what is missing is either a refusal when HEAD moved or a receipt field naming both heads, so a reader can tell the row's tree from the current one."
+notes = ["Severity minor: the control is consistent, so this is a reporting gap, not a false green on the reverted tree.", "During this window Main simply stops merging while a promote runs; that is a rule for Main, not a fix for the tool."]
