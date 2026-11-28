@@ -6,4 +6,41 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Re-port family of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143: port feature by feature, no wholesale merge; branch wt/SpainInteg 99b3bf0154da vs main 2123 commits ahead). Source commits: 18ea1a5c3 (keep released construction carry available in full villages), 33554901a (align released-carry routing with the custody fence). Added symbols the disposition table marks missing on main: released_carry (git grep released_carry main is empty), a_return_duty_reserves_only_its_addressable_physical_stock, physical_handoff_is_bounded_by_the_duty_and_preserves_stack_components, a_smaller_duty_caps_the_handoff_before_the_remaining_haul, bank_crafting_is_preferred_to_a_released_resident_pickup, donor_arrival_and_handoff_share_the_exact_body_distance, released_construction_handoff_replays_both_carries_and_the_return_duty, handoff_cut, near_bodies. Nothing is retired from the branch and nothing is merged yet."
-regression = []
+regression = [
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_return_duty_reserves_only_its_addressable_physical_stock",
+  "cargo:mc-core:settlements::construction::carry_release_tests::physical_handoff_is_bounded_by_the_duty_and_preserves_stack_components",
+  "cargo:mc-core:settlements::construction::carry_release_tests::donor_arrival_and_handoff_share_the_exact_body_distance",
+  "cargo:mc-core:settlements::construction::carry_release_tests::bank_crafting_is_preferred_to_a_released_resident_pickup",
+  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::released_construction_handoff_replays_both_carries_and_the_return_duty",
+  "cargo:mc-core:settlements::construction::carry_release_tests::released_fences_unblock_full_bank_storehouse_next_cell",
+  "cargo:mc-core:settlements::construction::carry_release_tests::worksite_release_returns_26_planks_and_the_next_builder_collects_all_four_fences",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_smaller_duty_caps_the_handoff_before_the_remaining_haul",
+  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::unpublished_construction_handoff_recovers_the_original_custody_and_duty",
+]
+repro_check = """Ported onto main 3d5dd3f40 in wt/SpainF5, not cherry-picked: main's fetch/pickup_point/building
+shapes differ and released_carry was absent. The source hunks are re-implemented as
+plugin_structures/settlement_builds_carry.rs (donor screen, addressable stock capped by the duty,
+body-distance fence, two-carry inventory::commit, duty decrement after commit) plus three wiring
+points: haul reservation, pickup routing, and the builder's exact approach.
+Green with the port: 20261128T102245-test-40c5_kyj carry_release 7/7 passed;
+20261128T102418-test-0o9ftxde construction_carry 2/2 passed.
+Red controls, each one production hunk disabled while the module stays for compilation:
+- CONTROL-A, no deduct call (20261128T101910-test-50pqh64i): released_fences_unblock_full_bank
+  red and a_return_duty_reserves_only_its_addressable_physical_stock red. The latter's added
+  fourth case panics "an addressable duty funds future work: InsufficientItems"; its three
+  refusal cases are vacuously green on unported main because nothing reads carry_pending for
+  funding there.
+- CONTROL-B, no handoff early return (20261128T100808-test-8xf5uky5 carry_release 4 failed;
+  20261128T101055-test-x9mm5d9h drill 2 failed): physical_handoff_is_bounded_by_the_duty,
+  a_smaller_duty_caps_the_handoff, donor_arrival, and both drill tests red.
+- CONTROL-C, no pickup routing (20261128T101618-test-i_aa4_oh): worksite_release_returns_26_planks red.
+- CONTROL-C2, first-commit ordering with the resident before bank crafting
+  (20261128T102030-test-ske5ppju): bank_crafting_is_preferred_to_a_released_resident_pickup red
+  only, which is the regression the second commit closed.
+- CONTROL-D, no exact released-donor approach in villager/building.rs
+  (20261128T102145-test-s7ck63qf): donor_arrival_and_handoff_share_the_exact_body_distance red only.
+Bank stock and bank crafting stay preferred when craftable; a non-craftable next material routes
+to the addressable donor cell and fetch transfers at most the owed amount inside 2.5 body blocks,
+preserving custom names and unowed personal stock. Nothing behavioural was left unported; the
+style-only ece50bfc5 formatting commit is not part of this family. status stays open for Main.
+"""
