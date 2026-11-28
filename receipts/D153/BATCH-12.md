@@ -49,3 +49,18 @@ pace is far below a quiet host; no result is claimed until the stage exits.
   committed test calls the private `gate_due`, so it cannot be the control; the
   row now carries the required control shape (`autonomy::tick`, eight villages,
   400 ticks) and is owned by `wt/SpainD7Re`.
+
+## Landing
+
+Pushed `3511c5e81..6c14f3002` to `origin/main` at 16:2x +07 (remote reports the
+repository moved to `git@github.com:kaiserproger/krasnokamen.git`; the `solaris`
+remote still redirects). The owner rule allows a not-yet-green commit to land and
+a broken push to get a follow-up fix, so the batch went out while the `test`
+stage was still running at 1472/9546 with 0 failures; this file records the L2
+verdict when the stage exits, and a red stage becomes a fix-forward, not a
+retraction.
+
+Additions after the table above: `69043d026c` (frozen-falling row points at its
+verified client pair), `d712ed32d7` (spear row gets a control that compiles),
+`6c14f3002a` (client pins key the embedded asset models — measured: an untracked
+model file moves `inputs_sha256` from `ded5865da99a…` to `9238ffb29f40…`).
