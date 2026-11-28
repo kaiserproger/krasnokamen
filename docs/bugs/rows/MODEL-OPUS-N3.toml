@@ -8,5 +8,5 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:107"
 regression = ["harness:scene-shot:native-player-head", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer"]
 proving_assertions = { "harness:scene-shot:native-player-head" = "placed_head_hat_layer_pixels" }
-fix_commit = "client:bc7429a36c29d09429a0c84bd66cf0ba0e6b983e"
-repro_check = "On clean core 6d3f1306b3, the native-player-head graphical scene failed placed_head_hat_layer_pixels with the exact player_head.json pre-image control 035c0dadf4e1 (zero hat pixels, 10750 head-changed pixels) and passed with restore bc7429a36c29 (9822 hat pixels). Logs, pin identities and result paths are in receipts/D145ClientTail/MODEL-OPUS-N3/evidence.md; promotion remains Main's responsibility."
+fix_commit = "client:e8fe40c2"
+repro_check = "On clean core 6d3f1306b3, the native-player-head scene failed placed_head_hat_layer_pixels with exact pre-image control 035c0dadf4e1 and passed with restore bc7429a36c29. The restore is not in published client main, so this pair cannot promote the row. The historical fix e8fe40c2 is published, but pin-release --client refused it because its package is still solaris-client; no published restore leg has been measured. See receipts/D145ClientTail/MODEL-OPUS-N3/evidence.md."
