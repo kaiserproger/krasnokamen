@@ -9,7 +9,7 @@ that a not-yet-green commit may land and a broken push gets a follow-up fix.
 
 | commit | content | proof |
 |---|---|---|
-| `d1b0da59f`, `afaabc4b9`, `3d5dd3f40` | client test work cherry-picked onto `main` from outside Main at 16:48 (see `docs/PITFALLS.md`) | not gated on `main`; the batch L2 is their first full run |
+| `d1b0da59f`, `afaabc4b9`, `3d5dd3f40` | client test work cherry-picked onto `main` at 16:48; the reflog does not identify who ran it (see `docs/PITFALLS.md`) | batch L2 pending |
 | `11fac926b` | `receipts/W1Gates/*` — the 44 open patch rows, their scenarios, the two promotion refusals | docs only |
 | `6e7b0e453` | `receipts/SpainF2Review/REPORT.md` + the F1/F2 review table in `receipts/D142/SPAIN-DISPOSITION.md` | docs only |
 | `4881424ac` | delete `TEST-NATIVE-IMPORT` (false positive) + `receipts/LedgerCleanup/DELETED-20261128.md`; open rows 202 → 201 | guard test `Ran 1 test, OK` |
