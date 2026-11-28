@@ -1,0 +1,4 @@
+== row SETTLEMENT-NATURAL-LUMBER-ZONE-ONE-COLUMN
+== reverse docs/bugs/promotions/SETTLEMENT-NATURAL-LUMBER-ZONE-ONE-COLUMN.patch
+ crates/mc-core/src/settlements/autonomy.rs | 122 +----------------------------
+ 1 file changed, 2 insertions(+), 120 deletions(-)

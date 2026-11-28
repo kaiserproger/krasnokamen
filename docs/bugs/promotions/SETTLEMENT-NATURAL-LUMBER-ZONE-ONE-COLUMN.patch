@@ -1,8 +1,7 @@
 diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
-index 8e8583f..3c883c8 100644
 --- a/crates/mc-core/src/settlements/autonomy.rs
 +++ b/crates/mc-core/src/settlements/autonomy.rs
-@@ -24,6 +24,9 @@ const ZONE_PROBES_PER_PASS: usize = 4;
+@@ -26,6 +26,9 @@
  const NATURAL_ZONE_CYCLES: usize = 2;
  // VillagePlanSource documents a maximum reach of seven chunks plus a margin.
  const START_SEARCH_RADIUS: i32 = 8;
@@ -12,7 +11,7 @@ index 8e8583f..3c883c8 100644
  
  #[derive(Debug, Default)]
  pub(crate) struct AutonomyQueue {
-@@ -727,7 +730,7 @@ fn queue_natural(
+@@ -947,7 +950,7 @@
  fn prove_natural(
      state: &mut TickState,
      settlement: SettlementId,
@@ -21,11 +20,10 @@ index 8e8583f..3c883c8 100644
      residents: &BTreeSet<uuid::Uuid>,
      candidates: &mut VecDeque<NaturalCandidate>,
  ) {
-@@ -840,13 +843,30 @@ fn prove_natural(
+@@ -1114,11 +1117,18 @@
      }
      if reached {
          let candidate = candidates.pop_front().expect("proved candidate");
--        let _ = super::buildings::certify_zone(
 +        // A natural lumber camp is the grove it stands in, not the one tree the
 +        // probe found: the zone grows sideways at certification time (CIV-6), and
 +        // the plain column stays the fallback when the wider rectangle is refused.
@@ -33,29 +31,16 @@ index 8e8583f..3c883c8 100644
 +            BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
 +            _ => candidate.bounds,
 +        };
-+        if super::buildings::certify_zone(
+         let refused = match super::buildings::certify_zone(
              state,
              settlement,
              candidate.kind,
 -            candidate.bounds,
 +            grown,
              candidate.entrance,
--        );
-+        )
-+        .is_err()
-+        {
-+            let _ = super::buildings::certify_zone(
-+                state,
-+                settlement,
-+                candidate.kind,
-+                candidate.bounds,
-+                candidate.entrance,
-+            );
-+        }
-     } else {
-         // A failed bounded route never installs a job. Try another resident on
-         // a later pass, then let the existing terrain sweep seek another zone.
-@@ -857,6 +877,104 @@ fn prove_natural(
+         ) {
+             Ok(_) => None,
+@@ -1156,6 +1166,104 @@
      }
  }
  
@@ -160,7 +145,7 @@ index 8e8583f..3c883c8 100644
  fn open_entrance(
      state: &TickState,
      bounds: &ScriptWorldBounds,
-@@ -894,6 +1012,16 @@ fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
+@@ -1204,6 +1312,16 @@
      })
  }
  
