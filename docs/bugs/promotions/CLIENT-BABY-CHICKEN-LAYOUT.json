@@ -1,0 +1,71 @@
+{
+  "id": "CLIENT-BABY-CHICKEN-LAYOUT",
+  "verdict": "promoted",
+  "fix_commit": "client:dddee26e8ac92b7d90a67bff834033939e23ee9e",
+  "fix_commit_full": "dddee26e8ac92b7d90a67bff834033939e23ee9e",
+  "promoted_at": "2026-11-28T12:19:51+00:00",
+  "tree_head": "9a6f6895bbab34a64b97be17c55aa698525355af",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/CMinor/CLIENT-BABY-CHICKEN-LAYOUT/control/result.json",
+    "client_head": "47caa48c7dc752e5e3d133d0bb3afe88b8e061c5",
+    "server_binary_sha256": "5d465c3119b3b9170a0fdacf1d94b858b770dc6f0c4aedec02f65455ed4e3baf",
+    "red": [
+      "harness:scene-shot:native-cminor-chick"
+    ],
+    "states": {
+      "harness:scene-shot:native-cminor-chick": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/CMinor/CLIENT-BABY-CHICKEN-LAYOUT/restore/result.json",
+    "client_head": "dddee26e8ac92b7d90a67bff834033939e23ee9e",
+    "server_binary_sha256": "5d465c3119b3b9170a0fdacf1d94b858b770dc6f0c4aedec02f65455ed4e3baf",
+    "green": [
+      "harness:scene-shot:native-cminor-chick"
+    ],
+    "states": {
+      "harness:scene-shot:native-cminor-chick": "green"
+    },
+    "tree_head": "9a6f6895bbab34a64b97be17c55aa698525355af",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/receipts/CMinor/CLIENT-BABY-CHICKEN-LAYOUT/restore/result.json",
+    "client_head": "dddee26e8ac92b7d90a67bff834033939e23ee9e",
+    "server_binary_sha256": "5d465c3119b3b9170a0fdacf1d94b858b770dc6f0c4aedec02f65455ed4e3baf",
+    "green": [
+      "harness:scene-shot:native-cminor-chick"
+    ],
+    "states": {
+      "harness:scene-shot:native-cminor-chick": "green"
+    },
+    "tree_head": "9a6f6895bbab34a64b97be17c55aa698525355af",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "b06b0813dcbc5a47c0dab21895e0d2689a565edf",
+    "paths": [
+      "assets/krasnokamen/models/entity/chicken_baby.json",
+      "assets/krasnokamen/models/entity/cold_chicken_baby.json",
+      "assets/krasnokamen/models/entity/cold_cow.json",
+      "assets/krasnokamen/models/entity/cold_cow_baby.json",
+      "assets/krasnokamen/models/entity/warm_cow.json",
+      "assets/krasnokamen/models/entity/warm_cow_baby.json",
+      "assets/krasnokamen/models/entity/warm_zombie_nautilus.json"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::krasnokamen_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CMinorA/.analysis/validation/20261128T121947-ledger-promote-qbdpztu7"
+}

@@ -3,7 +3,7 @@ id = "CLIENT-CLIMATE-COW-HORNS"
 title = "Native climate cow horns and the cold adult muzzle use the wrong shapes or net"
 area = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "ClientQ04 clean same-camera 26.3 climate pairs on 2026-11-11 show long curved cold horns against Java short stubs, thin diagonal warm horns against squared bends, absent native calf stubs and a gray cold muzzle against Java pink nostrils. Exact four UUIDs and front/side frames are retained in expected-subjects.json, native-r1-variant-proof.json and the clean native/Java artifact roots. Supplied cow skin nets independently locate the gray horn, child stub and pink muzzle islands. Client tests: entities::solaris_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls."
 repro = "client"
 regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls", "harness:scene-shot:native-cminor-cows"]
@@ -12,3 +12,4 @@ repro_check = "Pair: control client:47caa48c (cold_cow, cold_cow_baby, warm_cow 
 fix_commit = "client:dddee26e8ac92b7d90a67bff834033939e23ee9e"
 proving_assertions = { "harness:scene-shot:native-cminor-cows" = "cold_cow_authored_rig_selected" }
 proving_refs = ["harness:scene-shot:native-cminor-cows"]
+promotion = "docs/bugs/promotions/CLIENT-CLIMATE-COW-HORNS.json"
