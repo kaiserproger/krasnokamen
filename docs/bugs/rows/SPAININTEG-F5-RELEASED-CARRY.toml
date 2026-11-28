@@ -11,36 +11,54 @@ regression = [
   "cargo:mc-core:settlements::construction::carry_release_tests::physical_handoff_is_bounded_by_the_duty_and_preserves_stack_components",
   "cargo:mc-core:settlements::construction::carry_release_tests::donor_arrival_and_handoff_share_the_exact_body_distance",
   "cargo:mc-core:settlements::construction::carry_release_tests::bank_crafting_is_preferred_to_a_released_resident_pickup",
-  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::released_construction_handoff_replays_both_carries_and_the_return_duty",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_handoff_leaves_the_unpaid_part_of_the_duty_recorded",
   "cargo:mc-core:settlements::construction::carry_release_tests::released_fences_unblock_full_bank_storehouse_next_cell",
   "cargo:mc-core:settlements::construction::carry_release_tests::worksite_release_returns_26_planks_and_the_next_builder_collects_all_four_fences",
   "cargo:mc-core:settlements::construction::carry_release_tests::a_smaller_duty_caps_the_handoff_before_the_remaining_haul",
+  "cargo:mc-core:settlements::construction::carry_release_tests::a_bank_and_a_resident_in_one_cell_debit_the_selected_body",
+  "cargo:mc-core:settlements::construction::carry_release_tests::two_debtors_in_one_cell_debit_only_the_selected_body",
+  "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::released_construction_handoff_replays_both_carries_and_the_return_duty",
   "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::construction_carry_tests::unpublished_construction_handoff_recovers_the_original_custody_and_duty",
 ]
-repro_check = """Ported onto main 3d5dd3f40 in wt/SpainF5, not cherry-picked: main's fetch/pickup_point/building
-shapes differ and released_carry was absent. The source hunks are re-implemented as
-plugin_structures/settlement_builds_carry.rs (donor screen, addressable stock capped by the duty,
-body-distance fence, two-carry inventory::commit, duty decrement after commit) plus three wiring
-points: haul reservation, pickup routing, and the builder's exact approach.
-Green with the port: 20261128T102245-test-40c5_kyj carry_release 7/7 passed;
-20261128T102418-test-0o9ftxde construction_carry 2/2 passed.
-Red controls, each one production hunk disabled while the module stays for compilation:
-- CONTROL-A, no deduct call (20261128T101910-test-50pqh64i): released_fences_unblock_full_bank
-  red and a_return_duty_reserves_only_its_addressable_physical_stock red. The latter's added
-  fourth case panics "an addressable duty funds future work: InsufficientItems"; its three
-  refusal cases are vacuously green on unported main because nothing reads carry_pending for
-  funding there.
-- CONTROL-B, no handoff early return (20261128T100808-test-8xf5uky5 carry_release 4 failed;
-  20261128T101055-test-x9mm5d9h drill 2 failed): physical_handoff_is_bounded_by_the_duty,
-  a_smaller_duty_caps_the_handoff, donor_arrival, and both drill tests red.
-- CONTROL-C, no pickup routing (20261128T101618-test-i_aa4_oh): worksite_release_returns_26_planks red.
-- CONTROL-C2, first-commit ordering with the resident before bank crafting
-  (20261128T102030-test-ske5ppju): bank_crafting_is_preferred_to_a_released_resident_pickup red
-  only, which is the regression the second commit closed.
-- CONTROL-D, no exact released-donor approach in villager/building.rs
-  (20261128T102145-test-s7ck63qf): donor_arrival_and_handoff_share_the_exact_body_distance red only.
-Bank stock and bank crafting stay preferred when craftable; a non-craftable next material routes
-to the addressable donor cell and fetch transfers at most the owed amount inside 2.5 body blocks,
-preserving custom names and unowed personal stock. Nothing behavioural was left unported; the
-style-only ece50bfc5 formatting commit is not part of this family. status stays open for Main.
+repro_check = """Ported onto main 3d5dd3f40 in wt/SpainF5, not cherry-picked. Reviewed changes
+(2026-11-28, committee-sol) applied on cefaf35e2:
+1. Typed custody source. The route now carries Pickup { PickupSource::Bank | Debtor(uuid), at }:
+   pickup_point picks the bank only when bank_admissible runs the builder's real haul plan,
+   otherwise it returns the debtor uuid, and fetch/take debit exactly that uuid. A cell is a
+   destination, never an identity.
+2. Bank preference has a debit check. can_craft still gates the probe, but the chosen bank must
+   also pass bank_haul (same plan, reservations and shared wood account as fetch); a probe that
+   passes while the spend is refused now routes to and debits the debtor.
+3. Tests assert the debit, not the coordinate: bank_crafting_is_preferred_to_a_released_resident_pickup
+   checks the bank fences leave the bank in one phase and stay untouched while the debtor pays in the
+   refused phase. New: a_bank_and_a_resident_in_one_cell_debit_the_selected_body,
+   two_debtors_in_one_cell_debit_only_the_selected_body.
+4. Non-zero duty. a_handoff_leaves_the_unpaid_part_of_the_duty_recorded keeps 2 of 4 owed after a
+   2-fence trip; the published WAL drill now carries 6, owes 6, moves 4 and must replay Some(2),
+   remaining >= 0. The drill no longer asserts the in-memory duty, so the E control reds at replay.
+5. Tick boundary. donor_arrival_and_handoff_share_the_exact_body_distance ticks at [16.34,201,16.34]:
+   inside the 2.5 body radius (1.907) and outside the old cell-centre predicate (2.602).
+Green on the final tree: 20261128T114246-test-9frmob8c carry_release 10/10 passed;
+20261128T114418-test-du0hnx2j construction_carry 2/2 passed; fmt 20261128T114426-fmt-gze4ald1;
+code-health 20261128T114441-code-health-bu1ejhk7.
+Controls are reverse patches generated from the pre-port 3d5dd3f40 text for one hunk each, stored in
+receipts/SpainF5/controls/ with the patch sha256 bound to its red receipt:
+- A-no-deduct.patch c22c9a6831958cb533db4a3f057d61cd87988767cacb5d2ffdc0b4b271a9ec4e,
+  20261128T113102-test-_9d9u92n: released_fences, a_return_duty (its addressable fourth case:
+  "an addressable duty funds future work: InsufficientItems"), donor_arrival, worksite red.
+- B-no-handoff.patch 94999179cffeada5af3bff60c7fc5edc08476febd1c8247f6de25a6246939b4f,
+  20261128T113254-test-yucyus3j: 8 of 10 red (physical, smaller duty, unpaid remainder, worksite,
+  bank priority, colliding, two debtors, donor_arrival); the debtor route refuses as pre-port did.
+- C-no-pickup-route.patch fe60706fccc8dc6ce3164504fbb04a40004b6ffa3a62fba99b528a6e428e234b,
+  20261128T113446-test-7ghow4nt: worksite, bank priority, colliding, donor_arrival red.
+- D1-work-exact-false.patch 1094a10412531658c728e23b7c8fc4e2f84855c7bb5525de781d9ce6378ce904,
+  20261128T113635-test-er_2rb5w: donor_arrival red only, at target.exact.
+- D2-tick-cell-centre.patch c75fe1ee2468b0f8fd2f394a7f738241d13abb04213df940cdb04b9be147cd66,
+  20261128T113801-test-cpjruvh5: donor_arrival red only, at the final duty-cleared assert, so the
+  work hunk and the tick hunk are each covered by a distinct control.
+- E-no-duty-update.patch 189e708d448a57114198224f9c91bdaee5ac8c6cafa841b9da58aafeaf7d965f,
+  20261128T113918-test-gjpmm_n6: the published drill reds after crash() on
+  "the unpaid duty replays": Some([(fence,6)]) vs Some([(fence,2)]); the unpublished case passes.
+Behaviour not ported: nothing behavioural; the style-only ece50bfc5 commit stays unported.
+Row stays open: repro = "client", so promotion needs a real-client run before fixed.
 """

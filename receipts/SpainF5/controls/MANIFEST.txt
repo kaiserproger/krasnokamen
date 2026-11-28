@@ -1,0 +1,16 @@
+F5 released-carry reverse controls (wt/SpainF5)
+
+Each .patch restores the pre-port (3d5dd3f40) statement for one production hunk on the
+committed port tree; `git apply <patch>` makes the control tree, `git apply -R` restores it.
+Digest = sha256 of the patch file. Each receipt ran `tools/dev/mem-run.sh -m 6G
+python3 -m tools.harness run test -p mc-core --lib <filter>` on that control tree.
+
+A-no-deduct.patch          c22c9a6831958cb533db4a3f057d61cd87988767cacb5d2ffdc0b4b271a9ec4e  carry_release   20261128T113102-test-_9d9u92n  (4 failed)
+B-no-handoff.patch         94999179cffeada5af3bff60c7fc5edc08476febd1c8247f6de25a6246939b4f  carry_release   20261128T113254-test-yucyus3j  (8 failed)
+C-no-pickup-route.patch    fe60706fccc8dc6ce3164504fbb04a40004b6ffa3a62fba99b528a6e428e234b  carry_release   20261128T113446-test-7ghow4nt  (4 failed)
+D1-work-exact-false.patch  1094a10412531658c728e23b7c8fc4e2f84855c7bb5525de781d9ce6378ce904  carry_release   20261128T113635-test-er_2rb5w  (1 failed: target.exact)
+D2-tick-cell-centre.patch  c75fe1ee2468b0f8fd2f394a7f738241d13abb04213df940cdb04b9be147cd66  carry_release   20261128T113801-test-cpjruvh5  (1 failed: duty cleared after tick)
+E-no-duty-update.patch     189e708d448a57114198224f9c91bdaee5ac8c6cafa841b9da58aafeaf7d965f  construction_carry 20261128T113918-test-gjpmm_n6  (1 failed after crash: "the unpaid duty replays")
+
+Green on the same tree: 20261128T114246-test-9frmob8c (10/10), 20261128T114418-test-du0hnx2j (2/2),
+fmt 20261128T114426-fmt-gze4ald1, code-health 20261128T114441-code-health-bu1ejhk7.

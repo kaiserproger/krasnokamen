@@ -59,7 +59,13 @@ duplicate into a nonexistent slot. If the next material is not banked, its
 builder walks to that resident and collects at most the owed amount within
 2.5 blocks through the fenced native inventory transaction. Only after both
 carry post-images commit does the duty decrease; personal items stay put.
-Bank stock and bank crafting are preferred to a resident pickup. Owed carry is
+Bank stock and bank crafting are preferred to a resident pickup, and only when
+the builder's real haul from that bank is admissible rather than merely
+craftable in one unit. The route carries a typed source (bank, or one debtor's
+uuid): a cell is a destination, never an identity, so two residents in one cell
+or a bank and a resident in one cell cannot swap the body that pays. An
+admissible bank plan always wins; otherwise the route names the debtor that the
+debit will reach. Owed carry is
 a shared physical pool, not earmarked for one remaining project: the first
 eligible bound builder to reach the resident may collect its own remaining
 haul, even when a neighbouring project also needs that material. Both projects

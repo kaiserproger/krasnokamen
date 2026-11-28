@@ -1,0 +1,22 @@
+--- a/crates/mc-core/src/plugin_structures/settlement_builds_carry.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds_carry.rs
+@@ -194,19 +194,6 @@
+         .settlements
+         .get_mut(id)
+         .expect("authorized settlement");
+-    let duty = record
+-        .carry_pending
+-        .get_mut(&donor_uuid)
+-        .expect("source duty");
+-    let (_, count) = duty
+-        .iter_mut()
+-        .find(|(known, _)| *known == item)
+-        .expect("source material");
+-    *count -= moved;
+-    duty.retain(|(_, count)| *count > 0);
+-    if duty.is_empty() {
+-        record.carry_pending.remove(&donor_uuid);
+-    }
+     record.revision = record.revision.saturating_add(1);
+     Ok(())
+ }
