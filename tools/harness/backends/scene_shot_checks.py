@@ -1814,6 +1814,11 @@ def _cminor_subject(probe: ProbeSteps, artifact: Path, shots, name: str, types: 
     probe.report[f"cminor_{name}_indices"] = int(layer.get("indices") or 0)
     probe.report[f"cminor_{name}_spans"] = spans
     probe.report[f"cminor_{name}_min_y"] = round(float(layer["min"][1]), 4)
+    # The rig assertion must mean "the binding named this authored rig", never "some layer drew":
+    # a pre-image that falls back to the temperate rig still draws one (and still reports a layer
+    # with the climate *texture*), so a tuple without its record would make the assertion vacuous.
+    if record is None:
+        return None
     return record, layer, spans
 
 
