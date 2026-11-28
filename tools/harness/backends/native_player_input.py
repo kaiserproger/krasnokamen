@@ -554,6 +554,8 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             break
         before = after
     steps.fixture("tick rate 20")
+    second = _shot(steps, "sand-descended")
+    after = sample()
     steps.report.update(falling_windows=windows, falling_before_step=before,
                         falling_after_step=after)
     steps.check("sand_two_steps_without_position_packet",
@@ -567,7 +569,8 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("sand_presents_predicted_descent",
                 after["predicted_position"][1] <= presented
                 < min(before["presented_position"][1], after["y"]))
-    second = _shot(steps, "sand-descended")
+    steps.check("frozen_falling_presented_current_tick",
+                abs(presented - after["predicted_position"][1]) < 1e-9)
     for frame in (first, second):
         steps.check("sand_entity_geometry_submitted",
                     frame["entity_extraction"]["entity_indices"] > 0

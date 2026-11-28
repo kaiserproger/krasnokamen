@@ -1,0 +1,139 @@
+mem-run: scope -p MemoryMax=8G -p MemorySwapMax=1G -p CPUQuota=800% -p CPUWeight=50 nice=19 exclusive=0 perf=0 cpus=all slice=solaris-heavy.slice target=/run/media/kaiserroman/games/solaris-work/targets/slot-m expect=4096MiB key='cargo test -p krasnokamen-client --lib entity_listing_reports_presented_position_for_non_falling_entities'
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x765e2446e200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:     0.079 s
+   process: user: 0.026 s, system: 0.008 s, faults: 0, rss: 13.3 MiB
+mimalloc: process done: 0x765e2446e200
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling libc v0.2.189
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling cfg-if v1.0.5
+   Compiling log v0.4.34
+   Compiling pkg-config v0.3.34
+   Compiling bitflags v2.13.2
+   Compiling jobserver v0.1.35
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling cc v1.5.1
+   Compiling once_cell v1.21.4
+   Compiling smallvec v1.16.2
+   Compiling memchr v2.8.3
+   Compiling libloading v0.8.9
+   Compiling rustix v1.1.5
+   Compiling linux-raw-sys v0.12.1
+   Compiling serde_derive v1.0.228
+   Compiling libm v0.2.16
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling indexmap v2.14.2
+   Compiling pin-project-lite v0.2.17
+   Compiling bytemuck_derive v1.12.1
+   Compiling serde_core v1.0.228
+   Compiling bytemuck v1.25.0
+   Compiling dlib v0.5.3
+   Compiling wayland-sys v0.31.11
+   Compiling zerocopy v0.8.59
+   Compiling wayland-backend v0.3.17
+   Compiling synstructure v0.14.0
+   Compiling zerocopy-derive v0.8.59
+   Compiling serde v1.0.228
+   Compiling zerofrom-derive v0.1.8
+   Compiling synstructure v0.13.2
+   Compiling downcast-rs v1.2.1
+   Compiling scoped-tls v1.0.1
+   Compiling cfg_aliases v0.2.2
+   Compiling yoke-derive v0.8.2
+   Compiling zerofrom v0.1.8
+   Compiling quick-xml v0.41.0
+   Compiling futures-core v0.3.34
+   Compiling zeroize v1.9.0
+   Compiling stable_deref_trait v1.2.1
+   Compiling version_check v0.9.5
+   Compiling arrayvec v0.7.8
+   Compiling yoke v0.8.3
+   Compiling wayland-scanner v0.31.11
+   Compiling scopeguard v1.2.0
+   Compiling wayland-client v0.31.15
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling bytes v1.12.1
+   Compiling winnow v1.0.4
+   Compiling zerovec v0.11.8
+   Compiling cmake v0.1.58
+   Compiling errno v0.3.14
+   Compiling slab v0.4.12
+   Compiling fs_extra v1.3.0
+   Compiling thiserror v2.0.21
+   Compiling dunce v1.0.5
+   Compiling aws-lc-sys v0.45.0
+   Compiling thiserror-impl v2.0.21
+   Compiling rustversion v1.0.23
+   Compiling signal-hook-registry v1.4.8
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling wayland-server v0.31.14
+   Compiling generic-array v0.14.7
+   Compiling tokio-macros v2.7.2
+   Compiling mio v1.2.3
+   Compiling socket2 v0.6.5
+   Compiling const-oid v0.9.6
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling foldhash v0.1.5
+   Compiling spin v0.9.9
+   Compiling lazy_static v1.5.1
+   Compiling hashbrown v0.15.5
+   Compiling toml_edit v0.25.15+spec-1.1.0
+   Compiling tokio v1.53.1
+   Compiling wayland-protocols v0.32.13
