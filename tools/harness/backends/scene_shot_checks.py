@@ -1831,8 +1831,12 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
                     abs(float(layer["min"][1]) - ground) <= 0.02)
         height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
         probe.report["cminor_chicken_height_over_width"] = height_over_width
+        # The 26.3 child is a 4x4x4 body with planar shanks and a 1-px toe: 6 model pixels
+        # tall over 6 wide (height/width 1.00; the wings add nothing on x). The pre-image's
+        # adult-style stack is the same 6 px wide but reaches 11 px (head at 13 plus the jaw
+        # and wattle), ratio 1.83, so 1.50 separates them with 0.3 either way.
         probe.check("baby_chicken_child_silhouette",
-                    height_over_width is not None and 0.4 <= height_over_width <= 1.6)
+                    height_over_width is not None and 0.80 <= height_over_width <= 1.50)
 
     cold_chick = subject("cold-chicken", ("minecraft:chicken",), "cold_chicken_baby")
     probe.check("cold_chicken_baby_authored_rig_selected", cold_chick is not None)
