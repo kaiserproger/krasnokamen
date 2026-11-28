@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # The shared real-client stand (owner D150). Source it, do not build a client per row:
-#   . tools/dev/client-stand
+#   . tools/dev/client-stand || { echo "stand unavailable" >&2; handle_it; }
 #   python3 -m tools.harness run scenario <id> --client native --windowed
 # Every lane that needs a live client takes its runs from these paths.
-set -euo pipefail
+#
+# Sourced-safe (owner D153): sourcing must not change the caller's shell options
+# and must not end the caller; a missing path returns 1 instead of exiting.
 
 W=${SOLARIS_WORK:-/run/media/kaiserroman/games/solaris-work}
 # Stand pin: 529ed2dfe4c1 (commit 529ed2dfe4c1ec9cbcf5f43b7489f09625dc5d5a, client binary
@@ -17,13 +19,25 @@ export KRASNOKAMEN_CLIENT_RESOURCE_ROOT=$W/qa-armada/template-data/resources
 export KRASNOKAMEN_CLIENT_ASSET_ROOT=$W/qa-armada/template-data/assets
 export KRASNOKAMEN_CLIENT_ASSET_INDEX=$W/qa-armada/template-data/assets/asset-index.json
 
-for v in KRASNOKAMEN_CLIENT_BINARY KRASNOKAMEN_CLIENT_DATA_DIR KRASNOKAMEN_CLIENT_RESOURCE_ROOT \
-         KRASNOKAMEN_CLIENT_ASSET_ROOT KRASNOKAMEN_CLIENT_ASSET_INDEX; do
-    p=${!v}
-    if [ ! -e "$p" ]; then
-        echo "client-stand: $v is missing at $p" >&2
-        exit 1
-    fi
-done
+client_stand_paths() {
+    local v p
+    for v in KRASNOKAMEN_CLIENT_BINARY KRASNOKAMEN_CLIENT_DATA_DIR KRASNOKAMEN_CLIENT_RESOURCE_ROOT \
+             KRASNOKAMEN_CLIENT_ASSET_ROOT KRASNOKAMEN_CLIENT_ASSET_INDEX; do
+        p=${!v}
+        if [ ! -e "$p" ]; then
+            echo "client-stand: $v is missing at $p" >&2
+            return 1
+        fi
+    done
+    echo "client-stand: $KRASNOKAMEN_CLIENT_BINARY (data $KRASNOKAMEN_CLIENT_DATA_DIR)" >&2
+    return 0
+}
 
-echo "client-stand: $KRASNOKAMEN_CLIENT_BINARY (data $KRASNOKAMEN_CLIENT_DATA_DIR)" >&2
+# Run directly: strict mode and a real exit code. Sourced: no option changes,
+# and a failure returns 1 so the caller keeps control.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    set -euo pipefail
+    client_stand_paths || exit 1
+else
+    client_stand_paths || return 1
+fi
