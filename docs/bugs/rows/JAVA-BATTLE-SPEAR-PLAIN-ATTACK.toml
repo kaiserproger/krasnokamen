@@ -3,11 +3,11 @@ id = "JAVA-BATTLE-SPEAR-PLAIN-ATTACK"
 title = "The Java agent's attack tool sends a plain entity attack while holding a spear, which vanilla servers reject"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 LoaderObs seed-46 Java battle: 8 NeoForge attacks unconfirmed and the Fabric player died after unconfirmed spear attacks; kits carry iron_spear (piercing_weapon)"
 repro = "source"
 regression = ["loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftSpearPacketTest"]
 control_files = ["java-agent/src/main/java/dev/krasnokamen/agent/javaagent/MinecraftClientFacade.java"]
 failing_first = "reported"
 fix_commit = "loader:48696b3d65201d6a8b93c5e29839dc62f9b5e5d6"
-repro_check = "`gradlew --no-daemon --offline :java-agent:test --tests '*MinecraftSpearPacketTest'`: on Loader control d61f451b41 with tests kept, MinecraftSpearPacketTest.java:15 expected ServerboundPlayerActionPacket(STAB) but received ServerboundAttackPacket(entityId=42), after successful compile. On wt/LedgerHarnessEvSpear d633ea7f23, the exact same selector passes. The control and candidate logs and JUnit XML are retained under the shared workspace receipts/LedgerHarnessEvSpear/ (spear-packet-{control,candidate}.{log,xml}). The ledger promotion is not yet proved: its separate reversal build of the same ref failed to compile (missing FabricBlockGetter and PacketContextProvider). The lane used the vanilla 26.3 minecraft-client.jar; reproduce that input for the ledger reversal and restore."
+repro_check = "`gradlew --no-daemon --offline :java-agent:test --tests '*MinecraftSpearPacketTest'`: on Loader control d61f451b41 with tests kept, MinecraftSpearPacketTest.java:15 expected ServerboundPlayerActionPacket(STAB) but received ServerboundAttackPacket(entityId=42), after successful compile. On wt/LedgerHarnessEvSpear d633ea7f23, the exact same selector passes. Logs and JUnit XML: receipts/LedgerHarnessEv/JAVA-BATTLE-SPEAR-PLAIN-ATTACK/{spear-packet-control,spear-packet-candidate}.{log,xml}. Promoted 2026-11-28: the ledger reversal ran the same selector on the reverted tree (gradle exit 1, red at the packet assertion) and on the candidate (exit 0), artifact .analysis/validation/20261128T092535-ledger-promote-g9rfp4oc. The runner needs GRADLE_USER_HOME=solaris-work/loader-gradle-home, KRASNOKAMEN_CLIENT_JAR=<that>/caches/fabric-loom/26.3/minecraft-client.jar and KRASNOKAMEN_LOADER_ROOT=wt/LedgerHarnessEvSpear; a Loom minecraft-merged jar lacks the Fabric API classes and the build fails."

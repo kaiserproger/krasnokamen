@@ -1,0 +1,42 @@
+{
+  "id": "JAVA-BATTLE-SPEAR-PLAIN-ATTACK",
+  "verdict": "promoted",
+  "fix_commit": "loader:48696b3d65201d6a8b93c5e29839dc62f9b5e5d6",
+  "fix_commit_full": "48696b3d65201d6a8b93c5e29839dc62f9b5e5d6",
+  "promoted_at": "2026-11-28T09:27:10+00:00",
+  "tree_head": "580ffd51a4e8cb29ae4209373340da7dbe65f335",
+  "tree_dirty": true,
+  "tree_sha256": "0f12c8040805b22d9160984758dedaa426eb9e6c72a9a2b7ad335a7c663f8d16",
+  "loader_fix": true,
+  "control": "loader_reversal",
+  "control_tree": "loader_head",
+  "fix_patch_sha256": "d275197d513269dddbc3ccbb9ce5bfb0c726867cc94349efaa5c40350ff8c0df",
+  "reversed_files": [
+    "java-agent/src/main/java/dev/krasnokamen/agent/javaagent/MinecraftClientFacade.java"
+  ],
+  "kept_test_files": [],
+  "loader_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/LedgerHarnessEvSpear",
+    "head": "d633ea7f23ab959c9fc5b8ca9ca2422c4dd25198",
+    "untracked": []
+  },
+  "negative_control": {
+    "loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftSpearPacketTest": {
+      "state": "red",
+      "detail": "ironSpearSendsStabInsteadOfPlainEntityAttack() AssertionError",
+      "assertion": {
+        "file": "/tmp/ledger-client-control-suu1l6ni/ledger-loader-control-p1/java-agent/src/test/java/dev/krasnokamen/agent/javaagent/MinecraftSpearPacketTest.java",
+        "line": 15,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftSpearPacketTest": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261128T092535-ledger-promote-g9rfp4oc"
+}
