@@ -106,14 +106,15 @@ and "not run" for an unrun platform. Check: `.analysis/releases/<tag>/claims.md`
 maps each sentence to a receipt before review
 ([release text](development/release-and-tags.md#core-release-cut)).
 
-**A long promote launched as a named service died silently.** A `ledger promote`
-started as a named background service (2026-11-28 15:33) ran seven stages, then
-vanished at stage 8 with no `[ledger]` line, no exit code and the row still
-`open`; the control reds it had produced looked like a finished refusal. Launch
-long ledger runs as plain jobs (finite command, real timeout) so their exit is
-observable, and treat "no `[ledger]` line" as a dead run, not a verdict.
-Check: the run's own final line (`exit=`/`[ledger] refused|fixed`) exists before
-you read any stage log as a result.
+**A live long run was declared dead from one empty `ps`.** A `ledger promote`
+(2026-11-28) was still running — `proc://` showed it up, its cargo child was alive
+on stage 8 — when one `ps -p <pid> -o etime=` printed nothing and a duplicate
+promote was launched, then a pitfall entry was written claiming the first run died
+silently. A run's liveness is the runner's own registration (`proc://<name>`) and
+its child processes, never a single `ps` line; before relaunching, check both, and
+before writing an incident entry, check that the claimed failure reproduces.
+Check: `proc://<name>` says exited/absent and no child of it is alive, or the log
+carries its final `exit=`/`[ledger]` line.
 
 **Open rows sat 13 hours without executors.** On 2026-11-28 the turn ended after
 the SUMMON promotion and the next worker (BEDPatch) was not started until 15:08,
