@@ -82,9 +82,9 @@ the record the owner asked for, so the branch does not hang undecided.
 
 ## Closure (D142 final, 2026-11-28)
 
-`wt/SpainInteg` 22 non-merge commits are all assigned; none is retired and none
-is merged wholesale. The branch stays a patch series, and every family is a
-ledger row that names its source commits.
+All 22 non-merge commits on `wt/SpainInteg` have a disposition: 21 are assigned
+to ledger rows and one formatting-only commit will not be ported. The branch
+stays intact as a patch series; it is not merged wholesale.
 
 | family | commits | row | state |
 |---|---|---|---|
