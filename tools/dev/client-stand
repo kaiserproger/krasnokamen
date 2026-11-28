@@ -6,7 +6,12 @@
 set -euo pipefail
 
 W=${SOLARIS_WORK:-/run/media/kaiserroman/games/solaris-work}
-export KRASNOKAMEN_CLIENT_BINARY=$W/pins/c879f0ae38b7-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client
+# Stand pin: 529ed2dfe4c1 (commit 529ed2dfe4c1ec9cbcf5f43b7489f09625dc5d5a, client binary
+# sha256 31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5). It carries the
+# received-passenger observer the mount row needs. Frozen fallback: the c879f0ae38b7 pin
+# (…/pins/c879f0ae38b7-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client); receipts
+# already produced with it stay valid for their own control/candidate pair.
+export KRASNOKAMEN_CLIENT_BINARY=$W/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client
 export KRASNOKAMEN_CLIENT_DATA_DIR=$W/qa-armada/template-data/data/vanilla
 export KRASNOKAMEN_CLIENT_RESOURCE_ROOT=$W/qa-armada/template-data/resources
 export KRASNOKAMEN_CLIENT_ASSET_ROOT=$W/qa-armada/template-data/assets
