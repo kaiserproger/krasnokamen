@@ -106,6 +106,15 @@ and "not run" for an unrun platform. Check: `.analysis/releases/<tag>/claims.md`
 maps each sentence to a receipt before review
 ([release text](development/release-and-tags.md#core-release-cut)).
 
+**A long promote launched as a named service died silently.** A `ledger promote`
+started as a named background service (2026-11-28 15:33) ran seven stages, then
+vanished at stage 8 with no `[ledger]` line, no exit code and the row still
+`open`; the control reds it had produced looked like a finished refusal. Launch
+long ledger runs as plain jobs (finite command, real timeout) so their exit is
+observable, and treat "no `[ledger]` line" as a dead run, not a verdict.
+Check: the run's own final line (`exit=`/`[ledger] refused|fixed`) exists before
+you read any stage log as a result.
+
 **Open rows sat 13 hours without executors.** On 2026-11-28 the turn ended after
 the SUMMON promotion and the next worker (BEDPatch) was not started until 15:08,
 while `docs/bugs/rows` held 198 open rows (4 blockers) and nothing else was
