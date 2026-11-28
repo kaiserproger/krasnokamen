@@ -81,6 +81,23 @@ the uncommitted state, so commit anything unrelated only after the promote.
 Check: `git -C <worktree> log -1 --format=%H` is the head you report and
 `git -C <worktree> status --short` lists none of your files.
 
+**A lane committed after its gate, so the receipt stopped matching the tree.**
+(2026-11-28) A gameplay lane gated `ISSUE-1-09` at tree `503e95bd03`, then made
+three more commits; `ledger promote` refused with `client receipt ran at
+503e95bd03e3, not at the tree being promoted af014f2d7788`. A receipt binds the
+exact tree it ran on, so the tree is frozen from the gate until the promotion
+lands — further work goes to a second worktree. Check: the head at promote time
+equals the head in the receipt's `tree` field.
+
+**Cherry-picks landed on the shared `main` checkout from outside Main.**
+(2026-11-28 16:48) Three client test commits (`afaabc4b9`, `d1b0da59f`,
+`3d5dd3f40`) appeared on `main` as cherry-picks of a lane's branch
+(`4098d0a98`, `01a2c4a29`, `4722b06a0`); the lane that owned them had committed
+only on its own branch, and no lane admitted running the cherry-pick. The
+shared checkout moved off the frozen head every in-flight receipt was bound to.
+Only Main commits to `main`, and every gate receipt names the tree it binds;
+check `git reflog show main` before promoting a batch.
+
 **A pipeline hid the failure it should have reported.** A piped test run was
 read as green from the last command's status (2026-11-23), and a pin-citation
 scan with `rg -o -h` printed nothing, so a cited crash pin was classified
