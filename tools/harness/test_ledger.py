@@ -1129,6 +1129,21 @@ class GradleLoaderReportTests(unittest.TestCase):
         self.assertEqual(assertion['line'], 42)
         self.assertTrue(assertion['file'].endswith('MinecraftClientObservationTest.java'))
 
+    def test_junit5_assertion_uses_the_test_frame_not_the_library(self):
+        # JUnit 5 throws opentest4j's AssertionFailedError and puts the assertion library on top of
+        # the stack; the control's location is the first frame whose source belongs to the module.
+        module = self.report(
+            '<testcase name="ironSpear"><failure type="org.opentest4j.AssertionFailedError" '
+            'message="expected stab">org.opentest4j.AssertionFailedError: expected\n'
+            '\tat org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)\n'
+            '\tat dev.krasnokamen.agent.javaagent.'
+            'MinecraftClientObservationTest.ironSpear(MinecraftClientObservationTest.java:15)'
+            '</failure></testcase>')
+        state, detail, assertion = ledger._gradle_junit(module, self.SELECTOR)
+        self.assertEqual(state, ledger.RED, detail)
+        self.assertEqual(assertion['line'], 15)
+        self.assertTrue(assertion['file'].endswith('MinecraftClientObservationTest.java'))
+
     def test_other_exception_is_unrunnable(self):
         module = self.report(
             '<testcase name="x"><failure type="java.lang.NullPointerException">'

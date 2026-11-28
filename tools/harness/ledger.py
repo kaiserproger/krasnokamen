@@ -2582,6 +2582,10 @@ def _run_loader(ctx, tests, root, repo=None):
 # (NoInteractionsWanted from a guard that must not touch the game mode, 2026-11-25).
 _JUNIT_ASSERTIONS = (
     'AssertionError',
+    # JUnit 5's assertions throw opentest4j's AssertionFailedError, which does not contain the
+    # substring `AssertionError`, so every Jupiter assertion read as "not an assertion"
+    # (spear packet control, 2026-11-28).
+    'org.opentest4j.AssertionFailedError',
     'org.mockito.exceptions.verification.NoInteractionsWanted',
     'org.mockito.exceptions.verification.WantedButNotInvoked',
     'org.mockito.exceptions.verification.NeverWantedButInvoked',
@@ -2634,17 +2638,19 @@ def _gradle_junit(module_dir, selector):
             failed += 1
             kind = failure.get('type') or ''
             text = failure.text or ''
-            position = re.search(r'\(([\w.$]+)\.java:(\d+)\)', text) or re.search(r'([\w.$]+)\.java:(\d+)', text)
             if not _junit_assertion_failure(kind, text):
                 return UNRUNNABLE, f'{case.get("name")} failed with {kind or "an error"}, not an assertion', None
-            if position is None:
-                continue
-            simple = position.group(1).rsplit('.', 1)[-1]
-            sources = sorted(module_dir.glob(f'**/{simple}.java'))
-            if not sources:
-                continue
-            return RED, f'{case.get("name")} AssertionError', {
-                'file': str(sources[0]), 'line': int(position.group(2)), 'error': 'AssertionError'}
+            # The first stack frames belong to the assertion library (AssertionFailureBuilder,
+            # AssertionUtils); the control's location is the first frame whose source is in this
+            # module (JUnit 5 stack shape, spear packet control 2026-11-28).
+            for position in re.finditer(r'([\w.$]+)\.java:(\d+)', text):
+                simple = position.group(1).rsplit('.', 1)[-1]
+                sources = sorted(module_dir.glob(f'**/{simple}.java'))
+                if not sources:
+                    continue
+                return RED, f'{case.get("name")} AssertionError', {
+                    'file': str(sources[0]), 'line': int(position.group(2)), 'error': 'AssertionError'}
+            continue
     if failed:
         return UNRUNNABLE, 'a failure carried no assertion location', None
     if passed:
