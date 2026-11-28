@@ -82,21 +82,17 @@ Check: `git -C <worktree> log -1 --format=%H` is the head you report and
 `git -C <worktree> status --short` lists none of your files.
 
 **A lane committed after its gate, so the receipt stopped matching the tree.**
-(2026-11-28) A gameplay lane gated `ISSUE-1-09` at tree `503e95bd03`, then made
-three more commits; `ledger promote` refused with `client receipt ran at
-503e95bd03e3, not at the tree being promoted af014f2d7788`. A receipt binds the
-exact tree it ran on, so the tree is frozen from the gate until the promotion
-lands — further work goes to a second worktree. Check: the head at promote time
-equals the head in the receipt's `tree` field.
+(2026-11-28) The gameplay lane gated `ISSUE-1-09` at `503e95bd03e3` and then
+committed the evidence in `af014f2d7788`. `ledger promote` refused the receipt
+on the new HEAD. Keep the candidate frozen until promotion and continue other
+work in a separate tree. Check that the receipt's HEAD and working-state hash
+match the tree being promoted.
 
-**Cherry-picks landed on the shared `main` checkout from outside Main.**
-(2026-11-28 16:48) Three client test commits (`afaabc4b9`, `d1b0da59f`,
-`3d5dd3f40`) appeared on `main` as cherry-picks of a lane's branch
-(`4098d0a98`, `01a2c4a29`, `4722b06a0`); the lane that owned them had committed
-only on its own branch, and no lane admitted running the cherry-pick. The
-shared checkout moved off the frozen head every in-flight receipt was bound to.
-Only Main commits to `main`, and every gate receipt names the tree it binds;
-check `git reflog show main` before promoting a batch.
+**The shared checkout advanced after its candidate was frozen.**
+(2026-11-28 16:48) The `main` reflog records three client-test cherry-picks
+(`d1b0da59f`, `afaabc4b9`, `3d5dd3f40`) after `2216e1069`. It does not identify
+who ran them. Receipts for `2216e1069` still apply to that frozen worktree,
+not to the new `main`. Check the receipt's tree, not the name of the branch.
 
 **A pipeline hid the failure it should have reported.** A piped test run was
 read as green from the last command's status (2026-11-23), and a pin-citation
