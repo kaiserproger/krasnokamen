@@ -128,6 +128,99 @@ fn builder_finishes_the_last_roof_cells_beside_a_lower_perimeter() {
     );
 }
 
+/// A finished neighbour's roof is a perimeter footing the surface scan sees, but
+/// a body on the ground cannot climb to it: the nearest stand in a straight line
+/// is not the goal, the nearest one the router walks to is (Spain seed 100, the
+/// church beside a house: `worksite_unreached` for 160,000 ticks).
+#[test]
+fn a_builder_does_not_wait_beneath_a_neighbours_roof_stand() {
+    let (mut state, town, builder) = fixture();
+    start(&mut state, town, "spanish_church", 1, None);
+    fund(&mut state, "spanish_church", 1);
+    for _ in 0..4096 {
+        let project = &state.settlements.get(town).unwrap().projects[0];
+        let status = executor::status(&state, town, &project.structure).unwrap();
+        if status.stages[status.current_stage_index as usize].work_units
+            - status.completed_work_units
+            == 4
+        {
+            break;
+        }
+        attempt(&mut state, town, builder);
+    }
+    let project = state
+        .settlements
+        .get(town)
+        .unwrap()
+        .projects
+        .first()
+        .cloned()
+        .unwrap();
+    // The neighbour: a six-high solid wall over the north perimeter rows, open
+    // only at the two west columns. Its top is a footing the surface scan sees
+    // and the nearest stand to a builder standing north of it; a body on the
+    // ground cannot climb it.
+    // The fixture's stone floor is y=200.
+    let ground = 200;
+    for x in 2..16 {
+        for z in 1..=2 {
+            for y in ground + 1..=ground + 6 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    state
+        .entities
+        .set_pos(builder, [12.5, f64::from(ground + 1), 0.5]);
+    state.entities.set_vel(builder, [0.0; 3]);
+    let next = executor::next_cell(&state, town, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert!(
+        !in_reach(&state, builder, &project, next),
+        "setup: the builder is out of reach of the next cell {next:?}"
+    );
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let goal = work(&mut state, builder, &mut v, &mut ChangeSet::default()).unwrap();
+    state.entities.row_mut(builder).villager = Some(v);
+    let body = state.entities.body(builder);
+    assert!(
+        walks(
+            &state,
+            state.entities.pos(builder),
+            goal.pos,
+            body.half_width,
+            body.height,
+            WALK_NODES
+        ),
+        "the goal {:?} is a footing no route reaches, beside the wall of ground {ground}",
+        goal.pos
+    );
+    for _ in 0..4000 {
+        state.day_time = 4000;
+        crate::tick::run_tick(&mut state, &[]);
+        if executor::built_at(&state, town, "spanish_church", project.origin) {
+            return;
+        }
+    }
+    panic!(
+        "the church did not finish beside the neighbour: goal {:?} {:?} nav={:?}; next={:?}",
+        goal.pos,
+        state.entities.pos(builder),
+        {
+            let v = state.entities.row(builder).villager.as_ref().unwrap();
+            (
+                v.navigation_target,
+                v.navigation_search_failed,
+                v.navigation_path.len(),
+                v.activity,
+            )
+        },
+        executor::next_cell(&state, town, &project.structure)
+    );
+}
+
 fn final_approach_fixture() -> (TickState, SettlementId, EntitySlot, construction::Project) {
     let (mut state, town, builder) = fixture();
     crate::settlements::construction::tests::open_plan(&mut state);
