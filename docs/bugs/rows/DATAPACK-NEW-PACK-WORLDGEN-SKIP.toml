@@ -13,7 +13,8 @@ start_skips_A_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest green; harn
 behaviour is 1d8e57dd8's PackSet::open caller trial plus the worldgen input validation at
 datapacks_worldgen.rs:983-990 and the replay-baseline fence; a new pack joins only when content installs,
 worldgen inputs prepare and validate, and the fence accepts its identity."""
-regression = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
+regression = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest", "harness:datapack-reload:native-datapack-reload"]
+proving_assertions = { "harness:datapack-reload:native-datapack-reload" = "new_worldgen_pack_skipped_and_named" }
 proving_refs = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
 failing_first = "reported"
 fix_commit = "patch:7cbe9205537a5db15a7239da475c757211071d08c1c50173a76fa8847613b51b"
@@ -30,4 +31,5 @@ Promotion is not ready: the row is `repro = manual` and the ledger requires a gr
 a client receipt for such rows, while this is a server-start path with no scene ref. That is a
 proof-shape decision (the POL-2 / MECH-13 family: a start-path row whose symptom no client scene can
 show), and the fix patch has to be committed at
-docs/bugs/fix-patches/DATAPACK-NEW-PACK-WORLDGEN-SKIP.patch for a patch-mode promote."""
+docs/bugs/fix-patches/DATAPACK-NEW-PACK-WORLDGEN-SKIP.patch for a patch-mode promote.Real-client assertion added 2026-11-28 (HarnessAsserts): the existing native-datapack-reload scenario now stops its server, drops the same trigger the cargo oracle uses (data/mod/worldgen/structure_set/a.json) into the world's datapacks, starts the server again, and asserts `new_worldgen_pack_skipped_and_named` from the restarted server's own log (started AND the skip line names the pack and the vanilla gameplay cache), then rejoins the client and lists the pack. Pre-fix the caller trial returns the worldgen error, the port never opens, and that assertion is the red. It is new and has not yet been seen in a full scenario run; the red/green of its decision path are in receipts/HarnessAsserts/REPORT.md.
+"""

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import item_merge, native_client, village_autonomy_qa as village
+from . import civ_row_signals, item_merge, native_client, village_autonomy_qa as village
 from .probe_steps import ProbeSteps
 
 
@@ -1280,6 +1280,23 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
         current_population = population(info_now, name)
         row["population"] = current_population
         row["population_info"] = info_now
+        # One recorded sprint for the per-row signals (`civ_row_signals`): the same client
+        # observations the milestones read. A signal that is not observed yet stays None,
+        # which the ledger never reads as red.
+        revision = re.search(r"revision=(\d+)", " ".join(info_now))
+        detail.setdefault("row_signals", []).append({
+            "index": advanced, "ticks": row["client_game_time"],
+            "revision": int(revision[1]) if revision else None,
+            "projects": status.get("projects") or [], "dialog": status.get("project_ui") or [],
+            # A sprint whose storage read the caller did not perform records no storage at all:
+            # `civ_row_signals` then treats those totals as unobserved, never as zero.
+            "storage": status.get("storage_now") or {}, "anchor": detail["settlement_anchor"],
+            "entities": entities.get("entities") or [],
+            "population": current_population,
+        })
+        for signal, value in civ_row_signals.evaluate({"sprints": detail["row_signals"]}).items():
+            if value is not None:
+                verdicts[signal] = value
         if current_population >= detail["baseline_population"] + 2 and "growth_observation" not in detail:
             detail["growth_observation"] = {
                 "sprint_ticks": advanced, "population": current_population, "info": info_now,

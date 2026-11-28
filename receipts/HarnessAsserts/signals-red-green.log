@@ -1,0 +1,72 @@
+CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP
+  scenario: civilization-seed-qa
+  assertion: lumberjack_delivers_logs_within_a_day
+  ref: harness:civilization-seed-qa:lumberjack_delivers_logs_within_a_day  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIV-SEED24-FARM-SEEDS-NEED-A-FARM
+  scenario: civilization-seed-qa
+  assertion: first_farm_gets_seeds_from_cleared_ground
+  ref: harness:civilization-seed-qa:first_farm_gets_seeds_from_cleared_ground  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-EMPLOYED-SHEARING
+  scenario: civilization-seed-qa
+  assertion: wool_reaches_a_wool_bill_without_a_shepherd
+  ref: harness:civilization-seed-qa:wool_reaches_a_wool_bill_without_a_shepherd  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-FUNDED-PLANNER-IDLE
+  scenario: civilization-seed-qa
+  assertion: funded_project_advances_within_a_day
+  ref: harness:civilization-seed-qa:funded_project_advances_within_a_day  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-INACTIVE-SHEEP-TARGET
+  scenario: civilization-seed-qa
+  assertion: no_worker_stranded_past_the_simulated_boundary
+  ref: harness:civilization-seed-qa:no_worker_stranded_past_the_simulated_boundary  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-MIXED-LOG-HAUL-STARVATION
+  scenario: civilization-seed-qa
+  assertion: mixed_wood_load_reaches_storage
+  ref: harness:civilization-seed-qa:mixed_wood_load_reaches_storage  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-NATURAL-FOREST-SITE-PREPARATION
+  scenario: civilization-seed-qa
+  assertion: natural_forest_site_is_felled_and_housing_grows
+  ref: harness:civilization-seed-qa:natural_forest_site_is_felled_and_housing_grows  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+
+CIVILIZATION-STREET-BUILDER-RETENTION
+  scenario: civilization-seed-qa
+  assertion: street_completion_releases_the_builder
+  ref: harness:civilization-seed-qa:street_completion_releases_the_builder  graphical=True
+  RED observation  -> False
+  GREEN observation-> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met
+

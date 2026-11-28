@@ -7,5 +7,6 @@ severity = "major"
 status = "open"
 source = "civilization-seed-qa seed 24, .analysis/validation/20261107T122413-civilization-seed-qa-binw9gjz/result.json: revision 15 and cursor 0 throughout the funded idle interval; focused failing-first .analysis/validation/20261107T130801-test-74aw_bjp/result.json; reverting only the planner guard move fails .analysis/validation/20261107T131817-test-0vdhijbt/result.json; reverting only gatherer protection borrows the Lumberjack in .analysis/validation/20261107T133539-test-yg_jmb0o/result.json."
 failing_first = "reported"
-regression = ["cargo:mc-core:settlements::construction::planner_tests::funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer"]
+regression = ["cargo:mc-core:settlements::construction::planner_tests::funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer", "harness:civilization-seed-qa:funded_project_advances_within_a_day"]
+repro_check = "Real-client assertion added 2026-11-28 (HarnessAsserts): the ref harness:civilization-seed-qa:funded_project_advances_within_a_day is the named assertion `funded_project_advances_within_a_day` in the existing civilization-seed-qa run, over the observations that scenario already records. It is new and has not yet been seen in a full scenario run; its red/green are proven on the recorded observation in receipts/HarnessAsserts/REPORT.md."
 fix_commit = "patch:5549665bfbce8aaa422c34ea6585b88995d25ca79381c111bc9fd7a9a169dc54"

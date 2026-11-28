@@ -1748,3 +1748,55 @@ def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("crowd_entities_rendered",
                 probe.report["crowd_eligible"] >= 1000 and probe.report["crowd_submitted"] >= 1000)
     probe.check("crowd_stream_bounded", probe.report["crowd_dropped_over_budget"] > 0)
+
+
+# ENTITY-RELATIVE-MOVEMENT-DRIFT: a closed +/-0.01 trajectory must return the client's own
+# decoded position to the server's endpoint. The edge plans a relative move from the
+# quantized endpoint; flooring the raw displacement instead loses one 1/4096 step per
+# closed cycle (the cargo oracle's 1024 cycles accumulate 0.25 blocks). 192 cycles leave
+# ~0.047 blocks, well above the read tolerance, while a healthy edge keeps the endpoint
+# exact. Each endpoint is held long enough for the server's per-type update interval to
+# send it, so the two halves are two moves and not one coalesced move.
+RELATIVE_TRAJECTORY_CYCLES = 192
+RELATIVE_TRAJECTORY_STEP = 0.01
+RELATIVE_TRAJECTORY_HOLD_TICKS = 4
+RELATIVE_TRAJECTORY_TOLERANCE = 0.02
+RELATIVE_TRAJECTORY_ENTITY = "minecraft:armor_stand"
+
+
+def relative_trajectory_drift(origin: tuple[float, float, float],
+                              endpoint: tuple[float, float, float]) -> float:
+    """The largest per-axis distance the client's decoded endpoint moved from the origin."""
+    return max(abs(now - start) for now, start in zip(endpoint, origin))
+
+
+def check_entity_relative_trajectory(probe: ProbeSteps, artifact: Path, *,
+                                     cycles: int = RELATIVE_TRAJECTORY_CYCLES) -> None:
+    """ENTITY-RELATIVE-MOVEMENT-DRIFT: a closed trajectory leaves no viewer drift."""
+    selector = f"@e[type={RELATIVE_TRAJECTORY_ENTITY},limit=1]"
+
+    def received() -> tuple[float, float, float]:
+        page = probe.call("minecraft_list_entities", {
+            "radius": 16, "entity_type": RELATIVE_TRAJECTORY_ENTITY, "limit": 16})
+        rows = [row for row in page.get("entities", [])
+                if isinstance(row, dict) and row.get("entity_type") == RELATIVE_TRAJECTORY_ENTITY]
+        probe.check("relative_trajectory_one_entity_received", len(rows) == 1)
+        row = rows[0]
+        return (float(row["x"]), float(row["y"]), float(row["z"]))
+
+    origin = received()
+    probe.report["relative_trajectory_origin"] = list(origin)
+    for _ in range(cycles):
+        probe.fixture(f"tp {selector} {origin[0]:.3f} {origin[1] + RELATIVE_TRAJECTORY_STEP:.3f} {origin[2]:.3f}")
+        probe.call("minecraft_wait_ticks", {"ticks": RELATIVE_TRAJECTORY_HOLD_TICKS})
+        probe.fixture(f"tp {selector} {origin[0]:.3f} {origin[1]:.3f} {origin[2]:.3f}")
+        probe.call("minecraft_wait_ticks", {"ticks": RELATIVE_TRAJECTORY_HOLD_TICKS})
+    probe.call("minecraft_wait_ticks", {"ticks": 20})
+    endpoint = received()
+    drift = relative_trajectory_drift(origin, endpoint)
+    probe.report.update(relative_trajectory_end=list(endpoint),
+                        relative_trajectory_cycles=cycles,
+                        relative_trajectory_drift=drift,
+                        relative_trajectory_tolerance=RELATIVE_TRAJECTORY_TOLERANCE)
+    probe.check("relative_trajectory_returns_the_client_to_the_origin",
+                drift <= RELATIVE_TRAJECTORY_TOLERANCE)

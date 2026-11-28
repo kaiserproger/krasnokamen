@@ -9,4 +9,5 @@ source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civi
 # Negative control (d827661e): with only the settlement_builds.rs debit hunks reverted the regression fails with 'clearing 42 short grass stored no wheat seeds' (receipts/CivSimSeed24/b/seed-loot-negative-control.log; hunks sha256 3217aa68).
 failing_first = "reported"
 fix_commit = "patch:4932f851798c5f3bda3ad5bbbff94fbbfbe58feff741f1ce0eb85a33f63f1245"
-regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds"]
+regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds", "harness:civilization-seed-qa:first_farm_gets_seeds_from_cleared_ground"]
+repro_check = "Real-client assertion added 2026-11-28 (HarnessAsserts): the ref harness:civilization-seed-qa:first_farm_gets_seeds_from_cleared_ground is the named assertion `first_farm_gets_seeds_from_cleared_ground` in the existing civilization-seed-qa run, over the observations that scenario already records. It is new and has not yet been seen in a full scenario run; its red/green are proven on the recorded observation in receipts/HarnessAsserts/REPORT.md."

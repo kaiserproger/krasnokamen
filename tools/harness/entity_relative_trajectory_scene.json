@@ -1,0 +1,51 @@
+{
+  "seed": 100,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        203,
+        1000.5,
+        0,
+        35
+      ]
+    },
+    {
+      "cmd": "fill 960 199 960 1040 199 1040 minecraft:stone"
+    },
+    {
+      "cmd": "fill 960 200 960 1040 202 1040 minecraft:air"
+    },
+    {
+      "cmd": "summon minecraft:armor_stand 1000.5 200.0 1000.5 {NoGravity:1b,Invulnerable:1b,ShowArms:0b}"
+    },
+    {
+      "cmd": "tp @e[type=minecraft:armor_stand,limit=1] 1000.5 200.0 1000.5"
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "shot": "relative-trajectory"
+    }
+  ]
+}

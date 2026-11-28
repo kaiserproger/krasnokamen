@@ -1,0 +1,6 @@
+test_a_plain_observation_noise_stays_inside_the_tolerance (tools.harness.test_entity_relative_trajectory.RelativeTrajectoryTest.test_a_plain_observation_noise_stays_inside_the_tolerance) ... ok
+test_the_rows_1024_cycles_lose_a_quarter_block (tools.harness.test_entity_relative_trajectory.RelativeTrajectoryTest.test_the_rows_1024_cycles_lose_a_quarter_block) ... ok
+test_the_scene_greens_the_fixed_encoder (tools.harness.test_entity_relative_trajectory.RelativeTrajectoryTest.test_the_scene_greens_the_fixed_encoder) ... ok
+test_the_scene_reds_the_pre_fix_encoder (tools.harness.test_entity_relative_trajectory.RelativeTrajectoryTest.test_the_scene_reds_the_pre_fix_encoder) ... ok
+Ran 4 tests in 0.001s
+OK

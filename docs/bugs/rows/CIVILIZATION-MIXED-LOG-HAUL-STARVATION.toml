@@ -7,5 +7,6 @@ severity = "major"
 status = "open"
 source = "Seed-24 .analysis/validation/20261107T160204-civilization-seed-qa-uvkz8j4d/result.json and stall-snapshot.json: 61 birch logs and 6 oak logs remain carried with returning=false while settlement stock is unchanged for a day; failing-first .analysis/validation/civsim3-mixed-load-failing-first.log; reverting only the shared load predicate fails .analysis/validation/civsim3-mixed-load-negative-control.log."
 failing_first = "reported"
-regression = ["cargo:mc-core:villager::lumber_tests::lumberjack_delivers_a_stack_sized_mixed_wood_load_during_work"]
+regression = ["cargo:mc-core:villager::lumber_tests::lumberjack_delivers_a_stack_sized_mixed_wood_load_during_work", "harness:civilization-seed-qa:mixed_wood_load_reaches_storage"]
+repro_check = "Real-client assertion added 2026-11-28 (HarnessAsserts): the ref harness:civilization-seed-qa:mixed_wood_load_reaches_storage is the named assertion `mixed_wood_load_reaches_storage` in the existing civilization-seed-qa run, over the observations that scenario already records. It is new and has not yet been seen in a full scenario run; its red/green are proven on the recorded observation in receipts/HarnessAsserts/REPORT.md."
 fix_commit = "patch:2168d386850015763cd26d6d6e314217a93a8eca5702d4e12da5d29d2a876030"
