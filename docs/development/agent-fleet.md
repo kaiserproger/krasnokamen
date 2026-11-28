@@ -243,6 +243,8 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Target     rows or paths (ids only; attach `ledger probe` output for rows)
 # Base       <sha>; worktree name
 # Claim      task id and timebox; Main runs `task-claim` before launch (below)
+# Check-in   task id, logical agent and exact lease id from `fleet-status --task`;
+#            record actual phase edges, no heartbeat (see claims and fleet status)
 # Write set  owned files and dirs; everything else read-only
 # Module     a new feature only: its module or crate path, host module, the one
 #            registration point, exported interface; largest-cycle module count
@@ -347,6 +349,61 @@ and an overrun is visible without reading transcripts (owner, 2026-11-11).
   and running runner commands. Main and the owner read it instead of
   reconstructing state from transcripts. Tests:
   `python3 tools/dev/test_task_claim.py`.
+
+### Task timing (D92)
+
+Main includes the task, logical agent and exact lease identity from
+`fleet-status --task <task-id>` in the brief. The worker chooses a fresh
+opaque session ID (e.g. `python3 -c 'import uuid; print(uuid.uuid4().hex)'`).
+Using Main's absolute `tools/dev/` commands, it records a real boundary:
+
+```sh
+<work>/solaris/tools/dev/fleet-status --task <task-id>
+<work>/solaris/tools/dev/task-claim <task-id> --agent <name> --lease <lease-id> \
+  --session <session-id> --seq 0 --check-in start
+<work>/solaris/tools/dev/task-claim <task-id> --agent <name> --lease <lease-id> \
+  --session <session-id> --seq 1 --check-in build-wait
+```
+
+`start` begins `active`; add one to `--seq` for each change to `active`,
+`build-wait`, `build-run`, `peer-wait`, `review-wait`, `owner-wait` or `unknown`.
+Use `blocked` or `done` at the working session's actual terminal checkpoint.
+Main still releases the lease independently. Do not heartbeat, backdate or
+run a check-in as a condition for starting work; a refusal is an evidence
+gap, not a reason to cancel a running job. No free text, credentials,
+commands or transcript content belong in these IDs or the timing log.
+
+Keep the phase `active` when doing work while a background build runs.
+`build-wait` means the task is actually blocked on **observed build-token
+admission**; elapsed time from submission to scope start is not necessarily
+token wait. `build-run` is waiting on admitted build/test work to finish,
+not CPU utilization. If the distinction was not observed, use `unknown`;
+do not reconstruct a past boundary from a PID or lease. Use runner evidence
+(token wait and scope admission) and the harness terminal `result.json`
+(and its separately captured `[harness] stage=… exit=… in …s` output) for
+job timing. `fleet-status --task <task-id> --harness-receipt <result.json>`
+shows only receipt status and duration fields separately; it does not
+join that job to the task or count it as extra time. A missing terminal
+receipt is unavailable, not passing.
+
+Check on phase changes and at handoff, not on a timer. `closed_seconds`
+contains only intervals closed by a later accepted edge. The current age is
+provisional; it cannot distinguish silent ongoing work from a crashed worker.
+`closed_seconds.unknown` is bounded elapsed time with no phase attribution;
+`unmeasured_gap` marks intervals without comparable observations. Lease
+expiry/release without a terminal edge is not completion. Reports belong
+to one lease generation; overlaps across tasks and background jobs must
+not be added as independent wall times. These are elapsed agent-reported
+phases, not measurements of agent CPU, model processing or productivity.
+
+For a resumed logical session or an incomplete/expired observation on a
+still-live lease, explicitly `--check-in start --seq 0` with a fresh
+`--session` and `--replace-session <last session>` if one was recorded.
+The gap since the previous edge is unknown; a cross-boot gap is unmeasured.
+Use the new lease identity after takeover or after renewing an expired lease.
+
+### Handoff at timebox
+
 - **Slices close in hours; nothing claimed waits a day.** Main selects owners
   from the current ranked critical path under the operating mode above, not
   a historical “fill ten agents / battle first” schedule. A brief names its
