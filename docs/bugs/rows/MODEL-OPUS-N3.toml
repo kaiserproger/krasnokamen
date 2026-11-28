@@ -4,9 +4,14 @@ title = "Player heads have no outer (hat) layer."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:107"
-regression = ["harness:scene-shot:native-player-head"]
+regression = ["harness:scene-shot:native-player-head", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer"]
+proving_refs = ["harness:scene-shot:native-player-head"]
 proving_assertions = { "harness:scene-shot:native-player-head" = "placed_head_hat_layer_pixels" }
 fix_commit = "client:bc7429a36c29d09429a0c84bd66cf0ba0e6b983e"
 repro_check = "On clean core 6d3f1306b3, the native-player-head graphical scene failed placed_head_hat_layer_pixels with the exact player_head.json pre-image control 035c0dadf4e1 (zero hat pixels, 10750 head-changed pixels) and passed with restore bc7429a36c29 (9822 hat pixels). Logs, pin identities and result paths are in receipts/D145ClientTail/MODEL-OPUS-N3/evidence.md; promotion remains Main's responsibility. REGRESSION SHAPE CORRECTED (Main, 2026-11-28): the client unit ref was removed — a `client:<sha>` fix is proved by its real-client refs only, and a receipt cannot observe a client unit test; the graphical assertion placed_head_hat_layer_pixels is the proving set. The unit test stays in the client repository as ordinary coverage."
+promotion = "docs/bugs/promotions/MODEL-OPUS-N3.json"
+# GUARD RESTORED (Main, 2026-11-28): the client unit ref is back in `regression` as the
+# retained green guard, and `proving_refs` names only the graphical ref, which is the
+# promotion's proving set — the documented distinction, not a deleted test.

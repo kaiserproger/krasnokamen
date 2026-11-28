@@ -1,0 +1,11 @@
+[[bug]]
+id = "LEDGER-NO-PROOF-KIND-FOR-SCRIPT-TOOLING"
+title = "The ledger has no proof kind for a shell/python tooling row: `manual`/`client` demand a real-client receipt, `command` demands a `cargo:` ref, and a python unit test of a shell script is neither"
+area = "harness"
+severity = "major"
+repro = "source"
+status = "open"
+source = "Main, 2026-11-28: promoting HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK refused twice with 'client-surface row has no real-client harness ref' (repro manual), and docs/bugs/README.md:128-132 plus tools/harness/regressions.py:864-865 forbid `repro = \"command\"` for a fixed row that carries only python refs. The row's own proof — tools.dev.test_scene_slot, five python tests that fail when the script hunks are reversed — has no accepted shape."
+regression = []
+failing_first = "recorded"
+repro_check = "Three rows hit this in one pass: HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK, HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR and HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK all have python refs and a non-cargo repro, so `ledger promote` refuses them as client-surface (needs_real_client is true for repro manual/client) and `repro = \"command\"` would be refused by regressions validation because no cargo ref drives the same path. The honest fix is one of: (a) add a `python:`-only proof shape — a row whose refs are all `python:` and whose fix reverses to red at an assertion is proved by that reversal, no client receipt; or (b) let `command` accept a `python:` ref when the command under test is a repository script, with the original rerun receipt named in `source`. Until one exists these tooling rows cannot leave the queue, which is why they are reported rather than reclassified: changing `repro` to satisfy a gate is exactly the soft closure the ledger forbids."
