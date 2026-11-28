@@ -91,6 +91,33 @@
       "cmd": "kill @e[type=minecraft:chicken,distance=..16]"
     },
     {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {IsBaby:1b,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "cold-chicken"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-cold-chicken-entities",
+        "types": [
+          "minecraft:chicken"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:chicken,distance=..16]"
+    },
+    {
       "cmd": "kill @e[type=minecraft:item,distance=..16]"
     },
     {

@@ -1771,7 +1771,8 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
     `require_entities` dumps plus `eligible` keep a summon that never reached the client
     out of the green path.
     """
-    names = ("empty", "chicken", "cold-cow", "cold-calf", "warm-cow", "warm-calf", "nautilus")
+    names = ("empty", "chicken", "cold-chicken", "cold-cow", "cold-calf", "warm-cow",
+             "warm-calf", "nautilus")
     shots = _qa._load_shots(probe, artifact, names)
     ref = shots["empty"][0]
     for name in names[1:]:
@@ -1832,6 +1833,13 @@ def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
         probe.report["cminor_chicken_height_over_width"] = height_over_width
         probe.check("baby_chicken_child_silhouette",
                     height_over_width is not None and 0.4 <= height_over_width <= 1.6)
+
+    cold_chick = subject("cold-chicken", ("minecraft:chicken",), "cold_chicken_baby")
+    probe.check("cold_chicken_baby_authored_rig_selected", cold_chick is not None)
+    if cold_chick is not None:
+        _record, layer, spans = cold_chick
+        probe.check("cold_chicken_baby_stands_on_the_floor",
+                    abs(float(layer["min"][1]) - ground) <= 0.02)
 
     for name, types, rig in (
         ("cold-cow", ("minecraft:cow",), "cold_cow"),
