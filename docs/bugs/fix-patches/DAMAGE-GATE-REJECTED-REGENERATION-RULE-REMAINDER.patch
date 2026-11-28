@@ -1,0 +1,12 @@
+diff --git a/tools/harness/backends/native_p4.py b/tools/harness/backends/native_p4.py
+--- a/tools/harness/backends/native_p4.py
++++ b/tools/harness/backends/native_p4.py
+@@ -431,7 +431,7 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+     x, y, z = origin
+     # Read back the actual server rule before dealing damage. The echo fences both
+     # replies, so a rejected set reports the old value instead of timing out on an ack.
+-    steps.fixture("gamerule natural_regeneration false")
++    steps.fixture("gamerule natural_health_regeneration false")
+     steps.fixture("gamerule natural_health_regeneration")
+     regeneration = _echo(steps, "damage_regeneration_readback_ordered")
+     feedback = [line for line in regeneration["recent_chat"]

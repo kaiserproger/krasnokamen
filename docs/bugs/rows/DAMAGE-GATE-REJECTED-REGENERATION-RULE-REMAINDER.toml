@@ -5,6 +5,9 @@ area = "harness"
 repro = "source"
 severity = "major"
 status = "open"
-source = "Split from DAMAGE-GATE-REJECTED-REGENERATION-RULE (D123 review, 2026-11-27). That row's promotion (patch:c09ff708) proves only the acknowledgement wait, and its control removes the wait without restoring the rejected rule name. The original rejection - the server answers `gamerule natural_regeneration` with an unknown-rule message - is therefore unproven: tools/harness/backends/native_p4.py:609 now sends `natural_health_regeneration`, but no receipt reads the server's reply."
-regression = []
-repro_check = "The check that would prove it: a native_p4 step that sends `gamerule natural_health_regeneration false` and reads `gamerule natural_health_regeneration` back in the same tick before the first damage row, asserting the reply is already `false` (with the wait removed the read-back races the command and reports `true`); and a negative control that restores the rejected `natural_regeneration` command through the real fixture, where the server's rejection is what the acknowledgement wait turns red. Today neither exists: the wave 3/4 scene runs pass on both sides (artifacts 20261124T234236-native-v2-p4-damage-xq727z2i and 20261124T234755-native-v2-p4-damage-g7htf_29), and the unit test passes its own rule argument."
+source = "Split from DAMAGE-GATE-REJECTED-REGENERATION-RULE (D123 review, 2026-11-27). The earlier promotion reversed only the acknowledgement wait, not the rejected rule name. b7020b427 sent `natural_regeneration`; 23f4e4b11 corrected it to `natural_health_regeneration`."
+regression = ["harness:entities:native-v2-p4-damage"]
+proving_assertions = { "harness:entities:native-v2-p4-damage" = "damage_regeneration_disabled_on_server" }
+fix_commit = "patch:9e14f19457b1dd9e147badb4ad086ebeb04701139c94d5e5ebfd624614fa8708"
+failing_first = "reported"
+repro_check = "Reverse only the historical gamerule spelling with the row patch and run `python3 -m tools.harness run scenario native-v2-p4-damage --client native --windowed`. The same ordered canonical read-back and acknowledgement assertion remain in the control arm; inspect `regeneration_fixture_feedback` and `damage_regeneration_disabled_on_server`."

@@ -67,6 +67,18 @@
       "wait_ticks": 40
     },
     {
+      "require_entities": {
+        "name": "villager-present",
+        "args": {
+          "radius": 8,
+          "limit": 16
+        },
+        "types": [
+          "minecraft:villager"
+        ]
+      }
+    },
+    {
       "shot": "villager-leg"
     },
     {
@@ -95,18 +107,6 @@
           ]
         },
         "min_pixels": 500
-      }
-    },
-    {
-      "require_entities": {
-        "name": "villager-present",
-        "args": {
-          "radius": 8,
-          "limit": 16
-        },
-        "types": [
-          "minecraft:villager"
-        ]
       }
     }
   ]
