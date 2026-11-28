@@ -1,0 +1,11 @@
+[[bug]]
+id = "CIV-GATE-BIRTHS-MILESTONE-NEEDS-NET-GROWTH"
+title = "The civilization gate can log a birth, capture the baby, and still report `births=false`, because the milestone needs a net-growth observation the run does not always produce."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Measured by the D145Gameplay lane on 2026-11-28: run `wt/D145Gameplay/.analysis/validation/20261128T102040-civilization-seed-qa-sdz7erke` on `ac4b6a6a19` failed after 6928.9 s at the bounded observation limit with `new_house` and `second_building` reached and only `births` missing. The same run's audit log carries a real settlement birth (child `e86ea332-fa21-4422-acd2-964eb7c0f8b3`, settlement 1, tick 8264) and the window captured that baby at sprint 900, with iron and a new house with bed independently observed."
+failing_first = "reported"
+regression = ["python:tools.harness.test_civilization_seed_qa"]
+repro_check = "`tools/harness/backends/civilization_seed_qa.py:1321-1324` sets the `births` milestone only when **both** `growth_observation` and `baby_observation` exist in `detail`; the stall path then forces `verdicts['births'] = verdicts['all'] = False` at :1357. A run whose audit log proves a birth and whose capture proves the baby still fails whenever the net-growth observation is absent (population above the baseline the gate recorded), so the milestone name promises a birth witness and the rule requires demography. Either the milestone should be satisfied by the audit birth plus the baby capture, or it must be renamed and its limitation printed with the failure."
