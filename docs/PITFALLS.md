@@ -106,15 +106,17 @@ and "not run" for an unrun platform. Check: `.analysis/releases/<tag>/claims.md`
 maps each sentence to a receipt before review
 ([release text](development/release-and-tags.md#core-release-cut)).
 
-**A stale queue document beat the live ledger.** On 2026-11-28 Main ran from
-`.analysis/QUEUE.md` (last touched 2026-11-11) and `.analysis/MEMORY.md`
-(2026-11-16), whose tail marked the remaining work deferred and blocked, while
-`docs/bugs/rows` held 198 open rows (4 blockers); with no active row after the
-last landing, Main idled 13 hours. The queue is the ledger, counted by
-`python3 -m tools.harness ledger list`, and a turn ends only after naming the
-next rows and their owners; a stale cursor is deleted, not appended (D147,
-incident receipt receipts/D147/D147-QUEUE-SINGLE-SOURCE.md, ledger rows).
-Check: the closing report quotes `ledger list`'s open count and three rows.
+**Open rows sat 13 hours without executors.** On 2026-11-28 the turn ended after
+the SUMMON promotion and the next worker (BEDPatch) was not started until 15:08,
+while `docs/bugs/rows` held 198 open rows (4 blockers) and nothing else was
+dispatched on them. The cause of that dispatch gap is not established; open
+hypotheses are (a) no turn-boundary check that counts open ledger rows,
+(b) dependence on a single worker whose handoff ends the turn, (c) lanes closed
+without replacements being started. The queue is `docs/bugs/rows`, counted by
+`python3 -m tools.harness ledger list`; a stale cursor is deleted, not appended
+(D147 as amended by D148, incident receipt receipts/D147/D147-QUEUE-SINGLE-SOURCE.md,
+ledger rows). Check: a closing report quotes `ledger list`'s open count and the
+next rows with owners.
 
 ## The owner host
 
