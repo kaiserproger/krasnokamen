@@ -28,8 +28,10 @@ evidence only. The invalid promotion record is preserved as
   requires the control→restore production patch to have the *same patch-id* as the fix's
   own non-test patch. A historical bulk commit that also moves binary assets cannot satisfy
   that against a single-file control, whatever pin exists.
-- The valid `035c0dadf4e1` → `bc7429a36c29` pair stays historical evidence: it reds
-  `placed_head_hat_layer_pixels` exactly, but its restore is not published.
+- The `035c0dadf4e1` → `bc7429a36c29` pair is diagnostic only: the control fails
+  `placed_head_hat_layer_pixels`, but its restore is not published. The
+  [hunk map](../../docs/bugs/promotions/MODEL-OPUS-N3.hunks.md) landed separately
+  in `29e0b63e9`; it documents the diagnostic pair and does not promote the row.
 
 ## Count
 
