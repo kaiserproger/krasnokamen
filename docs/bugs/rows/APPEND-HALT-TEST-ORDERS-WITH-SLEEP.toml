@@ -11,8 +11,3 @@ failing_first = "reported"
 fix_commit = "de1a323b435c304dc84450fc2f48b8133bb8f9cf"
 repro_check = "The fix de1a323b4 is test-only (native_checkpoint_crash_tests.rs joins the journal thread before the tempdir goes); its commit has no non-test hunks, so the patch-mode control has nothing to reverse and a reversal would only restore a teardown race whose failure is a hidden late panic, never an assertion (README:203-208: crash/timeout cannot be a control). The earlier ordering defect (400 ms sleep vs a 2 s injected commit delay) is now structurally gone: the test waits on entered_rx with a 10 s timeout and joins the writer. Kept open: no honest red exists; the ref is green on every tree (20261120T055005-test-vgedac9p and 20/20 repeats under load)."
 
-# Closure path (Main, 2026-11-28): the current fix is test-only, so `ledger promote` has nothing to
-# reverse and the row cannot close as it stands. Replace the 400 ms sleep ordering with a
-# deterministic signal (a latch the test releases when the append failure has been observed), so the
-# pre-fix code fails the assertion every run and the fixed code passes every run; then the fix has a
-# non-test hunk and a control that goes red at its own assertion. Repo rule: no sleeps as signals.

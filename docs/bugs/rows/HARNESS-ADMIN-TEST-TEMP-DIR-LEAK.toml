@@ -10,8 +10,3 @@ regression = ["cargo:mc-edge:server::admin_tests::a_failing_admin_test_leaves_no
 fix_commit = "abc5fd559"
 repro_check = "Blocked by the test-only control rule, not by the fix: the guard under test is test scaffolding inside crates/mc-edge/src/admin_tests.rs (AdminWorld::drop and the fixture), so the only defect that leaks the directory again is a hunk in that test file. docs/bugs/README.md now refuses a control_b_patch that changes a test file or an inline cfg(test) module (it could replay control A), so this row cannot carry a defect injection. Its fix commit abc5fd559 is committed and its two refs are green on HEAD; promotion needs either an owner decision to allow a test-helper defect patch for this class or a production-side surface for the leak."
 
-# Closure path (Main, 2026-11-28): the current fix is test-only, so `ledger promote` has nothing to
-# reverse and the row cannot close as it stands. Replace the 400 ms sleep ordering with a
-# deterministic signal (a latch the test releases when the append failure has been observed), so the
-# pre-fix code fails the assertion every run and the fixed code passes every run; then the fix has a
-# non-test hunk and a control that goes red at its own assertion. Repo rule: no sleeps as signals.
