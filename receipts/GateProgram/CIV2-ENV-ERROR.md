@@ -62,5 +62,14 @@ a hand-made spec with `native_seed: 100`; the run's own `birth-snapshot-spec.jso
 `native_seed: 24, native_worldgen_revision: 33`. With the run's exact spec the reader is
 green, so the snapshot stage is not a second defect: only the launch variable was wrong.
 
+The frozen W1Freeze harness's `verify_birth_snapshot` also passed offline:
+`verified=true`, settlement 1, claim tick 3316, baseline tick 3543, two births
+(`bf3148f8-78cd-4550-a49c-253fcfe27185`, `dd102951-ebe3-49a1-8796-e91c5526787e`).
+It used `civilization-seed-qa/scenario.json` and `server.log` from the failed run
+and the separate snapshot report above (SHA-256
+`4cbd2cfbfaa0b1008bb0faf57b37d2887698b8b753c870f4446ac19fda716564`). The final
+checkpoint at tick 85267 covered the last client observation at tick 82737.
+This is separate evidence for the birth assertion, not a passing scene receipt.
+
 Consequence for the rerun: a civ gate on current main needs a server pin **and** a bots pin
 from the same tree, and the bots binary is the one in `KRASNOKAMEN_SNAPSHOT_BINARY`.
