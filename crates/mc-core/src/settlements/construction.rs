@@ -2072,12 +2072,15 @@ fn release_incumbent(
 }
 
 /// Builders work only 2000..9000 of the day. A project whose work counter
-/// stands still for this many shift ticks (150 s of game time) has a builder
-/// that cannot make progress (seed 24: a stationary zombie within eight blocks
-/// of the only road to the lot kept the builder fleeing and returning for
-/// 15,000 ticks, 35 of 239 cells, and held the single project slot).
+/// stands still for this many simulated shift ticks (150 s of game time) has a
+/// builder that cannot make progress (seed 24: a stationary zombie within eight
+/// blocks of the only road to the lot kept the builder fleeing and returning
+/// for 15,000 ticks, 35 of 239 cells, and held the single project slot).
+/// Frozen ticks are not shift time: only simulated ticks move villagers
+/// (tick.rs runs settlements and brains inside `if sim`), so a held world, and
+/// the retention gate's between-sprint observation, add no window.
 const BUILDER_STALL_SHIFT_TICKS: u64 = 3_000;
-/// The replaced builder is chosen last for this long.
+/// The replaced builder is chosen last for this many simulated ticks.
 const BUILDER_SHUN_TICKS: u64 = 24_000;
 /// Longest gap between two planning passes counted as shift time.
 const BUILDER_WATCH_STEP: u64 = 100;
@@ -2086,14 +2089,17 @@ const BUILDER_WATCH_STEP: u64 = 100;
 #[derive(Debug)]
 pub(crate) struct BuilderWatch {
     progress: (String, u32, u64),
+    /// Last simulated tick seen (`game_ticks`, not the global tick or the
+    /// day clock).
     seen: u64,
-    /// Shift ticks without progress.
+    /// Simulated shift ticks without progress.
     idle: u64,
     reported: bool,
     refusal: Option<&'static str>,
     /// First recovery outcome, consumed by this episode's repeated-stall report.
     recovery: Option<&'static str>,
-    /// Replaced builders and the tick until which they are chosen last.
+    /// Replaced builders and the simulated tick until which they are chosen
+    /// last.
     shunned: Vec<(uuid::Uuid, u64)>,
     /// Some builder was bound to the project during this episode: only a site
     /// a builder failed is given back for another.
@@ -2160,6 +2166,29 @@ fn live_builder(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
     })
 }
 
+/// Record that `project` released `uuid`: it is chosen last for
+/// [`BUILDER_SHUN_TICKS`] simulated ticks, so recovery rotates the builder
+/// instead of rebinding the one that just failed. `game` is
+/// `tick_control::game_ticks`, the same monotonic clock the window uses.
+pub(crate) fn shun(
+    state: &mut TickState,
+    id: SettlementId,
+    handle: &str,
+    uuid: uuid::Uuid,
+    game: u64,
+) {
+    if let Some(watch) = state
+        .settlements
+        .builder_watch
+        .get_mut(&(id, handle.to_owned()))
+    {
+        watch.shunned.retain(|&(_, until)| game < until);
+        watch
+            .shunned
+            .push((uuid, game.saturating_add(BUILDER_SHUN_TICKS)));
+    }
+}
+
 /// Replace the builder of a running project that has not advanced a cell for
 /// [`BUILDER_STALL_SHIFT_TICKS`] of shift: another resident takes it, whose
 /// route may not cross whatever stopped the first.
@@ -2202,7 +2231,14 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         snapshot.current_stage_index,
         snapshot.completed_work_units,
     );
-    let tick = state.tick;
+    // Shift time is simulated time: only simulated ticks move villagers
+    // (tick.rs runs settlements and brains inside `if sim`). Counting
+    // `state.tick` here expired the 3,000-tick window in ~190 shift ticks of
+    // the R7 gate and released a builder before a 58-block walk could finish.
+    // The monotonic simulation clock is `game_ticks`, not `day_time`: the
+    // latter holds under a disabled daylight cycle and jumps with
+    // `/time set|add`, so it decides only the shift phase.
+    let game = state.tick_control.game_ticks(state.tick);
     let on_shift = (2_000..9_000).contains(&state.day_time.rem_euclid(24_000));
     let watch = state
         .settlements
@@ -2210,7 +2246,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         .entry((id, project.structure.clone()))
         .or_insert_with(|| BuilderWatch {
             progress: progress.clone(),
-            seen: tick,
+            seen: game,
             idle: 0,
             reported: false,
             refusal: None,
@@ -2219,8 +2255,8 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
             bound: false,
             told: None,
         });
-    let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
-    watch.seen = tick;
+    let elapsed = game.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
+    watch.seen = game;
     if watch.progress != progress {
         watch.progress = progress;
         watch.idle = 0;
@@ -2342,17 +2378,8 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         "project_paused"
     } else if let Some(slot) = incumbent {
         if release_incumbent(state, id, &project.structure, slot) {
-            if let Some(watch) = state
-                .settlements
-                .builder_watch
-                .get_mut(&(id, project.structure.clone()))
-            {
-                watch.shunned.retain(|&(_, until)| tick < until);
-                watch.shunned.push((
-                    state.entities.row(slot).uuid,
-                    tick.saturating_add(BUILDER_SHUN_TICKS),
-                ));
-            }
+            let released = state.entities.row(slot).uuid;
+            shun(state, id, &project.structure, released, game);
             "builder_released"
         } else {
             "builder_retained"

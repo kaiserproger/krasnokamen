@@ -1,6 +1,8 @@
+use super::builders::assign_builder;
 use super::growth_tests::Warnings;
 use super::tests::fixture;
 use super::*;
+use crate::villager::Activity;
 use mc_data::ItemStack;
 
 fn bed_project() -> (TickState, SettlementId, crate::entities::EntitySlot) {
@@ -816,5 +818,309 @@ fn a_committed_house_upgrade_reports_its_missing_certificate_requirement() {
     assert!(
         text.contains("cause=\"certificate_incomplete\"") && text.contains("missing="),
         "the refusal names its missing requirements: {text}"
+    );
+}
+
+/// One native tick whose simulation is held: the global tick advances and
+/// `game_ticks` does not, exactly as between the retention gate's sprints.
+fn held_tick(state: &mut TickState) {
+    state.tick += 1;
+    state.tick_control.begin_tick(state.tick);
+}
+
+/// One simulated tick: both the global tick and the simulation clock advance.
+fn running_tick(state: &mut TickState) {
+    state.tick += 1;
+    state.tick_control.begin_tick(state.tick);
+}
+
+#[test]
+fn a_frozen_simulation_adds_no_builder_stall_window() {
+    let (mut state, id, builder) = bed_project();
+    let uuid = state.entities.row(builder).uuid;
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    let game = state.tick_control.game_ticks(state.tick);
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        state.tick_control.set_frozen(true);
+        for _ in 0..9_000 {
+            held_tick(&mut state);
+            release_stalled_builder(&mut state, id);
+        }
+    });
+    assert_eq!(
+        state.tick_control.game_ticks(state.tick),
+        game,
+        "9,000 held ticks are not shift time"
+    );
+    let text = warnings.0.lock().unwrap().join("\n");
+    assert!(
+        !text.contains("settlement_construction_stalled"),
+        "a frozen world must not expire the window: {text}"
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession,
+        Profession::Builder,
+        "a frozen world must not strip the builder"
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0]
+            .builder
+            .map(|(uuid, _)| uuid),
+        Some(uuid),
+        "the project keeps its builder"
+    );
+    assert!(
+        state
+            .settlements
+            .builder_watch
+            .get(&(id, handle))
+            .is_none_or(|watch| watch.shunned.is_empty()),
+        "no builder may be shunned by a frozen world"
+    );
+}
+
+#[test]
+fn a_held_day_clock_does_not_stop_the_builder_stall_window() {
+    let (mut state, id, _builder) = bed_project();
+    let day = state.day_time;
+    assert!(
+        (2_000..9_000).contains(&day.rem_euclid(24_000)),
+        "the fixture must stand inside the work shift"
+    );
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        state.tick_control.set_frozen(false);
+        for _ in 0..=150 {
+            for _ in 0..20 {
+                state.tick += 1;
+                state.tick_control.begin_tick(state.tick);
+            }
+            release_stalled_builder(&mut state, id);
+        }
+    });
+    assert_eq!(
+        state.day_time, day,
+        "the day clock is held, as with doDaylightCycle=false"
+    );
+    let text = warnings.0.lock().unwrap().join("\n");
+    assert!(
+        text.contains("settlement_construction_stalled"),
+        "simulated ticks must still expire the window: {text}"
+    );
+}
+
+#[test]
+fn a_released_builder_is_not_rebound_before_an_unshunned_builder() {
+    let (mut state, id, released) = bed_project();
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    state.settlements.get_mut(id).unwrap().projects[0].builder = None;
+    // Beside the storage chest, like the fixture's builder, so both pass the
+    // storage probe and the ordering rule is what decides.
+    let second = super::super::allocator::tests::villager(&mut state, [2.5, 201.0, 1.5]);
+    let entity = state.entities.body(second).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    {
+        let v = state.entities.row_mut(second).villager.as_mut().unwrap();
+        v.data.profession = Profession::Builder;
+        v.activity = Activity::Work;
+    }
+    let released_uuid = state.entities.row(released).uuid;
+    let second_uuid = state.entities.row(second).uuid;
+    let mut cache = super::super::allocator::PoiCache::default();
+    let mut path = Vec::new();
+    assert!(
+        super::builders::probe_storage(&mut state, id, released, &mut cache, &mut path),
+        "setup: the released builder must reach storage"
+    );
+    assert!(
+        super::builders::probe_storage(&mut state, id, second, &mut cache, &mut path),
+        "setup: the second builder must reach storage"
+    );
+    // One watcher pass creates this project's episode entry; the shun below is
+    // what that episode records when it releases a builder.
+    release_stalled_builder(&mut state, id);
+    let game = state.tick_control.game_ticks(state.tick);
+    shun(&mut state, id, &handle, released_uuid, game);
+    assert!(
+        state
+            .settlements
+            .builder_watch
+            .get(&(id, handle.clone()))
+            .is_some_and(|watch| watch
+                .shunned
+                .iter()
+                .any(|&(uuid, until)| uuid == released_uuid && game < until)),
+        "setup: the released builder's shun must be recorded"
+    );
+    assign_builder(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0]
+            .builder
+            .map(|(uuid, _)| uuid),
+        Some(second_uuid),
+        "the recovery must rotate to the builder that was not just released"
+    );
+}
+
+/// An unbound single-project settlement with the fixture's native Builder and,
+/// optionally, one `Profession::None` retrain resident beside the storage
+/// chest. The watcher pass seeds the project's episode entry.
+struct Bench {
+    state: TickState,
+    id: SettlementId,
+    handle: String,
+    native: crate::entities::EntitySlot,
+    retrain: Option<crate::entities::EntitySlot>,
+}
+
+fn bench(with_retrain: bool) -> Bench {
+    let (mut state, id, native) = bed_project();
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    state.settlements.get_mut(id).unwrap().projects[0].builder = None;
+    let retrain = with_retrain.then(|| {
+        let slot = super::super::allocator::tests::villager(&mut state, [2.5, 201.0, 1.5]);
+        let entity = state.entities.body(slot).id;
+        crate::settlements::bind(&mut state, id, entity).unwrap();
+        slot
+    });
+    release_stalled_builder(&mut state, id);
+    Bench {
+        state,
+        id,
+        handle,
+        native,
+        retrain,
+    }
+}
+
+/// (native uuid, retrain uuid) with both routes to storage proven, so the
+/// ordering rule is what decides the binding.
+fn ready_pair(b: &mut Bench) -> (uuid::Uuid, Option<uuid::Uuid>) {
+    let (native_slot, retrain_slot) = (b.native, b.retrain);
+    let native = b.state.entities.row(native_slot).uuid;
+    let retrain = retrain_slot.map(|slot| b.state.entities.row(slot).uuid);
+    assert_reaches_storage(b, native_slot);
+    if let Some(slot) = retrain_slot {
+        assert_reaches_storage(b, slot);
+    }
+    (native, retrain)
+}
+
+fn assert_reaches_storage(bench: &mut Bench, slot: crate::entities::EntitySlot) {
+    let mut cache = super::super::allocator::PoiCache::default();
+    let mut path = Vec::new();
+    assert!(
+        super::builders::probe_storage(&mut bench.state, bench.id, slot, &mut cache, &mut path),
+        "setup: the candidate must reach storage"
+    );
+}
+
+fn bound(bench: &Bench) -> Option<uuid::Uuid> {
+    bench.state.settlements.get(bench.id).unwrap().projects[0]
+        .builder
+        .map(|(uuid, _)| uuid)
+}
+
+#[test]
+fn an_unshunned_retrain_candidate_is_bound_before_a_shunned_native_builder() {
+    let mut b = bench(true);
+    let (native, retrain) = ready_pair(&mut b);
+    let game = b.state.tick_control.game_ticks(b.state.tick);
+    shun(&mut b.state, b.id, &b.handle, native, game);
+    assign_builder(&mut b.state, b.id);
+    assert_eq!(
+        bound(&b),
+        retrain,
+        "the just-released builder must not beat a fresh retrain"
+    );
+}
+
+#[test]
+fn a_sole_shunned_native_builder_is_still_assigned() {
+    let mut b = bench(false);
+    let (native, _) = ready_pair(&mut b);
+    let game = b.state.tick_control.game_ticks(b.state.tick);
+    shun(&mut b.state, b.id, &b.handle, native, game);
+    assign_builder(&mut b.state, b.id);
+    assert_eq!(
+        bound(&b),
+        Some(native),
+        "the only eligible builder takes the site even when shunned"
+    );
+}
+
+#[test]
+fn a_frozen_simulation_does_not_lift_a_builder_shun() {
+    let mut b = bench(true);
+    let (native, retrain) = ready_pair(&mut b);
+    let game = b.state.tick_control.game_ticks(b.state.tick);
+    shun(&mut b.state, b.id, &b.handle, native, game);
+    b.state.tick_control.set_frozen(true);
+    // Longer than BUILDER_SHUN_TICKS in native ticks: a shun measured on the
+    // global tick would have lapsed here.
+    for _ in 0..(BUILDER_SHUN_TICKS + 6_000) {
+        held_tick(&mut b.state);
+    }
+    assert_eq!(b.state.tick_control.game_ticks(b.state.tick), game);
+    assign_builder(&mut b.state, b.id);
+    assert_eq!(
+        bound(&b),
+        retrain,
+        "held ticks are not shun time, so the released builder stays shunned"
+    );
+}
+
+#[test]
+fn a_builder_shun_lifts_on_its_game_tick_deadline() {
+    let mut b = bench(true);
+    let (native, retrain) = ready_pair(&mut b);
+    let game = b.state.tick_control.game_ticks(b.state.tick);
+    shun(&mut b.state, b.id, &b.handle, native, game);
+    b.state.tick_control.set_frozen(false);
+    for _ in 0..(BUILDER_SHUN_TICKS - 1) {
+        running_tick(&mut b.state);
+    }
+    assert_eq!(
+        b.state.tick_control.game_ticks(b.state.tick),
+        game + BUILDER_SHUN_TICKS - 1
+    );
+    assign_builder(&mut b.state, b.id);
+    assert_eq!(
+        bound(&b),
+        retrain,
+        "one tick short of the deadline the released builder is still shunned"
+    );
+
+    let mut b = bench(true);
+    let (native, _) = ready_pair(&mut b);
+    let game = b.state.tick_control.game_ticks(b.state.tick);
+    shun(&mut b.state, b.id, &b.handle, native, game);
+    b.state.tick_control.set_frozen(false);
+    for _ in 0..BUILDER_SHUN_TICKS {
+        running_tick(&mut b.state);
+    }
+    assert_eq!(
+        b.state.tick_control.game_ticks(b.state.tick),
+        game + BUILDER_SHUN_TICKS
+    );
+    assign_builder(&mut b.state, b.id);
+    assert_eq!(
+        bound(&b),
+        Some(native),
+        "at game == until the shun lapses and the native builder takes the site"
     );
 }
