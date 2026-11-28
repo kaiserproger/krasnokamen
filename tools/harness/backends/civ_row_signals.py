@@ -2,7 +2,7 @@
 
 `civilization-seed-qa` already records, once per sprint, the settlement's own dialogs and
 the client's received entities: the Construction status body, the storage totals, the
-building list, the resident census and the scanned blocks of every building. Each function
+building list and the resident census. Each function
 here turns those records into the verdict a row registers as
 `harness:civilization-seed-qa:<signal name>`.
 

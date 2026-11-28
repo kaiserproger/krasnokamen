@@ -1,0 +1,14 @@
+OK  CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP: status=open graphical=['harness:civilization-seed-qa:lumberjack_delivers_logs_within_a_day'] cargo=2
+OK  CIV-SEED24-FARM-SEEDS-NEED-A-FARM: status=open graphical=['harness:civilization-seed-qa:first_farm_gets_seeds_from_cleared_ground'] cargo=1
+OK  CIVILIZATION-EMPLOYED-SHEARING: status=open graphical=['harness:civilization-seed-qa:wool_reaches_a_wool_bill_without_a_shepherd'] cargo=1
+OK  CIVILIZATION-FUNDED-PLANNER-IDLE: status=open graphical=['harness:civilization-seed-qa:funded_project_advances_within_a_day'] cargo=1
+OK  CIVILIZATION-GENERATED-DOOR-TREE: status=open graphical=['harness:scene-shot:native-village-exit-foliage'] cargo=1
+OK  CIVILIZATION-INACTIVE-SHEEP-TARGET: status=open graphical=['harness:civilization-seed-qa:no_worker_stranded_past_the_simulated_boundary'] cargo=2
+OK  CIVILIZATION-MIXED-LOG-HAUL-STARVATION: status=open graphical=['harness:civilization-seed-qa:mixed_wood_load_reaches_storage'] cargo=1
+OK  CIVILIZATION-NATURAL-FOREST-SITE-PREPARATION: status=open graphical=['harness:civilization-seed-qa:natural_forest_site_is_felled_and_housing_grows'] cargo=18
+OK  CIVILIZATION-STREET-BUILDER-RETENTION: status=open graphical=['harness:civilization-seed-qa:street_completion_releases_the_builder'] cargo=2
+OK  CIVILIZATION-STREET-VERGE: status=open graphical=['harness:settlement-map-qa:verge_connected'] cargo=1
+OK  DATAPACK-NEW-PACK-WORLDGEN-SKIP: status=open graphical=['harness:datapack-reload:native-datapack-reload'] cargo=1
+OK  ENTITY-RELATIVE-MOVEMENT-DRIFT: status=open graphical=['harness:scene-shot:native-entity-relative-trajectory'] cargo=4
+OK  VILLAGER-HOUSE-EXIT-FOLIAGE: status=open graphical=['harness:scene-shot:native-village-exit-foliage'] cargo=2
+ALL_13_OK

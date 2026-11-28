@@ -12,7 +12,11 @@ promote`. Every ref below is marked in its row as **new and not yet seen in a fu
 run**; the red/green here are the assertion's decision path on recorded observations, not a
 scenario pass.
 
-Raw evidence beside this file: `signals-red-green.log`, `verge-red-green.log`,
+All thirteen row files were re-read after the commits: each carries exactly one graphical
+ref, its `status` is still `open`, and its `cargo:` refs are kept
+(`receipts/HarnessAsserts/row-refs-check.log`, `ALL_13_OK`).
+
+Raw evidence beside this file: `row-refs-check.log`, `signals-red-green.log`, `verge-red-green.log`,
 `test_civ_row_signals.log`, `test_datapack_worldgen_skip.log`,
 `test_entity_relative_trajectory.log`, `worldgen-reversed-cargo.log`.
 
