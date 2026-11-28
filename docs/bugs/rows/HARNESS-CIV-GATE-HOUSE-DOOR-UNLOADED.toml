@@ -17,3 +17,4 @@ repro_check = [
   "python3 -m unittest tools.harness.test_civilization_seed_qa.RemoteHouseDoorTests (aa2afc814: the door's chunk is loaded, then a straight walk; a refused straight walk takes a lateral hop; a door no hop reaches is observed from the console teleport; without a teleport a named error replaces the raw client refusal)",
   "Next gate run: a completed house farther than the client's loaded radius is reached by load and hops or observed from the console teleport, and without a teleport the gate reports the named error instead of aborting on the raw refusal.",
 ]
+fix_commit = "aa2afc8142c2064c4261f2621ada4c628f38f2a4"

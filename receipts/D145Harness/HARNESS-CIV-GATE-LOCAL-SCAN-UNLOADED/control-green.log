@@ -1,0 +1,58 @@
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x7258b48c6200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:     0.305 s
+   process: user: 0.201 s, system: 0.024 s, faults: 0, rss: 19.2 GiB
+mimalloc: process done: 0x7258b48c6200
