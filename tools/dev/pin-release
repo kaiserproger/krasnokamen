@@ -46,9 +46,11 @@ INPUT_PATHS = (
     "tools/extract-block-map-colors", "tools/extract-block-light", "tools/extract-block-mining",
     "tools/extract-block-explosion", "tools/VanillaWorldgenOracle.java",
 )
-# What a client release build reads: its own workspace (patched winit is a path dependency).
+# What a client release build reads: its own workspace (patched winit is a path dependency) and
+# `assets`, because build.rs embeds every assets/krasnokamen/models/entity/*.json with include_str!;
+# without it a model-only change kept the input key and reuse_pin could hand back the old binary.
 CLIENT_INPUT_PATHS = (
-    "src", "launcher", "paths", "vendor", "build.rs", "Cargo.toml", "Cargo.lock", ".cargo",
+    "src", "launcher", "paths", "vendor", "build.rs", "assets", "Cargo.toml", "Cargo.lock", ".cargo",
     "rust-toolchain.toml",
 )
 # Environment that changes what cargo/rustc produce (build() pops the target variables itself).
