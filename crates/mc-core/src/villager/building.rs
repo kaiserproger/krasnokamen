@@ -14,6 +14,13 @@ use crate::tick::TickState;
 const MARGIN: i32 = 2;
 /// Placement reach from the builder's feet to the next cell.
 const REACH: f64 = 12.0;
+/// Perimeter stands the router is asked to walk to before the nearest one wins.
+const STAND_ROUTES: usize = 12;
+/// Route nodes the real router may expand to confirm a perimeter goal.
+const ROUTE_NODES: usize = 512;
+/// Route nodes a committed goal is re-confirmed with; a truncated walk is a
+/// goal the builder cannot reach.
+const WALK_NODES: usize = 4096;
 /// Felling and clearing reach from the builder's feet to the cell's footing.
 pub(super) const PREPARATION_REACH: f64 = 4.0;
 
@@ -233,6 +240,35 @@ pub(super) fn preparation_stand(
     best.map(|(_, at)| at)
 }
 
+/// Whether the real router walks a body of `width` by `height` from the point
+/// `from` to the stand cell `to` within `nodes` expansions; a truncated search
+/// is false. The query runs on its own throwaway budget: choosing a goal is
+/// planning, not the tick's navigation spend, and the brain charges the route
+/// it actually walks.
+fn walks(
+    state: &TickState,
+    from: [f64; 3],
+    to: BlockPos,
+    width: f64,
+    height: f64,
+    nodes: usize,
+) -> bool {
+    let mut cache = crate::settlements::allocator::PoiCache::default();
+    let mut path = Vec::new();
+    let mut budget = crate::tick_budget::Budget::default();
+    let mut ctx = crate::settlements::allocator::RouteCtx {
+        world: &state.world,
+        registry: &state.registry,
+        dimension: state.dimension,
+        consumer: crate::tick_budget::Consumer::Allocator,
+        budget: &mut budget,
+    };
+    ctx.admit()
+        && crate::settlements::allocator::find_path_limited_ctx(
+            &mut ctx, &mut cache, from, to, width, height, &mut path, true, 64, 64, true, nodes,
+        )
+}
+
 fn site_target(
     state: &TickState,
     project: &construction::Project,
@@ -275,7 +311,7 @@ fn site_target(
     ];
     let body = state.entities.body(slot);
     let here = state.entities.pos(slot);
-    let mut best: Option<(f64, BlockPos)> = None;
+    let mut candidates: Vec<(f64, BlockPos)> = Vec::new();
     // The nearest horizontal side can be below a hillside site's roof reach.
     // Choose an actual supported perimeter stand, with arrival clearance, not
     // a point at the blueprint's fixed base height above a lower slope.
@@ -317,15 +353,42 @@ fn site_target(
         // Keep a still-valid destination while walking around terrain. Picking
         // the nearest stand anew can alternate adjacent goals whose routes
         // begin in opposite directions, so neither route ever advances.
-        if committed == Some(at) {
+        // A goal the router can no longer walk to (the builder stands beneath a
+        // roof it can never reach) is no goal to keep.
+        if committed == Some(at) && walks(state, here, at, body.half_width, body.height, WALK_NODES)
+        {
             return Some(at);
         }
-        let distance = (0..3).map(|axis| (here[axis] - stand[axis]).powi(2)).sum();
-        if best.as_ref().is_none_or(|(known, _)| distance < *known) {
-            best = Some((distance, at));
-        }
+        let distance: f64 = (0..3).map(|axis| (here[axis] - stand[axis]).powi(2)).sum();
+        candidates.push((distance, at));
     }
-    best.map(|(_, at)| at)
+    candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // The nearest stand in a straight line can be the roof of a neighbour's
+    // finished building or a ledge the router cannot climb: the builder would
+    // arrive beneath it and never place (Spain seed 100, the church beside a
+    // house: worksite_unreached for 160,000 ticks). The nearest stand the real
+    // router walks to is the goal; with none, the nearest as before.
+    // A stand beside one the router could not reach is reached or not with it:
+    // a roof strip costs one search, not one per column.
+    let mut unreached: Vec<BlockPos> = Vec::new();
+    let mut searched = 0;
+    for (_, at) in &candidates {
+        if searched == STAND_ROUTES {
+            break;
+        }
+        if unreached.iter().any(|miss| {
+            miss.x.abs_diff(at.x) + miss.z.abs_diff(at.z) <= 1 && miss.y.abs_diff(at.y) <= 1
+        }) {
+            unreached.push(*at);
+            continue;
+        }
+        searched += 1;
+        if walks(state, here, *at, body.half_width, body.height, ROUTE_NODES) {
+            return Some(*at);
+        }
+        unreached.push(*at);
+    }
+    candidates.first().map(|(_, at)| *at)
 }
 
 /// Brain hook only selects a navigation target while villager state is detached.

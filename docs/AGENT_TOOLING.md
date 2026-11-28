@@ -11,6 +11,67 @@ graphical gates, render oracle), [heavy commands](development/heavy-commands-and
 (the owner-host runner), [catalog load](development/catalog-load.md),
 [performance windows](development/performance-windows-and-profiling.md).
 
+### D54 causal growth accounting
+
+`tools/harness/gathering_audit.py` folds CRC-checked, contiguous, single-tick
+native WAL frames against an immutable physical block baseline. Mining and
+logging credits require actor UUID, profession, work-cursor advancement,
+matching block removal and the configured inventory yield; farming requires
+mature-to-replanted crop and matching produce/seed custody. Separate deposit
+receipts name the worker and receiving container. Natural-output receipts
+require a newly handled corpse, a chicken's egg-timer reset or a matching leaf
+decay; expiry requires witnessed item age and bounded chunk-debt spends.
+Ambiguous final debt cancellation/spend steps are not credited. The full
+balance includes every item in bank, villager, player and dropped-item custody:
+unknown gains or losses fail with per-item residuals, never an unrelated-item
+exemption.
+`python3 -m unittest tools.harness.test_gathering_audit` covers fixture frames,
+missing causal attribution and missing items with attribution enabled.
+Warehouse soil-return proofs resolve the WAL project's stable structure ID:
+the preparation snapshot's origin can be below the certified building minimum.
+An empty result from comparing those two coordinates is not a return receipt.
+
+The D54 converted-saturated-copy observation budget is 36,000 running ticks:
+the measured 75/142 construction cells in 6,000 ticks imply about 11,360
+ticks at that average rate; the larger bound includes a natural night, the
+next work window and delivery margin. Its scenario wall deadline is 15,000
+seconds (versus 1,693 seconds measured for 6,000 ticks), with an outer 15,600
+second interrupt deadline. Exhausting either bound is failure, not completion.
+Reuse the existing server pin and acceleration profile, never mutate the
+source, preserve all worlds/WAL, and check 250 GiB free plus the estimated
+trial footprint before launching.
+
+The retained-stall follow-up uses
+`python3 -m tools.harness.retained_storehouse --server <pin> --auditor <native-auditor> --source <R5/after-audit-copy> --fixture-root <R5> --out <new-receipt-dir>`.
+It requires immutable checkpoint 383732, five full banks, storehouse cursor
+64/142 and the released donor's four fences. Its running-tick budget follows
+the audited checkpoint day phase instead of a fixed number: from the checkpoint
+through the next adult work shift (phase 2000..8999) plus a work window of the
+remaining 78 placements at the recorded R5 placement pace (61 units in 1,488
+running ticks, doubled for the first-shift warm-up, so 3,806 work ticks). For
+the R6b checkpoint that is 13,267 + 3,806 = 17,073 running ticks, and one
+explicit ceiling (`--cap-ticks`, 24,000) rejects any larger derivation. Off the
+work shift only 2,000-tick batches run before a cheap observation (server time
+query, storehouse cursor, journal frontier); a batch is clamped to the shift
+boundary, which gets a full frozen census, and inside the shift the 20-tick
+cadence returns with a full census per batch, coarsening to 200 ticks only after
+real progress. It crashes after actual progress, checks frozen recovery of
+the cursor and all physical custody, then stops early only on a certified
+extra storehouse receiving stock with an exact causal construction ledger.
+`growth_accounting.py`, `growth_io.py` and `journal_witness.py` own the copy,
+custody and publication probes. A checkpoint project remains an identity
+witness even when the first replayed frame completes and removes it.
+`PASS_RETAINED_STALL_ONLY` is not full D54 acceptance: the untouched
+`full-balance.json` still fails on any unexplained item, including natural
+outputs outside construction. The separate `construction-balance.json`
+exposes that ALL-item status and residual alongside its restricted result.
+If setup fails before any census or block mutation, the offline finalizer
+does not issue an empty native block probe or invent a warehouse proof.
+It preserves the failed run status and still emits the available accounting.
+Run `python3 -m unittest tools.harness.test_growth_accounting tools.harness.test_retained_storehouse`
+for its accounting and scope controls; missing construction items and even
+transient construction ground custody must reject the retained proof.
+
 ## Prerequisites
 
 Run from the repository root with Python 3, the pinned Rust toolchain and
