@@ -1,0 +1,2848 @@
+{
+  "client": "native",
+  "client_binary": {
+    "dirty": false,
+    "head": "529ed2dfe4c1ec9cbcf5f43b7489f09625dc5d5a",
+    "manifest_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/manifest.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5"
+  },
+  "commands": [
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+      "play",
+      "--profile",
+      "offline-test",
+      "--server",
+      "127.0.0.1:46357",
+      "--username",
+      "VillageQA",
+      "--automation",
+      "--mcp-http",
+      "127.0.0.1:0",
+      "--windowed",
+      "--data-dir",
+      "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data",
+      "--runtime-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/runtime",
+      "--artifact-dir",
+      "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/artifacts"
+    ]
+  ],
+  "details": {
+    "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/artifacts",
+    "binary_path": "/run/media/kaiserroman/games/solaris-work/pins/529ed2dfe4c1-client-x86_64-unknown-linux-gnu/krasnokamen-client",
+    "binary_sha256": "31cf654585586062a7024fccae05e6c2ca37bfda4414084c8d472db78be5fbb5",
+    "binary_status": "ready",
+    "capture": {
+      "artifact_uri": "krasnokamen-client://artifacts/native-final.png",
+      "camera_position": [
+        202.5,
+        79.62000000476837,
+        -439.5
+      ],
+      "connection_epoch": "1",
+      "dimension_epoch": "2",
+      "display_scanout_verified": false,
+      "entity_extraction": {
+        "animated": 24,
+        "block_entities": 2,
+        "block_entity_indices": 216,
+        "crowd": 1,
+        "crowd_fallback": {},
+        "crowd_resolved": 0,
+        "dropped_over_budget": 0,
+        "eligible": 29,
+        "entities": [
+          {
+            "entity_id": 41,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 42,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 44,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 8,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 9,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 3,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 4,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 6,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 7,
+            "entity_type": "minecraft:cow",
+            "rig": "minecraft:cow#renderer_main",
+            "texture": "minecraft:entity/cow/cow_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 95,
+            "entity_type": "minecraft:zombie",
+            "rig": "minecraft:zombie#renderer_main",
+            "texture": "minecraft:textures/entity/zombie/zombie.png",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 2,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 96,
+            "entity_type": "minecraft:villager",
+            "rig": "minecraft:villager#renderer_main",
+            "texture": "minecraft:textures/entity/villager/villager.png",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 97,
+            "entity_type": "minecraft:villager",
+            "rig": "minecraft:villager#renderer_main",
+            "texture": "minecraft:textures/entity/villager/villager.png",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 98,
+            "entity_type": "minecraft:villager",
+            "rig": "minecraft:villager#renderer_main",
+            "texture": "minecraft:textures/entity/villager/villager.png",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 80,
+            "entity_type": "minecraft:bat",
+            "rig": "minecraft:bat#renderer_main",
+            "texture": "minecraft:textures/entity/bat/bat.png",
+            "texture_layer": 6
+          },
+          {
+            "entity_id": 5,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 29,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 31,
+            "entity_type": "minecraft:sheep",
+            "rig": "minecraft:sheep#renderer_main",
+            "texture": "minecraft:textures/entity/sheep/sheep.png",
+            "texture_layer": 6
+          },
+          {
+            "entity_id": 22,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 23,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 24,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 25,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 26,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          },
+          {
+            "entity_id": 27,
+            "entity_type": "minecraft:pig",
+            "rig": "minecraft:pig#renderer_main",
+            "texture": "minecraft:entity/pig/pig_temperate",
+            "texture_layer": 5
+          }
+        ],
+        "entity_indices": 57048,
+        "entity_indices_by_material": {
+          "EntityCutout": 10584,
+          "EntityShadow": 48,
+          "ItemCutout": 408
+        },
+        "entity_layer_geometry": [
+          {
+            "indices": 9900,
+            "layer": 5,
+            "material": "EntityCutout",
+            "max": [
+              236.276,
+              97.572,
+              109.026
+            ],
+            "min": [
+              148.355,
+              38.328,
+              42.762
+            ],
+            "quads": 1650,
+            "uv_digest": 6531229286024328171
+          },
+          {
+            "indices": 684,
+            "layer": 6,
+            "material": "EntityCutout",
+            "max": [
+              217.214,
+              50.371,
+              107.425
+            ],
+            "min": [
+              197.918,
+              34.001,
+              88.23
+            ],
+            "quads": 114,
+            "uv_digest": 16308060097028393194
+          },
+          {
+            "indices": 48,
+            "layer": 5,
+            "material": "EntityShadow",
+            "max": [
+              200.003,
+              78.0,
+              73.35
+            ],
+            "min": [
+              199.0,
+              77.0,
+              70.0
+            ],
+            "quads": 8,
+            "uv_digest": 4831684468080795359
+          },
+          {
+            "indices": 408,
+            "layer": 7,
+            "material": "ItemCutout",
+            "max": [
+              209.611,
+              69.383,
+              81.587
+            ],
+            "min": [
+              206.22,
+              68.883,
+              71.244
+            ],
+            "quads": 68,
+            "uv_digest": 1132422271371796997
+          }
+        ],
+        "known": 67,
+        "lighting_pending": 0,
+        "profile_textures_pending": 0,
+        "state_revision": "78341",
+        "submitted": 25,
+        "ticked": 83328,
+        "unrendered": {},
+        "vertices": 23672,
+        "waited": 44605
+      },
+      "entity_frame_counts": {
+        "extracted": 25,
+        "gpu_completed": 25,
+        "submitted": 25,
+        "visible_pixels_proven": false
+      },
+      "entity_geometry": {
+        "completion_scope": "this captured frame submission; not visible-pixel count",
+        "extracted_indices": 58632,
+        "extracted_vertices": 23752,
+        "gpu_completed_indices": 58632,
+        "submitted_indices": 58632
+      },
+      "environment": {
+        "fog_alpha": 1.0,
+        "fog_color": [
+          0.6862745,
+          0.8,
+          1.0
+        ],
+        "fog_end": 1024.0,
+        "fog_start": 0.0,
+        "moon_angle": 221.94592,
+        "rain": 0.0,
+        "render_fog_end": 64.0,
+        "render_fog_start": 57.6,
+        "sky_color": [
+          0.4745098,
+          0.6509804,
+          1.0
+        ],
+        "sky_fog_end": 64.0,
+        "sky_kind": "Overworld",
+        "star_angle": 41.94592,
+        "star_brightness": 0.0,
+        "sun_angle": 41.94592,
+        "thunder": 0.0,
+        "time_of_day": "9554"
+      },
+      "far_terrain": {
+        "generation": {
+          "error": null,
+          "in_flight": 0,
+          "loaded": false,
+          "supported": false,
+          "tiles": 0
+        },
+        "gpu_pool_bytes": 21495808,
+        "resident_tiles": 790,
+        "uploads": 0,
+        "vertices": 235110,
+        "visible_tiles": 241
+      },
+      "file_name": "native-final.png",
+      "frame_id": "620",
+      "frame_interval_sample_frame_id": "619",
+      "frame_pass_breakdown": {
+        "block_entities_extracted": 2,
+        "block_entity_geometry_indices": 216,
+        "culled_chunks": 612,
+        "draw_calls_api": 34,
+        "entity_draws": 16,
+        "entity_extracted": 25,
+        "entity_geometry_indices": 57048,
+        "entity_submitted_indices": 58632,
+        "fog_rejected_chunks": 0,
+        "frustum_rejected_chunks": 15,
+        "graph_rejected_chunks": 597,
+        "occlusion_graph_available": true,
+        "occlusion_graph_enabled": true,
+        "occlusion_graph_reached_sections": 119,
+        "other_dynamic_indices": 1368,
+        "shadow_terrain_api_calls": 0,
+        "shadow_terrain_indices": 0,
+        "shadow_terrain_logical_draws": [
+          0,
+          0
+        ],
+        "submitted_indices": 187269,
+        "terrain_cutout_api_calls": 1,
+        "terrain_cutout_indices": 39462,
+        "terrain_cutout_logical_draws": 81,
+        "terrain_indirect_candidates_cutout": 81,
+        "terrain_indirect_candidates_opaque": 96,
+        "terrain_opaque_api_calls": 1,
+        "terrain_opaque_indices": 82644,
+        "terrain_opaque_logical_draws": 96,
+        "terrain_phase2_api_calls": 2,
+        "terrain_translucent_draws": 5,
+        "terrain_translucent_indices": 2784,
+        "visible_chunks": 60
+      },
+      "gait_frame": [
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "938e3c7f-72b2-4923-0639-fa2a6911c0ca",
+          "position": [
+            208.94787110574543,
+            69.0,
+            -455.78377266041934
+          ],
+          "walk_position": 131.50867,
+          "walk_speed": 1.028591e-15
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "938e3d7f-72b2-4ad6-0639-f92a6911bf17",
+          "position": [
+            203.37744140625,
+            69.0,
+            -446.508544921875
+          ],
+          "walk_position": 130.77805,
+          "walk_speed": 1.0777479e-09
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "938e3b7f-72b2-4770-0639-fb2a6911c27d",
+          "position": [
+            190.425537109375,
+            69.0,
+            -446.1416015625
+          ],
+          "walk_position": 133.95538,
+          "walk_speed": 1.05347656e-13
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "938e3e7f-72b2-4c89-0639-f82a6911bd64",
+          "position": [
+            187.0654296875,
+            69.0,
+            -444.9814453125
+          ],
+          "walk_position": 133.27536,
+          "walk_speed": 8.0529325e-12
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "0f6f2b92-6f9c-359b-302d-32a7e0b36282",
+          "position": [
+            179.40486201047906,
+            69.0,
+            -440.4721383690835
+          ],
+          "walk_position": 109.15675,
+          "walk_speed": 1.4575726e-17
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "0f6f2a92-6f9c-33e8-302d-33a7e0b36435",
+          "position": [
+            179.60269910541442,
+            69.0,
+            -441.9349232906825
+          ],
+          "walk_position": 109.39676,
+          "walk_speed": 0.03926559
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "0f6f2c92-6f9c-374e-302d-31a7e0b360cf",
+          "position": [
+            190.01701038930332,
+            69.0,
+            -453.46975573227974
+          ],
+          "walk_position": 110.43108,
+          "walk_speed": 0.09246401
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "0f6f2d92-6f9c-3901-302d-30a7e0b35f1c",
+          "position": [
+            172.67048082053662,
+            69.00000601203945,
+            -445.84347351491465
+          ],
+          "walk_position": 106.95884,
+          "walk_speed": 0.049973916
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "d5706077-6986-6395-6cd5-7997cbea1288",
+          "position": [
+            188.32568359375,
+            61.93816830503056,
+            -399.800048828125
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "d5705d77-6986-5e7c-6cd5-7c97cbea17a1",
+          "position": [
+            185.199951171875,
+            62.54827572690556,
+            -399.800048828125
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "d5705f77-6986-61e2-6cd5-7a97cbea143b",
+          "position": [
+            181.65478515625,
+            61.320068359375,
+            -398.800048828125
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "d5705e77-6986-602f-6cd5-7b97cbea15ee",
+          "position": [
+            191.73731181770563,
+            59.0,
+            -399.2000324446708
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:villager",
+          "entity_uuid": "f2254c36-7772-491b-8854-5a3bd7a7f6c5",
+          "position": [
+            199.5,
+            77.0,
+            -441.5
+          ],
+          "walk_position": 209.86304,
+          "walk_speed": 1e-45
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "56dc70c7-0bd7-dcba-688a-149db3317003",
+          "position": [
+            220.45003844499593,
+            63.0,
+            -395.57257741093645
+          ],
+          "walk_position": 17.005884,
+          "walk_speed": 0.023874775
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "56dc6ec7-0bd7-d954-688a-169db3317369",
+          "position": [
+            214.58393555879593,
+            26.343645823518035,
+            -407.20967127084714
+          ],
+          "walk_position": 2.0822246,
+          "walk_speed": 0.14405057
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "56dc71c7-0bd7-de6d-688a-139db3316e50",
+          "position": [
+            215.69178839075218,
+            55.69348760868888,
+            -404.38419006115305
+          ],
+          "walk_position": 44.382896,
+          "walk_speed": 2.8444492e-05
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "56dc6fc7-0bd7-db07-688a-159db33171b6",
+          "position": [
+            214.30009856820107,
+            45.11363920885682,
+            -404.35893553495407
+          ],
+          "walk_position": 20.693005,
+          "walk_speed": 2.7208436e-09
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "29c6eeaf-0161-edfe-5c92-a3cedf1a9c3f",
+          "position": [
+            230.214111328125,
+            52.726806640625,
+            -410.369384765625
+          ],
+          "walk_position": 78.80963,
+          "walk_speed": 0.05050387
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "29c6edaf-0161-ec4b-5c92-a4cedf1a9df2",
+          "position": [
+            233.80902713585724,
+            68.0,
+            -412.68688877351815
+          ],
+          "walk_position": 83.2912,
+          "walk_speed": 0.11549908
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "29c6ecaf-0161-ea98-5c92-a5cedf1a9fa5",
+          "position": [
+            234.701171875,
+            68.0,
+            -411.353759765625
+          ],
+          "walk_position": 83.73407,
+          "walk_speed": 0.029758489
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "29c6efaf-0161-efb1-5c92-a2cedf1a9a8c",
+          "position": [
+            235.66360892140074,
+            69.0,
+            -409.58301761723123
+          ],
+          "walk_position": 80.29766,
+          "walk_speed": 0.11483145
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "20be4bae-fc29-16d7-63cd-56cee2cb325e",
+          "position": [
+            221.7314453125,
+            61.929931640625,
+            -404.444091796875
+          ],
+          "walk_position": 92.26174,
+          "walk_speed": 1.220329e-10
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "20be4cae-fc29-188a-63cd-55cee2cb30ab",
+          "position": [
+            225.249267578125,
+            38.326904296875,
+            -406.576171875
+          ],
+          "walk_position": 68.467834,
+          "walk_speed": 0.00011793322
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "20be4aae-fc29-1524-63cd-57cee2cb3411",
+          "position": [
+            225.930419921875,
+            22.990362608688883,
+            -407.8720703125
+          ],
+          "walk_position": 31.328304,
+          "walk_speed": 3.6644897e-06
+        },
+        {
+          "entity_type": "minecraft:sheep",
+          "entity_uuid": "3bcabfaf-0bc8-4b21-4a73-e2ced49d9294",
+          "position": [
+            216.62241044085906,
+            34.0,
+            -405.27687710863995
+          ],
+          "walk_position": 98.80183,
+          "walk_speed": 1.4445009e-14
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "20be4dae-fc29-1a3d-63cd-54cee2cb2ef8",
+          "position": [
+            228.306396484375,
+            70.0,
+            -403.503662109375
+          ],
+          "walk_position": 83.57397,
+          "walk_speed": 1.9664797e-06
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "97474ac6-4afd-6186-81ac-1fcd14fbb1ef",
+          "position": [
+            187.746337890625,
+            79.0,
+            -389.28271484375
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "974748c6-4afd-5e20-81ac-21cd14fbb555",
+          "position": [
+            180.70988919908027,
+            61.388133892362625,
+            -396.2413253390114
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "97474bc6-4afd-6339-81ac-1ecd14fbb03c",
+          "position": [
+            181.418701171875,
+            61.0,
+            -394.199951171875
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "9eb7fbc6-4edb-83af-78a3-7ecd0fc2de2e",
+          "position": [
+            176.3797018621117,
+            84.0,
+            -387.2677623713389
+          ],
+          "walk_position": 29.568684,
+          "walk_speed": 0.17947729
+        },
+        {
+          "entity_type": "minecraft:chicken",
+          "entity_uuid": "974749c6-4afd-5fd3-81ac-20cd14fbb3a2",
+          "position": [
+            180.316313885521,
+            82.0,
+            -387.89757902759203
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "9eb7fac6-4edb-81fc-78a3-7fcd0fc2dfe1",
+          "position": [
+            173.1370524886685,
+            84.0,
+            -385.3436745729996
+          ],
+          "walk_position": 7.3887773,
+          "walk_speed": 0.07118924
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "b2aa6965-320e-e805-85f4-e0f786dd93a2",
+          "position": [
+            151.44189453125,
+            96.0,
+            -468.23046875
+          ],
+          "walk_position": 67.997536,
+          "walk_speed": 1.0967288e-09
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "b2aa6765-320e-e49f-85f4-def786dd903c",
+          "position": [
+            149.072100687027,
+            96.0,
+            -468.6684318974614
+          ],
+          "walk_position": 63.406837,
+          "walk_speed": 1.1564016e-13
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "b2aa6865-320e-e652-85f4-e1f786dd9555",
+          "position": [
+            149.78857421875,
+            96.0,
+            -465.423095703125
+          ],
+          "walk_position": 65.85032,
+          "walk_speed": 5.1821367e-08
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "b2aa6665-320e-e2ec-85f4-dff786dd91ef",
+          "position": [
+            147.55126953125,
+            96.0,
+            -468.539306640625
+          ],
+          "walk_position": 40.527325,
+          "walk_speed": 0.07868797
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "a70e0554-e5ec-fcf6-d56c-d7b86bf31b07",
+          "position": [
+            263.87600728273367,
+            76.0,
+            -415.8814683377773
+          ],
+          "walk_position": 10.099459,
+          "walk_speed": 0.121047676
+        },
+        {
+          "entity_type": "minecraft:villager",
+          "entity_uuid": "ef6078d7-83d7-4459-b3a6-755b6e3653bf",
+          "position": [
+            199.502685546875,
+            78.0,
+            -439.14990234375
+          ],
+          "walk_position": 323.9248,
+          "walk_speed": 1e-45
+        },
+        {
+          "entity_type": "minecraft:pig",
+          "entity_uuid": "9eb7fcc6-4edb-8562-78a3-7dcd0fc2dc7b",
+          "position": [
+            185.06564673036337,
+            85.249267578125,
+            -380.3950027236715
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "ad61e642-7acd-5187-b8ca-070ceaf08556",
+          "position": [
+            264.2799702790212,
+            76.0,
+            -434.56093612105286
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:zombie",
+          "entity_uuid": "6d66b80f-e77c-47c6-b73e-2d633d2eac8d",
+          "position": [
+            204.300048828125,
+            71.0,
+            -448.300048828125
+          ],
+          "walk_position": 2.690268,
+          "walk_speed": 1e-45
+        },
+        {
+          "entity_type": "minecraft:zombie",
+          "entity_uuid": "820ba397-50e2-421b-9509-737d9456196d",
+          "position": [
+            247.4140625,
+            -28.0,
+            -392.66259765625
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:zombie",
+          "entity_uuid": "9a6f1fb8-f62f-451b-84d2-654d7f8bbaa3",
+          "position": [
+            185.2764214996132,
+            -13.0,
+            -467.300048828125
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:villager",
+          "entity_uuid": "f430549e-7843-454c-898a-947921fee411",
+          "position": [
+            199.5029296875,
+            78.0,
+            -439.14990234375
+          ],
+          "walk_position": 347.07968,
+          "walk_speed": 1e-45
+        },
+        {
+          "entity_type": "minecraft:cow",
+          "entity_uuid": "a70e0454-e5ec-fb43-d56c-d8b86bf31cba",
+          "position": [
+            262.25255139647396,
+            76.0,
+            -411.6746567854402
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        },
+        {
+          "entity_type": "minecraft:bat",
+          "entity_uuid": "35173e8d-dd95-4c6d-9644-f6e4a6fb892e",
+          "position": [
+            198.75011869072915,
+            49.43994140625,
+            -423.4029161825776
+          ],
+          "walk_position": 49.973145,
+          "walk_speed": 2.7084877e-06
+        },
+        {
+          "entity_type": "minecraft:wolf",
+          "entity_uuid": "ad61e542-7acd-4fd4-b8ca-080ceaf08709",
+          "position": [
+            266.2551414182562,
+            76.0,
+            -440.4636759556124
+          ],
+          "walk_position": 0.0,
+          "walk_speed": 0.0
+        }
+      ],
+      "gpu_completion": true,
+      "gpu_timestamps": {
+        "frame_id": "619",
+        "frame_span_measurement": "first_to_last_render_or_compute_pass_includes_interpass_depth_copy_excludes_queue_wait_and_capture_copy",
+        "frame_span_ms": 125.92847,
+        "measurement": "sum_of_render_and_compute_pass_device_timestamps_excludes_queue_wait_and_capture_copy",
+        "passes_ms": {
+          "aces_tonemap": 9.49528,
+          "bloom_horizontal": null,
+          "bloom_vertical": null,
+          "cutout": 2.113283,
+          "directional_shadow": null,
+          "directional_shadow_cascade1": null,
+          "directional_shadow_cascade2": null,
+          "dynamic_geometry": 10.266865,
+          "far_terrain": 44.16612,
+          "far_terrain_generate": null,
+          "god_rays": null,
+          "hiz_pyramid_build": 6.164009,
+          "opaque": 15.164316,
+          "outline_horizontal_blur": null,
+          "outline_identity_blit": null,
+          "outline_mask": null,
+          "outline_rgb_composite": null,
+          "outline_silhouette": null,
+          "outline_vertical_blur": null,
+          "present_blit": 10.013844,
+          "sky": 7.059905,
+          "taa_resolve": null,
+          "terrain_frustum_cull": 1.890372,
+          "terrain_occlusion_cull": 1.827062,
+          "terrain_occlusion_draw": 0.338813,
+          "translucent": 1.223628,
+          "ui_overlay": 7.122305
+        },
+        "status": "measured_completed",
+        "timestamp_period_ns": 1.0,
+        "total_ms": 116.84580199999999
+      },
+      "height": 720,
+      "lightmap_revision": "1850",
+      "offscreen_only": false,
+      "origin": [
+        0.0,
+        0.0,
+        -512.0
+      ],
+      "passes": [
+        "sky",
+        "opaque",
+        "cutout",
+        "translucent",
+        "ui_overlay",
+        "present_blit",
+        "aces_tonemap",
+        "terrain_frustum_cull",
+        "hiz_pyramid_build",
+        "terrain_occlusion_cull",
+        "terrain_occlusion_draw",
+        "dynamic_geometry",
+        "far_terrain"
+      ],
+      "path": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/artifacts/native-final.png",
+      "pitch": 0.0,
+      "present_requested": true,
+      "previous_render_metrics": {
+        "adapter": {
+          "backend": "Vulkan",
+          "crowd_instancing_enabled": true,
+          "device": 0,
+          "device_type": "Cpu",
+          "driver": "llvmpipe",
+          "driver_info": "Mesa 26.0.8-1ubuntu0.3 (LLVM 21.1.8)",
+          "enabled_features": "Features { features_wgpu: FeaturesWGPU(MULTI_DRAW_INDIRECT_COUNT), features_webgpu: FeaturesWebGPU(TIMESTAMP_QUERY | INDIRECT_FIRST_INSTANCE) }",
+          "features": "Features { features_wgpu: FeaturesWGPU(SHADER_FLOAT32_ATOMIC | TEXTURE_FORMAT_16BIT_NORM | TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES | PIPELINE_STATISTICS_QUERY | TIMESTAMP_QUERY_INSIDE_ENCODERS | TIMESTAMP_QUERY_INSIDE_PASSES | MAPPABLE_PRIMARY_BUFFERS | TEXTURE_BINDING_ARRAY | BUFFER_BINDING_ARRAY | STORAGE_RESOURCE_BINDING_ARRAY | SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING | STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING | PARTIALLY_BOUND_BINDING_ARRAY | MULTI_DRAW_INDIRECT_COUNT | PUSH_CONSTANTS | ADDRESS_MODE_CLAMP_TO_ZERO | ADDRESS_MODE_CLAMP_TO_BORDER | POLYGON_MODE_LINE | POLYGON_MODE_POINT | VERTEX_WRITABLE_STORAGE | CLEAR_TEXTURE | MULTIVIEW | TEXTURE_ATOMIC | TEXTURE_FORMAT_NV12 | TEXTURE_FORMAT_P010 | EXPERIMENTAL_RAY_QUERY | SHADER_F64 | SHADER_I16 | SHADER_PRIMITIVE_INDEX | SHADER_EARLY_DEPTH_TEST | SHADER_INT64 | SUBGROUP | SUBGROUP_BARRIER | PIPELINE_CACHE | SHADER_INT64_ATOMIC_MIN_MAX | SHADER_INT64_ATOMIC_ALL_OPS | TEXTURE_INT64_ATOMIC | EXPERIMENTAL_MESH_SHADER | EXPERIMENTAL_RAY_HIT_VERTEX_RETURN | EXTENDED_ACCELERATION_STRUCTURE_VERTEX_FORMATS | EXPERIMENTAL_PASSTHROUGH_SHADERS), features_webgpu: FeaturesWebGPU(DEPTH_CLIP_CONTROL | DEPTH32FLOAT_STENCIL8 | TEXTURE_COMPRESSION_BC | TEXTURE_COMPRESSION_BC_SLICED_3D | TIMESTAMP_QUERY | INDIRECT_FIRST_INSTANCE | SHADER_F16 | RG11B10UFLOAT_RENDERABLE | BGRA8UNORM_STORAGE | FLOAT32_FILTERABLE | DUAL_SOURCE_BLENDING | CLIP_DISTANCES) }",
+          "hiz_occlusion_enabled": true,
+          "indirect_first_instance_available": true,
+          "limits": {
+            "max_bind_groups": 8,
+            "max_buffer_size": 2147483647,
+            "max_compute_workgroups_per_dimension": 65535,
+            "max_storage_buffer_binding_size": 134217728,
+            "max_texture_dimension_2d": 16384
+          },
+          "limits_debug": "Limits { max_texture_dimension_1d: 16384, max_texture_dimension_2d: 16384, max_texture_dimension_3d: 4096, max_texture_array_layers: 2048, max_bind_groups: 8, max_bindings_per_bind_group: 1000, max_dynamic_uniform_buffers_per_pipeline_layout: 500000, max_dynamic_storage_buffers_per_pipeline_layout: 500000, max_sampled_textures_per_shader_stage: 1000000, max_samplers_per_shader_stage: 1000000, max_storage_buffers_per_shader_stage: 1000000, max_storage_textures_per_shader_stage: 1000000, max_uniform_buffers_per_shader_stage: 1000000, max_binding_array_elements_per_shader_stage: 1000000, max_binding_array_sampler_elements_per_shader_stage: 1000000, max_uniform_buffer_binding_size: 65536, max_storage_buffer_binding_size: 134217728, max_vertex_buffers: 16, max_buffer_size: 2147483647, max_vertex_attributes: 32, max_vertex_buffer_array_stride: 2048, min_uniform_buffer_offset_alignment: 32, min_storage_buffer_offset_alignment: 32, max_inter_stage_shader_components: 128, max_color_attachments: 8, max_color_attachment_bytes_per_sample: 128, max_compute_workgroup_storage_size: 32768, max_compute_invocations_per_workgroup: 1024, max_compute_workgroup_size_x: 1024, max_compute_workgroup_size_y: 1024, max_compute_workgroup_size_z: 1024, max_compute_workgroups_per_dimension: 65535, min_subgroup_size: 8, max_subgroup_size: 8, max_push_constant_size: 256, max_non_sampler_bindings: 4294967295, max_task_workgroup_total_count: 4194304, max_task_workgroups_per_dimension: 65536, max_mesh_output_layers: 9, max_mesh_multiview_count: 1, max_blas_primitive_count: 536870911, max_blas_geometry_count: 16777215, max_tlas_instance_count: 16777215, max_acceleration_structures_per_shader_stage: 1000000 }",
+          "multi_draw_indirect_enabled": true,
+          "name": "llvmpipe (LLVM 21.1.8, 256 bits)",
+          "surface_present_modes": [
+            "Immediate",
+            "Mailbox",
+            "Fifo",
+            "FifoRelaxed"
+          ],
+          "tier": "portable_indexed",
+          "timestamp_query_available": true,
+          "timestamp_query_enabled": true,
+          "timestamp_query_nonblocking": true,
+          "vendor": 65541
+        },
+        "block_entities_extracted": 2,
+        "block_entity_geometry_indices": 216,
+        "client_publish_skipped": 1,
+        "collect_completed_ms": 0.0,
+        "cpu_client_advance_ms": 7.295257,
+        "cpu_client_drain_ms": 0.0011200000000000001,
+        "cpu_client_draw_ms": 134.069702,
+        "cpu_client_publish_ms": 0.415843,
+        "cpu_client_sync_window_ms": 0.00426,
+        "cpu_client_tasks_ms": 0.0,
+        "cpu_draw_encode_ms": 0.085791,
+        "cpu_prepare_submit_ms": 2.2064039999999636,
+        "cpu_session_events_ms": 0.0,
+        "cpu_session_prepare_frame_ms": 0.715234,
+        "cpu_session_tick_detail_ms": {
+          "block_effects": 0.10588,
+          "commands_effects_atlas": 3.4108120000000004,
+          "entities_block_sources": 0.177562,
+          "entities_presentation": 0.283582,
+          "environment": 0.004710000000000001,
+          "events": 0.7265759999999999,
+          "player": 0.1596,
+          "player_environment_context": 0.00113,
+          "refresh_scene": 1.75408,
+          "ui_synchronize": 0.00206,
+          "world_border": 0.00017999999999999998
+        },
+        "cpu_session_tick_ms": 6.737963,
+        "cpu_upload_ms": 1.438199,
+        "cpu_visibility_sort_ms": 0.187731,
+        "crowd_draw_calls": 3,
+        "crowd_instances": 1,
+        "crowd_upload_bytes": 1272,
+        "culled_chunks": 612,
+        "desired_maximum_frame_latency": 2,
+        "draw_calls": 34,
+        "dynamic_upload_bytes": 2134688,
+        "encoder_finish_ms": 0.281332,
+        "entity_draws": 16,
+        "entity_extracted": 25,
+        "entity_geometry_indices": 57048,
+        "entity_submitted_indices": 58632,
+        "first_person_upload_bytes": 2064,
+        "fog_rejected_chunks": 0,
+        "fps": 5.389876355859106,
+        "frame_id": "619",
+        "frame_wall_ms": 131.76495699999998,
+        "frustum_rejected_chunks": 15,
+        "gpu_activated_texture_revision": "1",
+        "gpu_completed_frame_id": "619",
+        "gpu_failed": false,
+        "gpu_time_ms": 116.84580199999999,
+        "gpu_time_status": "measured_completed",
+        "gpu_timestamps": {
+          "frame_id": "619",
+          "frame_span_measurement": "first_to_last_render_or_compute_pass_includes_interpass_depth_copy_excludes_queue_wait_and_capture_copy",
+          "frame_span_ms": 125.92847,
+          "measurement": "sum_of_render_and_compute_pass_device_timestamps_excludes_queue_wait_and_capture_copy",
+          "passes_ms": {
+            "aces_tonemap": 9.49528,
+            "bloom_horizontal": null,
+            "bloom_vertical": null,
+            "cutout": 2.113283,
+            "directional_shadow": null,
+            "directional_shadow_cascade1": null,
+            "directional_shadow_cascade2": null,
+            "dynamic_geometry": 10.266865,
+            "far_terrain": 44.16612,
+            "far_terrain_generate": null,
+            "god_rays": null,
+            "hiz_pyramid_build": 6.164009,
+            "opaque": 15.164316,
+            "outline_horizontal_blur": null,
+            "outline_identity_blit": null,
+            "outline_mask": null,
+            "outline_rgb_composite": null,
+            "outline_silhouette": null,
+            "outline_vertical_blur": null,
+            "present_blit": 10.013844,
+            "sky": 7.059905,
+            "taa_resolve": null,
+            "terrain_frustum_cull": 1.890372,
+            "terrain_occlusion_cull": 1.827062,
+            "terrain_occlusion_draw": 0.338813,
+            "translucent": 1.223628,
+            "ui_overlay": 7.122305
+          },
+          "status": "measured_completed",
+          "timestamp_period_ns": 1.0,
+          "total_ms": 116.84580199999999
+        },
+        "graph_rejected_chunks": 597,
+        "graphics_preset": "low",
+        "height": 720,
+        "index_count": 187269,
+        "occlusion_graph_available": true,
+        "occlusion_graph_enabled": true,
+        "occlusion_graph_reached_sections": 119,
+        "offscreen_only": false,
+        "other_dynamic_indices": 1368,
+        "present_call_ms": 129.538643,
+        "present_mode": "fifo",
+        "present_requested_frame_id": "619",
+        "present_thread_cpu_ms": 0.05530899999950378,
+        "queue_submit_ms": 0.03894,
+        "render_mode": "optimized",
+        "render_target": "actual_window_scene_target",
+        "render_thread_cpu_ms": 2.1854120000002197,
+        "resident": {
+          "camera_reserved_bytes": 1568,
+          "dynamic_reserved_bytes": 2359296,
+          "entity_overlay_reserved_bytes": 1024,
+          "fancy_target_active_bytes": 7372836,
+          "first_person_depth_bytes": 3686400,
+          "first_person_reserved_bytes": 2304,
+          "index_largest_free_bytes": 1161560,
+          "index_reserved_bytes": 8388608,
+          "index_used_bytes": 6353232,
+          "instance_reserved_bytes": 2097184,
+          "lightmap_reserved_bytes": 1024,
+          "lightmap_revision": "1847",
+          "outline_target_active_bytes": 11059200,
+          "retired_mesh_bytes": 0,
+          "scene_target_active_bytes": 7372800,
+          "shadow_instance_reserved_bytes": 2097184,
+          "star_reserved_bytes": 56160,
+          "sunrise_reserved_bytes": 2304,
+          "terrain_index_budget_bytes": 536870912,
+          "terrain_indirect_reserved_bytes": 19579116,
+          "terrain_vertex_budget_bytes": 1073741824,
+          "texture_active_bytes": 223479808,
+          "texture_retired_bytes": 0,
+          "ui_reserved_bytes": 278528,
+          "vertex_largest_free_bytes": 9950400,
+          "vertex_reserved_bytes": 33554560,
+          "vertex_used_bytes": 20756560
+        },
+        "resident_chunks": 811,
+        "resource_activation_frame_id": "70",
+        "scene_revision": "3276",
+        "shadow_indirect_reserved_bytes": 15728760,
+        "shadow_terrain_api_calls": 0,
+        "shadow_terrain_indices": 0,
+        "shadow_terrain_logical_draws": [
+          0,
+          0
+        ],
+        "submitted_frame_id": "619",
+        "submitted_frame_interval_ms": 142.41253500000002,
+        "surface_acquire_ms": 0.01991,
+        "terrain_cutout_api_calls": 1,
+        "terrain_cutout_indices": 39462,
+        "terrain_cutout_logical_draws": 81,
+        "terrain_freed_chunks": 0,
+        "terrain_gpu_culling_latest": {
+          "cutout": {
+            "drawn_draws": 3,
+            "drawn_indices": 510,
+            "final_visible_draws": 3,
+            "final_visible_indices": 510,
+            "frustum_visible_draws": 81,
+            "frustum_visible_indices": 39462,
+            "hiz_rejected_draws": 78,
+            "hiz_rejected_indices": 38952,
+            "late_hidden_draws": 0,
+            "late_hidden_indices": 0,
+            "phase1_draws": 3,
+            "phase1_indices": 510,
+            "phase2_draws": 0,
+            "phase2_indices": 0
+          },
+          "frame_id": "619",
+          "hiz": true,
+          "opaque": {
+            "drawn_draws": 8,
+            "drawn_indices": 11148,
+            "final_visible_draws": 8,
+            "final_visible_indices": 11148,
+            "frustum_visible_draws": 96,
+            "frustum_visible_indices": 82644,
+            "hiz_rejected_draws": 88,
+            "hiz_rejected_indices": 71496,
+            "late_hidden_draws": 0,
+            "late_hidden_indices": 0,
+            "phase1_draws": 8,
+            "phase1_indices": 11148,
+            "phase2_draws": 0,
+            "phase2_indices": 0
+          }
+        },
+        "terrain_hiz_occlusion": true,
+        "terrain_indirect_candidates": 177,
+        "terrain_indirect_candidates_cutout": 81,
+        "terrain_indirect_candidates_opaque": 96,
+        "terrain_multi_draw_indirect": true,
+        "terrain_opaque_api_calls": 1,
+        "terrain_opaque_indices": 82644,
+        "terrain_opaque_logical_draws": 96,
+        "terrain_phase2_api_calls": 2,
+        "terrain_translucent_draws": 5,
+        "terrain_translucent_indices": 2784,
+        "terrain_upload_bytes": 0,
+        "terrain_uploaded_chunks": 0,
+        "texture_layers": 10,
+        "texture_upload_bytes": 774412,
+        "timestamp_missed_samples": 0,
+        "ui_upload_bytes": 213164,
+        "unknown_section_fade_policy_count": 0,
+        "upload_bytes": 3135768,
+        "uploaded_texture_revision": "1",
+        "visible_chunks": 60,
+        "width": 1280
+      },
+      "render_mode": "optimized",
+      "render_target": "actual_window_scene_target",
+      "resource_epoch": "1",
+      "retained_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/screenshots/native-final.png",
+      "scene_revision": "3281",
+      "state_revision": "23347",
+      "submitted_frame_interval_ms": 142.41253500000002,
+      "terrain_extraction": {
+        "cancelled_jobs": 0,
+        "catalog_ready": true,
+        "completed_jobs": 5839,
+        "cpu_mesh_budget_bytes": 536870912,
+        "cpu_mesh_resident_bytes": 0,
+        "cpu_mesh_resident_peak_bytes": 8076896,
+        "cpu_mesh_result_awaiting_upload": false,
+        "deduplicated_invalidations": 139338,
+        "dispatched_jobs": 5839,
+        "epochs": [
+          1,
+          2,
+          1
+        ],
+        "generation": "3",
+        "geometry_ready": true,
+        "last_mesh_cpu_ms": 7.91262,
+        "mesh_cpu_total_ms": 33003.15017099998,
+        "nearby_sections": [
+          {
+            "pending": false,
+            "requested_revision": "138303",
+            "running_revision": null,
+            "section": [
+              11,
+              3,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143678",
+            "running_revision": null,
+            "section": [
+              11,
+              3,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143688",
+            "running_revision": null,
+            "section": [
+              11,
+              3,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143167",
+            "running_revision": null,
+            "section": [
+              11,
+              4,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143679",
+            "running_revision": null,
+            "section": [
+              11,
+              4,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143689",
+            "running_revision": null,
+            "section": [
+              11,
+              4,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143169",
+            "running_revision": null,
+            "section": [
+              11,
+              5,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143680",
+            "running_revision": null,
+            "section": [
+              11,
+              5,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143690",
+            "running_revision": null,
+            "section": [
+              11,
+              5,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143776",
+            "running_revision": null,
+            "section": [
+              12,
+              3,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143786",
+            "running_revision": null,
+            "section": [
+              12,
+              3,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143718",
+            "running_revision": null,
+            "section": [
+              12,
+              3,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143777",
+            "running_revision": null,
+            "section": [
+              12,
+              4,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143926",
+            "running_revision": null,
+            "section": [
+              12,
+              4,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143852",
+            "running_revision": null,
+            "section": [
+              12,
+              4,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143778",
+            "running_revision": null,
+            "section": [
+              12,
+              5,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143927",
+            "running_revision": null,
+            "section": [
+              12,
+              5,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143853",
+            "running_revision": null,
+            "section": [
+              12,
+              5,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143806",
+            "running_revision": null,
+            "section": [
+              13,
+              3,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143816",
+            "running_revision": null,
+            "section": [
+              13,
+              3,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143747",
+            "running_revision": null,
+            "section": [
+              13,
+              3,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143807",
+            "running_revision": null,
+            "section": [
+              13,
+              4,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143817",
+            "running_revision": null,
+            "section": [
+              13,
+              4,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143854",
+            "running_revision": null,
+            "section": [
+              13,
+              4,
+              -27
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143808",
+            "running_revision": null,
+            "section": [
+              13,
+              5,
+              -29
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143818",
+            "running_revision": null,
+            "section": [
+              13,
+              5,
+              -28
+            ]
+          },
+          {
+            "pending": false,
+            "requested_revision": "143855",
+            "running_revision": null,
+            "section": [
+              13,
+              5,
+              -27
+            ]
+          }
+        ],
+        "pending_sections": 0,
+        "queue_peak": 811,
+        "render_rules_ready": true,
+        "result_queue_bound": 36,
+        "running_jobs": 0,
+        "section_descriptor_bound": 131072,
+        "section_descriptor_count": 811,
+        "single_result_byte_bound": 8388608,
+        "source_sampling_complete": false,
+        "stale_discarded_jobs": 1392,
+        "unknown_biome_samples": 27657,
+        "unknown_light_samples": 1065184,
+        "unloaded_sections": 179,
+        "worker_count": 4
+      },
+      "terrain_gpu_culling": {
+        "cutout": {
+          "drawn_draws": 3,
+          "drawn_indices": 510,
+          "final_visible_draws": 3,
+          "final_visible_indices": 510,
+          "frustum_visible_draws": 81,
+          "frustum_visible_indices": 39462,
+          "hiz_rejected_draws": 78,
+          "hiz_rejected_indices": 38952,
+          "late_hidden_draws": 0,
+          "late_hidden_indices": 0,
+          "phase1_draws": 3,
+          "phase1_indices": 510,
+          "phase2_draws": 0,
+          "phase2_indices": 0
+        },
+        "frame_id": "620",
+        "hiz": true,
+        "opaque": {
+          "drawn_draws": 8,
+          "drawn_indices": 11148,
+          "final_visible_draws": 8,
+          "final_visible_indices": 11148,
+          "frustum_visible_draws": 96,
+          "frustum_visible_indices": 82644,
+          "hiz_rejected_draws": 88,
+          "hiz_rejected_indices": 71496,
+          "late_hidden_draws": 0,
+          "late_hidden_indices": 0,
+          "phase1_draws": 8,
+          "phase1_indices": 11148,
+          "phase2_draws": 0,
+          "phase2_indices": 0
+        }
+      },
+      "terrain_submission": {
+        "bounded_resident_section_limit": 131072,
+        "clock_domain": "renderer_monotonic_elapsed_millis",
+        "frame_id": "620",
+        "generation": [
+          "1",
+          "2",
+          "1"
+        ],
+        "section_count": 811,
+        "section_sample_limit": 64,
+        "sections": [
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142254",
+            "section": [
+              8,
+              -4,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14416"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124661",
+            "section": [
+              8,
+              -4,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14150"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124757",
+            "section": [
+              8,
+              -4,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13844"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124853",
+            "section": [
+              8,
+              -4,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13844"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124949",
+            "section": [
+              8,
+              -4,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13844"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125045",
+            "section": [
+              8,
+              -4,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13844"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125056",
+            "section": [
+              8,
+              -4,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14150"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142437",
+            "section": [
+              8,
+              -4,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14150"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142663",
+            "section": [
+              8,
+              -4,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53662"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142255",
+            "section": [
+              8,
+              -3,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14150"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124662",
+            "section": [
+              8,
+              -3,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13495"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124758",
+            "section": [
+              8,
+              -3,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13146"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124854",
+            "section": [
+              8,
+              -3,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "12308"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124950",
+            "section": [
+              8,
+              -3,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "12308"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125046",
+            "section": [
+              8,
+              -3,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "12614"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125057",
+            "section": [
+              8,
+              -3,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13495"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142438",
+            "section": [
+              8,
+              -3,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13844"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142664",
+            "section": [
+              8,
+              -3,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53662"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142256",
+            "section": [
+              8,
+              -2,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "14150"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124663",
+            "section": [
+              8,
+              -2,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "11659"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124759",
+            "section": [
+              8,
+              -2,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "11082"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124855",
+            "section": [
+              8,
+              -2,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10360"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124951",
+            "section": [
+              8,
+              -2,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10360"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125047",
+            "section": [
+              8,
+              -2,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10606"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125058",
+            "section": [
+              8,
+              -2,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "11659"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142439",
+            "section": [
+              8,
+              -2,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "12614"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142665",
+            "section": [
+              8,
+              -2,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53662"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142257",
+            "section": [
+              8,
+              -1,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "13495"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124664",
+            "section": [
+              8,
+              -1,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10092"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124760",
+            "section": [
+              8,
+              -1,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9604"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124856",
+            "section": [
+              8,
+              -1,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9080"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124952",
+            "section": [
+              8,
+              -1,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9080"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125048",
+            "section": [
+              8,
+              -1,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9388"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125059",
+            "section": [
+              8,
+              -1,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10092"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142440",
+            "section": [
+              8,
+              -1,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "11082"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142666",
+            "section": [
+              8,
+              -1,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53662"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142258",
+            "section": [
+              8,
+              0,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "11980"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124665",
+            "section": [
+              8,
+              0,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "8346"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124761",
+            "section": [
+              8,
+              0,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7784"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124857",
+            "section": [
+              8,
+              0,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7258"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124953",
+            "section": [
+              8,
+              0,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7258"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125049",
+            "section": [
+              8,
+              0,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7522"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125060",
+            "section": [
+              8,
+              0,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "8346"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142441",
+            "section": [
+              8,
+              0,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9604"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142667",
+            "section": [
+              8,
+              0,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53662"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142259",
+            "section": [
+              8,
+              1,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "10853"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124666",
+            "section": [
+              8,
+              1,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7522"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124762",
+            "section": [
+              8,
+              1,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7258"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124858",
+            "section": [
+              8,
+              1,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6784"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124954",
+            "section": [
+              8,
+              1,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6784"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125050",
+            "section": [
+              8,
+              1,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7014"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125061",
+            "section": [
+              8,
+              1,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7522"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142442",
+            "section": [
+              8,
+              1,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7784"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142668",
+            "section": [
+              8,
+              1,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53355"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142260",
+            "section": [
+              8,
+              2,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9786"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124667",
+            "section": [
+              8,
+              2,
+              -31
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7014"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124763",
+            "section": [
+              8,
+              2,
+              -30
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6784"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124859",
+            "section": [
+              8,
+              2,
+              -29
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6525"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "124955",
+            "section": [
+              8,
+              2,
+              -28
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6525"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125051",
+            "section": [
+              8,
+              2,
+              -27
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "6525"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "125062",
+            "section": [
+              8,
+              2,
+              -26
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7014"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142443",
+            "section": [
+              8,
+              2,
+              -25
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "7522"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142669",
+            "section": [
+              8,
+              2,
+              -24
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "53355"
+          },
+          {
+            "fade_duration_ms": 750,
+            "mesh_revision": "142261",
+            "section": [
+              8,
+              3,
+              -32
+            ],
+            "selected_for_draw": false,
+            "source_visibility": 1.0,
+            "uploaded_time_ms": "9388"
+          }
+        ],
+        "truncated": true,
+        "upload_cause": "all_present_layer_uploads_and_resident_mapping_committed",
+        "visibility_time_ms": "110890"
+      },
+      "texture_animation_sequence": "1865",
+      "texture_revision": "1",
+      "width": 1280,
+      "window": {
+        "cursor_locked": true,
+        "focused": true,
+        "height": 720,
+        "native": true,
+        "occluded": false,
+        "offscreen": false,
+        "pointer_inside": true,
+        "renderable": true,
+        "width": 1280
+      },
+      "yaw": -180.0
+    },
+    "command_index": 0,
+    "descriptor": {
+      "endpoint": "http://127.0.0.1:40561/mcp",
+      "instance_id": "native-3708172-1795862405140934659",
+      "pid": 3708172,
+      "profile": "offline-test",
+      "protocol_versions": [
+        "2025-11-25"
+      ],
+      "started_unix_ms": "1795862407443",
+      "token_file": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/runtime/native-3708172-1795862405140934659.token"
+    },
+    "descriptor_path": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/runtime/native-3708172-1795862405140934659.json",
+    "headless": false,
+    "initialized": true,
+    "launch_status": "ready",
+    "log": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/native-client.log",
+    "operator_fixture": [
+      {
+        "bypassesPlayerLimit": false,
+        "level": 4,
+        "name": "VillageQA",
+        "uuid": "bb52c5c3-83b2-3ffb-ae4d-e46c78f2e7c5"
+      }
+    ],
+    "operator_fixture_path": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/ops.json",
+    "peak_client_rss_kib": 1882712,
+    "pid": 3708172,
+    "protocol_version": "2025-11-25",
+    "resource_paths": {
+      "KRASNOKAMEN_CLIENT_ASSET_INDEX": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets/asset-index.json",
+      "KRASNOKAMEN_CLIENT_ASSET_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets",
+      "KRASNOKAMEN_CLIENT_DATA_DIR": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/data/vanilla",
+      "KRASNOKAMEN_CLIENT_RESOURCE_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/resources"
+    },
+    "root": "/run/media/kaiserroman/games/solaris-work/solaris-client",
+    "runtime_dir": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/runtime",
+    "scenario": {
+      "assertions": {
+        "all_behaviours_pass": true,
+        "building_list_server_echo": true,
+        "camp_certificate_accepted": true,
+        "camp_certified_server_echo": true,
+        "cave_hostile_summoned_server_echo": true,
+        "chest_menu_closed": true,
+        "chest_menu_received": true,
+        "day_end_deposits_server_echo": true,
+        "day_work_begins_server_echo": true,
+        "farmer_certificate_accepted": true,
+        "farmer_certified_server_echo": true,
+        "farmer_has_fresh_entity": true,
+        "farmer_summoned_server_echo": true,
+        "house_certified_server_echo": true,
+        "in_play": true,
+        "lumberjack_has_fresh_entity": true,
+        "lumberjack_summoned_server_echo": true,
+        "mine_certificate_accepted": true,
+        "mine_certified_server_echo": true,
+        "miner_has_fresh_entity": true,
+        "miner_summoned_server_echo": true,
+        "morning_returns_server_echo": true,
+        "night_falls_server_echo": true,
+        "player_present": true,
+        "player_teleported": true,
+        "settlement_created_server_echo": true,
+        "settlement_info_server_echo": true,
+        "storage_certificate_accepted": true,
+        "storage_certified_server_echo": true,
+        "three_villagers_bound": true,
+        "trees_planted_server_echo": true,
+        "villagers_bound_server_echo": true
+      },
+      "fixture_commands": [
+        "fill 158 69 -482 226 74 -414 minecraft:air",
+        "fill 158 75 -482 226 80 -414 minecraft:air",
+        "fill 158 81 -482 226 86 -414 minecraft:air",
+        "fill 158 87 -482 226 92 -414 minecraft:air",
+        "fill 158 93 -482 226 93 -414 minecraft:air",
+        "fill 158 75 -482 226 75 -414 minecraft:dirt",
+        "fill 158 76 -482 226 76 -414 minecraft:grass_block",
+        "fill 190 76 -450 194 76 -446 minecraft:stone",
+        "gamemode creative @s",
+        "effect give @s minecraft:regeneration infinite 255 true",
+        "gamerule advance_time false",
+        "gamerule spawn_mobs false",
+        "gamerule random_tick_speed 0",
+        "time set 18000",
+        "fill 192 77 -448 196 77 -444 minecraft:oak_planks",
+        "fill 192 81 -448 196 81 -444 minecraft:oak_planks",
+        "fill 192 78 -448 196 80 -448 minecraft:cobblestone",
+        "fill 192 78 -444 196 80 -444 minecraft:cobblestone",
+        "fill 192 78 -448 192 80 -444 minecraft:cobblestone",
+        "fill 196 78 -448 196 80 -444 minecraft:cobblestone",
+        "setblock 196 78 -446 minecraft:air",
+        "setblock 196 79 -446 minecraft:air",
+        "setblock 196 78 -446 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]",
+        "setblock 196 79 -446 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]",
+        "setblock 193 78 -447 minecraft:red_bed[facing=east,part=foot,occupied=false]",
+        "setblock 194 78 -447 minecraft:red_bed[facing=east,part=head,occupied=false]",
+        "setblock 193 78 -446 minecraft:red_bed[facing=east,part=foot,occupied=false]",
+        "setblock 194 78 -446 minecraft:red_bed[facing=east,part=head,occupied=false]",
+        "setblock 193 78 -445 minecraft:red_bed[facing=east,part=foot,occupied=false]",
+        "setblock 194 78 -445 minecraft:red_bed[facing=east,part=head,occupied=false]",
+        "setblock 195 78 -445 minecraft:air",
+        "fill 200 77 -448 204 77 -444 minecraft:oak_planks",
+        "fill 200 81 -448 204 81 -444 minecraft:oak_planks",
+        "fill 200 78 -448 204 80 -448 minecraft:cobblestone",
+        "fill 200 78 -444 204 80 -444 minecraft:cobblestone",
+        "fill 200 78 -448 200 80 -444 minecraft:cobblestone",
+        "fill 204 78 -448 204 80 -444 minecraft:cobblestone",
+        "setblock 200 78 -446 minecraft:air",
+        "setblock 200 79 -446 minecraft:air",
+        "setblock 200 78 -446 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]",
+        "setblock 200 79 -446 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]",
+        "setblock 201 78 -447 minecraft:composter",
+        "setblock 202 78 -446 minecraft:air",
+        "setblock 202 79 -446 minecraft:air",
+        "setblock 204 77 -447 minecraft:farmland[moisture=7]",
+        "setblock 204 78 -447 minecraft:wheat[age=7]",
+        "setblock 204 77 -446 minecraft:farmland[moisture=7]",
+        "setblock 204 78 -446 minecraft:wheat[age=7]",
+        "setblock 204 77 -445 minecraft:farmland[moisture=7]",
+        "setblock 204 78 -445 minecraft:wheat[age=7]",
+        "setblock 205 77 -446 minecraft:water",
+        "fill 200 77 -442 204 77 -438 minecraft:oak_planks",
+        "fill 200 81 -442 204 81 -438 minecraft:oak_planks",
+        "fill 200 78 -442 204 80 -442 minecraft:cobblestone",
+        "fill 200 78 -438 204 80 -438 minecraft:cobblestone",
+        "fill 200 78 -442 200 80 -438 minecraft:cobblestone",
+        "fill 204 78 -442 204 80 -438 minecraft:cobblestone",
+        "setblock 200 78 -440 minecraft:air",
+        "setblock 200 79 -440 minecraft:air",
+        "setblock 200 78 -440 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]",
+        "setblock 200 79 -440 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]",
+        "setblock 201 78 -441 minecraft:chest[facing=north,type=single,waterlogged=false]",
+        "setblock 202 78 -440 minecraft:air",
+        "setblock 202 79 -440 minecraft:air",
+        "fill 206 71 -450 216 77 -440 minecraft:stone",
+        "fill 206 78 -450 216 81 -440 minecraft:air",
+        "setblock 207 78 -449 minecraft:smithing_table",
+        "setblock 208 78 -449 minecraft:air",
+        "fill 203 70 -450 205 73 -448 minecraft:stone",
+        "fill 204 71 -449 204 72 -449 minecraft:air",
+        "summon minecraft:zombie 204.5 71.0 -448.5 {PersistenceRequired:1b}",
+        "fill 206 77 -436 210 77 -432 minecraft:oak_planks",
+        "fill 206 81 -436 210 81 -432 minecraft:oak_planks",
+        "fill 206 78 -436 210 80 -436 minecraft:cobblestone",
+        "fill 206 78 -432 210 80 -432 minecraft:cobblestone",
+        "fill 206 78 -436 206 80 -432 minecraft:cobblestone",
+        "fill 210 78 -436 210 80 -432 minecraft:cobblestone",
+        "setblock 206 78 -434 minecraft:air",
+        "setblock 206 79 -434 minecraft:air",
+        "setblock 206 78 -434 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]",
+        "setblock 206 79 -434 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]",
+        "setblock 207 78 -435 minecraft:fletching_table",
+        "setblock 208 78 -434 minecraft:air",
+        "setblock 208 79 -434 minecraft:air",
+        "setblock 207 77 -430 minecraft:dirt",
+        "fill 205 80 -432 209 82 -428 minecraft:oak_leaves[persistent=false,waterlogged=false]",
+        "fill 207 78 -430 207 81 -430 minecraft:oak_log",
+        "setblock 210 77 -425 minecraft:dirt",
+        "fill 208 80 -427 212 82 -423 minecraft:oak_leaves[persistent=false,waterlogged=false]",
+        "fill 210 78 -425 210 81 -425 minecraft:oak_log",
+        "setblock 197 77 -446 minecraft:oak_stairs[facing=west,half=bottom,shape=straight]",
+        "setblock 199 77 -446 minecraft:oak_stairs[facing=east,half=bottom,shape=straight]",
+        "setblock 199 77 -440 minecraft:oak_stairs[facing=east,half=bottom,shape=straight]",
+        "setblock 205 77 -434 minecraft:oak_stairs[facing=east,half=bottom,shape=straight]",
+        "settlement create qa 31",
+        "settlement building certify house 192 77 -448 196 81 -444",
+        "settlement building certify farmer 200 77 -448 204 81 -444",
+        "settlement building certify storage 200 77 -442 204 81 -438",
+        "settlement building certify mine 206 71 -450 216 78 -440",
+        "settlement building certify lumber_camp 206 77 -436 210 81 -432",
+        "tp @s 202.5 78.0 -439.5",
+        "summon minecraft:villager 195 78 -445",
+        "tp @s 195.5 79.0 -445.5",
+        "settlement bind qa f2254c36-7772-491b-8854-5a3bd7a7f6c5",
+        "summon minecraft:villager 208 78 -449",
+        "tp @s 206.6 79.0 -449.0",
+        "settlement bind qa ef6078d7-83d7-4459-b3a6-755b6e3653bf",
+        "summon minecraft:villager 208 78 -434",
+        "tp @s 206.8 79.0 -433.5",
+        "settlement bind qa f430549e-7843-454c-898a-947921fee411",
+        "tp @s 198.5 78.0 -440.5",
+        "time set 3000",
+        "time set 18000",
+        "gamerule advance_time true",
+        "time set 3000",
+        "time set 9000",
+        "tp @s 202.5 78.0 -439.5",
+        "tp @s 202.5 78.0 -439.5",
+        "tp @s 202.5 78.0 -439.5"
+      ],
+      "id": "village-qa-settlements",
+      "passed": true,
+      "settlement_acceptance": {
+        "bed_sleepers": {
+          "ef6078d7": "\u041c\u0438\u0445\u0430\u0438\u043b \u00b7 \u0448\u0430\u0445\u0442\u0451\u0440 \u00b7 \u0441\u043e\u043d",
+          "f2254c36": "\u0410\u043d\u0434\u0440\u0435\u0439 \u00b7 \u0444\u0435\u0440\u043c\u0435\u0440 \u00b7 \u0441\u043e\u043d"
+        },
+        "behaviour": {
+          "door_walk": "PASS",
+          "farmer_harvest": "PASS",
+          "lumberjack": "PASS",
+          "miner_deposit": "PASS",
+          "night_door": "PASS",
+          "sleep_return": "PASS"
+        },
+        "bind_chat": [
+          "<VillageQA> village-qa villagers_bound dfc62389",
+          "Bound f430549e-7843-454c-898a-947921fee411 to qa.",
+          "Teleported VillageQA to 206.8, 79, -433.5",
+          "<VillageQA> village-qa lumberjack_summoned 81013030",
+          "Summoned new Villager",
+          "Bound ef6078d7-83d7-4459-b3a6-755b6e3653bf to qa.",
+          "Teleported VillageQA to 206.6, 79, -449",
+          "<VillageQA> village-qa miner_summoned 9570e965",
+          "Summoned new Villager",
+          "Bound f2254c36-7772-491b-8854-5a3bd7a7f6c5 to qa.",
+          "Teleported VillageQA to 195.5, 79, -445.5",
+          "Summoned new Villager"
+        ],
+        "bind_ok_count": 3,
+        "building_list_chat": [
+          "Buildings: #4294967297 house level 1 [192, 77, -448]-[196, 81, -444], #4294967298 farmer level 1 [200, 77, -448]-[204, 81, -444], #4294967299 storage level 1 [200, 77, -442]-[204, 81, -438], #4294967300 mine level 1 [206, 71, -450]-[216, 78, -440], #4294967301 lumber_camp level 1 [206, 77, -436]-[210, 81, -432].",
+          "<VillageQA> village-qa building_list d20fcb5e",
+          "<VillageQA> village-qa settlement_info db1be409",
+          "\u00abqa\u00bb \u00b7 \u0433\u043b\u0430\u0432\u0430: VillageQA \u00b7 \u0436\u0438\u0442\u0435\u043b\u0435\u0439 3 \u00b7 \u0440\u0430\u0431\u043e\u0442\u0430\u044e\u0442 3 \u00b7 \u0431\u0435\u0437\u0440\u0430\u0431\u043e\u0442\u043d\u044b\u0445 0\nqa | owner=bb52c5c3-83b2-3ffb-ae4d-e46c78f2e7c5 anchor=[192, 69, -448] radius=31 members=3 revision=15\nMigration A=unknown (not evaluated since start)",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Set minecraft:overworld to 9000 tick(s)",
+          "<VillageQA> village-qa day_end_deposits bc1850b4",
+          "<VillageQA> village-qa morning_returns c241956f",
+          "Set minecraft:overworld to 3000 tick(s)",
+          "<VillageQA> village-qa night_falls 0e574527"
+        ],
+        "cave_hostile": {
+          "end": [
+            204.3,
+            71.0,
+            -448.3
+          ],
+          "feet": [
+            204,
+            71,
+            -449
+          ],
+          "morning": [
+            204.3,
+            71.0,
+            -448.3
+          ],
+          "start": [
+            204.5,
+            71.0,
+            -448.5
+          ]
+        },
+        "chest_empty_baseline": {},
+        "chest_final_totals": {
+          "minecraft:cobblestone": 4,
+          "minecraft:oak_log": 4,
+          "minecraft:wheat_seeds": 3
+        },
+        "day_jobs": {
+          "ef6078d7": "miner",
+          "f2254c36": "farmer",
+          "f430549e": "lumberjack"
+        },
+        "door_flips": {
+          "f2254c36": "out through [200, 78, -446]"
+        },
+        "evidence": {
+          "door_walk": "worker f2254c36 went out through door [200, 78, -446] and the door was received closed",
+          "farmer_harvest": "wheat at [204, 78, -447] changed age 7 -> 0 (harvested and replanted)",
+          "lumberjack": "trunk [207, 78, -430] cut, sapling replanted; chest oak_log=4 totals={'minecraft:wheat_seeds': 3, 'minecraft:oak_log': 4, 'minecraft:cobblestone': 4}",
+          "miner_deposit": "dug [208, 77, -449] minecraft:stone -> minecraft:air; chest holds mining {'minecraft:wheat_seeds': 3, 'minecraft:oak_log': 4, 'minecraft:cobblestone': 4}; cave zombie still sealed at [204.3, 71.0, -448.3]",
+          "night_door": "2 workers asleep, house door [196, 78, -446] shut",
+          "sleep_return": "same 3 entities persist; ef6078d7 held miner by day, slept by bed [194, 78, -447], still held it on waking and got back to work: within 2.5 of its station [207, 78, -449]"
+        },
+        "mine_probe_cells": 18,
+        "night_door": {
+          "door": [
+            196,
+            78,
+            -446
+          ],
+          "open": "false",
+          "ticks": 8
+        },
+        "night_ticks": 91,
+        "origin_block": [
+          192,
+          77,
+          -448
+        ],
+        "player_inventory": [
+          {
+            "count": null,
+            "item_id": null,
+            "origin": "server_observed",
+            "selected": false,
+            "slot": 41,
+            "state": "unknown"
+          },
+          {
+            "count": null,
+            "item_id": null,
+            "origin": "server_observed",
+            "selected": false,
+            "slot": 42,
+            "state": "unknown"
+          }
+        ],
+        "recent_chat_tail": [
+          "Buildings: #4294967297 house level 1 [192, 77, -448]-[196, 81, -444], #4294967298 farmer level 1 [200, 77, -448]-[204, 81, -444], #4294967299 storage level 1 [200, 77, -442]-[204, 81, -438], #4294967300 mine level 1 [206, 71, -450]-[216, 78, -440], #4294967301 lumber_camp level 1 [206, 77, -436]-[210, 81, -432].",
+          "<VillageQA> village-qa building_list d20fcb5e",
+          "<VillageQA> village-qa settlement_info db1be409",
+          "\u00abqa\u00bb \u00b7 \u0433\u043b\u0430\u0432\u0430: VillageQA \u00b7 \u0436\u0438\u0442\u0435\u043b\u0435\u0439 3 \u00b7 \u0440\u0430\u0431\u043e\u0442\u0430\u044e\u0442 3 \u00b7 \u0431\u0435\u0437\u0440\u0430\u0431\u043e\u0442\u043d\u044b\u0445 0\nqa | owner=bb52c5c3-83b2-3ffb-ae4d-e46c78f2e7c5 anchor=[192, 69, -448] radius=31 members=3 revision=15\nMigration A=unknown (not evaluated since start)",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Set minecraft:overworld to 9000 tick(s)",
+          "<VillageQA> village-qa day_end_deposits bc1850b4",
+          "<VillageQA> village-qa morning_returns c241956f",
+          "Set minecraft:overworld to 3000 tick(s)",
+          "<VillageQA> village-qa night_falls 0e574527",
+          "Game rule advance_time is now set to true",
+          "Set minecraft:overworld to 18000 tick(s)",
+          "<VillageQA> village-qa day_work_begins 05d9201d",
+          "Set minecraft:overworld to 3000 tick(s)",
+          "Teleported VillageQA to 198.5, 78, -440.5",
+          "<VillageQA> village-qa villagers_bound dfc62389",
+          "Bound f430549e-7843-454c-898a-947921fee411 to qa.",
+          "Teleported VillageQA to 206.8, 79, -433.5"
+        ],
+        "repro": {},
+        "settlement_info_chat": [
+          "<VillageQA> village-qa settlement_info db1be409",
+          "\u00abqa\u00bb \u00b7 \u0433\u043b\u0430\u0432\u0430: VillageQA \u00b7 \u0436\u0438\u0442\u0435\u043b\u0435\u0439 3 \u00b7 \u0440\u0430\u0431\u043e\u0442\u0430\u044e\u0442 3 \u00b7 \u0431\u0435\u0437\u0440\u0430\u0431\u043e\u0442\u043d\u044b\u0445 0\nqa | owner=bb52c5c3-83b2-3ffb-ae4d-e46c78f2e7c5 anchor=[192, 69, -448] radius=31 members=3 revision=15\nMigration A=unknown (not evaluated since start)",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Teleported VillageQA to 202.5, 78, -439.5",
+          "Set minecraft:overworld to 9000 tick(s)"
+        ],
+        "settlement_radius": 31,
+        "sleeper": {
+          "back_to_work": "within 2.5 of its station [207, 78, -449]",
+          "closest": 1.64990234375,
+          "day_job": "miner",
+          "job": "miner",
+          "morning_ticks": 83,
+          "station": [
+            207,
+            78,
+            -449
+          ],
+          "travelled": 9.7,
+          "uuid": "ef6078d7-83d7-4459-b3a6-755b6e3653bf",
+          "watched_logs": [],
+          "woke_nameplate": "\u041c\u0438\u0445\u0430\u0438\u043b \u00b7 \u0448\u0430\u0445\u0442\u0451\u0440 \u00b7 \u0440\u0430\u0431\u043e\u0442\u0430"
+        },
+        "time_set_count": 5,
+        "villager_positions": [
+          {
+            "position": [
+              199.5029296875,
+              78.0,
+              -439.14990234375
+            ],
+            "uuid": "f430549e-7843-454c-898a-947921fee411"
+          },
+          {
+            "position": [
+              199.502685546875,
+              78.0,
+              -439.14990234375
+            ],
+            "uuid": "ef6078d7-83d7-4459-b3a6-755b6e3653bf"
+          },
+          {
+            "position": [
+              199.5,
+              77.0,
+              -441.5
+            ],
+            "uuid": "f2254c36-7772-491b-8854-5a3bd7a7f6c5"
+          }
+        ],
+        "villager_uuids": [
+          {
+            "role": "farmer",
+            "stage": [
+              195,
+              78,
+              -445
+            ],
+            "uuid": "f2254c36-7772-491b-8854-5a3bd7a7f6c5"
+          },
+          {
+            "role": "miner",
+            "stage": [
+              208,
+              78,
+              -449
+            ],
+            "uuid": "ef6078d7-83d7-4459-b3a6-755b6e3653bf"
+          },
+          {
+            "role": "lumberjack",
+            "stage": [
+              208,
+              78,
+              -434
+            ],
+            "uuid": "f430549e-7843-454c-898a-947921fee411"
+          }
+        ],
+        "villager_uuids_observed": [
+          "f2254c36-7772-491b-8854-5a3bd7a7f6c5",
+          "ef6078d7-83d7-4459-b3a6-755b6e3653bf",
+          "f430549e-7843-454c-898a-947921fee411"
+        ],
+        "villagers_visible": 3
+      }
+    },
+    "seed": 81,
+    "server_address": "127.0.0.1:46357",
+    "server_binary_path": "/run/media/kaiserroman/games/solaris-work/pins/af014f2d7788-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+    "server_binary_sha256": "d9f6264ffcc2e2e423ff37fce990c20567b2fdf11ef4ecded0b2ed425e08acc2",
+    "settings_path": "/run/media/kaiserroman/games/solaris-work/solaris-client/.analysis/harness-runs/native-xtu9jd2p/client-settings.json",
+    "settings_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "validation_mode": "graphical",
+    "window_focus": {
+      "display": ":113",
+      "mechanism": "XRaiseWindow+XSetInputFocus",
+      "pid": 3708172,
+      "window_id": 2097154,
+      "x_server_focus_verified": true
+    },
+    "world_dir": "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/world"
+  },
+  "duration_seconds": 124.636,
+  "ended_at": "2026-11-28T10:41:59+00:00",
+  "error": null,
+  "exits": [
+    null
+  ],
+  "logs": [
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/server.log",
+    "/run/media/kaiserroman/games/solaris-work/wt/D145Gameplay2/.analysis/validation/20261128T103954-village-qa-reo4efhq/xvfb.log",
+    ".analysis/validation/20261128T103954-village-qa-reo4efhq/native-client.log"
+  ],
+  "profile": "village-qa",
+  "scope": "real-client",
+  "started_at": "2026-11-28T10:39:53+00:00",
+  "status": "passed",
+  "tree": {
+    "dirty": false,
+    "head": "af014f2d7788bc9164fc6b4c2accf35c81945c39",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
