@@ -1,0 +1,11 @@
+[[bug]]
+id = "SUMMON-REJECTS-UNUSED-ENTITY-NBT"
+title = "`/summon` refuses the whole entity when the NBT carries a field that entity does not use, where vanilla 26.3 spawns it and ignores the field"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "CMinor native-model fixture, 2026-11-28: `summon minecraft:chicken 1000.5 160 1003.5 {IsBaby:1b,NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}` spawned nothing (scene dump empty, `cminor-chicken-entities` assertion false; receipts/CMinor/SUMMON-REJECTS-UNUSED-ENTITY-NBT/mc-core-refusal-result.json + mc-core-empty-dump.json). mc-core rejects it in `command_summon::supports` (`crates/mc-core/src/command_summon.rs:322`, `IsBaby` matches only `entity_life::uses_is_baby`, i.e. the zombie family) and the caller returns `Entity does not support summon NBT field IsBaby` (`crates/mc-core/src/command_summon.rs:415-420`). Vanilla 26.3 accepts the same command: a vanilla 26.3 bundler (tools-cache/minecraft/26.3/server.jar, Temurin 25) logs `Summoned new Chicken` for both `{IsBaby:1b,...}` and `{Age:-24000,...}` (receipts/CMinor/SUMMON-REJECTS-UNUSED-ENTITY-NBT/vanilla-26.3-summon.log lines 73-74, probe script beside it). `IsBaby` is `Zombie`'s own save field, not an `AgeableMob` field, so the vanilla loader never reads it on a chicken; it keeps the entity and drops the unused key."
+repro = "command"
+regression = []
+failing_first = "reported"
+repro_check = "Command: `summon minecraft:chicken 0 100 0 {IsBaby:1b,NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}`. mc-core: no entity, error `Entity does not support summon NBT field IsBaby` (silent in a scene because the fixture turns command feedback off). Vanilla 26.3: `Summoned new Chicken`, entity spawned as an adult. A fix needs a `cargo:` test through the summon path asserting an unused field is ignored (entity spawned, field not applied) instead of the whole summon being refused, plus the command rerun on the fixed build with its receipt; the trap is that mc-core validates every authored key fail-closed (`supports`, `Duplicate summon NBT field`), so the change is the unknown/unused-key branch only, not the known-key validation."

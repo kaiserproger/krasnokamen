@@ -1803,3 +1803,167 @@ def check_entity_relative_trajectory(probe: ProbeSteps, artifact: Path, *,
                         relative_trajectory_tolerance=RELATIVE_TRAJECTORY_TOLERANCE)
     probe.check("relative_trajectory_returns_the_client_to_the_origin",
                 drift <= RELATIVE_TRAJECTORY_TOLERANCE)
+CMINOR_SHOTS = ("empty", "chicken", "cold-chicken", "cold-cow", "cold-calf", "warm-cow",
+                "warm-calf", "nautilus")
+
+
+def _cminor_frames(probe: ProbeSteps, artifact: Path):
+    """The shared cminor scene's shots, every camera-pinned to its own `empty` frame."""
+    shots = _qa._load_shots(probe, artifact, CMINOR_SHOTS)
+    ref = shots["empty"][0]
+    for name in CMINOR_SHOTS[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    probe.check("empty_frame_has_no_entity_layer",
+                not ((ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []))
+    return shots
+
+
+def _rig_id(rig) -> str:
+    """The authored model id a binding's rig key names (`minecraft:cold_cow#main` -> `cold_cow`)."""
+    return str(rig or "").removeprefix("minecraft:").split("#")[0]
+
+
+def _cminor_subject(probe: ProbeSteps, artifact: Path, shots, name: str, types: tuple[str, ...],
+                    rig: str):
+    """One subject's largest `EntityCutout` layer and its selected record.
+
+    A rig the client cannot resolve (`rig != rig`) lands in `unrendered` and reports no layer,
+    which is the row's own symptom; `require_entities`' dump and `eligible` keep a summon that
+    never reached the client out of the green path. The layer's own world bounds are what the
+    assertions read, so the frame's pixel scale cannot move them.
+    """
+    frame = shots[name][0]
+    extraction = frame.get("entity_extraction") or {}
+    records = extraction.get("entities") or []
+    dump = artifact / f"cminor-{name}-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    record = next((entry for entry in records
+                   if entry.get("entity_type") in types and _rig_id(entry.get("rig")) == rig), None)
+    layers = [layer for layer in (extraction.get("entity_layer_geometry") or [])
+              if str(layer.get("material") or "") == "EntityCutout"
+              and int(layer.get("indices") or 0) > 0]
+    layer = max(layers, key=lambda entry: int(entry.get("indices") or 0)) if layers else None
+    probe.report[f"cminor_{name}_records"] = records
+    probe.report[f"cminor_{name}_unrendered"] = extraction.get("unrendered")
+    probe.report[f"cminor_{name}_dump_entities"] = [entry.get("entity_type") for entry in dumped]
+    probe.report[f"cminor_{name}_crowd"] = int(extraction.get("crowd") or 0)
+    probe.check(f"{name}_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entry.get("entity_type") in types for entry in dumped))
+    probe.check(f"{name}_cpu_path", int(extraction.get("crowd") or 0) == 0)
+    probe.report[f"cminor_{name}_rig"] = (record or {}).get("rig")
+    if record is not None:
+        probe.report[f"cminor_{name}_texture"] = record.get("texture")
+    if layer is None:
+        probe.report[f"cminor_{name}_spans"] = None
+        return None
+    spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 5)
+             for axis in range(3)]
+    probe.report[f"cminor_{name}_indices"] = int(layer.get("indices") or 0)
+    probe.report[f"cminor_{name}_spans"] = spans
+    probe.report[f"cminor_{name}_min_y"] = round(float(layer["min"][1]), 4)
+    # The rig assertion must mean "the binding named this authored rig", never "some layer drew":
+    # a pre-image that falls back to the temperate rig still draws one (and still reports a layer
+    # with the climate *texture*), so a tuple without its record would make the assertion vacuous.
+    if record is None:
+        return None
+    return record, layer, spans
+
+
+# The pad top is y=160; every subject is summoned standing on it.
+_CMINOR_GROUND = 160.0
+
+
+def _cminor_floor(probe: ProbeSteps, name: str, layer) -> None:
+    probe.report[f"cminor_{name}_ground_offset"] = round(float(layer["min"][1]) - _CMINOR_GROUND, 4)
+    probe.check(f"{name}_stands_on_the_floor",
+                abs(float(layer["min"][1]) - _CMINOR_GROUND) <= 0.05)
+
+
+def check_cminor_chicken(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-BABY-CHICKEN-LAYOUT: the child chick rigs draw, not the adult-style stack.
+
+    The 26.3 child is a 4x4x4 body with planar shanks and a 1-px toe: 6 model pixels tall
+    over 6 wide (height/width 1.00, the wings adding nothing on x). The pre-image's
+    adult-style stack keeps the same 6-px width but reaches 11 px (head at 13 plus the jaw
+    and wattle), ratio 1.83, so the 0.80..1.50 band separates them with 0.3 either way.
+    The cold shot names `cold_chicken_baby`, the separate rig the same row covers.
+    """
+    shots = _cminor_frames(probe, artifact)
+    chick = _cminor_subject(probe, artifact, shots, "chicken", ("minecraft:chicken",), "chicken_baby")
+    probe.check("baby_chicken_authored_rig_selected", chick is not None)
+    if chick is not None:
+        _record, layer, spans = chick
+        _cminor_floor(probe, "chicken", layer)
+        height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
+        probe.report["cminor_chicken_height_over_width"] = height_over_width
+        probe.check("baby_chicken_child_silhouette",
+                    height_over_width is not None and 0.80 <= height_over_width <= 1.50)
+    cold = _cminor_subject(probe, artifact, shots, "cold-chicken", ("minecraft:chicken",),
+                           "cold_chicken_baby")
+    probe.check("cold_chicken_baby_authored_rig_selected", cold is not None)
+    if cold is not None:
+        _record, layer, _spans = cold
+        _cminor_floor(probe, "cold-chicken", layer)
+    probe.report["visual_review_required"] = [
+        "Inspect chicken/cold-chicken frames: the rig name and bounds prove which model drew "
+        "and its envelope, not every texel."
+    ]
+
+
+def check_cminor_cows(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-CLIMATE-COW-HORNS: the climate cow and calf rigs draw, not the temperate fallback.
+
+    `presentation::rig` maps a cow variant's `model` ("cold"/"warm") to
+    `minecraft:{model}_cow[_baby]#main` only when the client ships that rig, so the frame's
+    `entities` record names the authored rig the pre-image fell back from (`cow`). The
+    layer's bounds show that rig standing on the pad; the jar's stub horns and pink muzzle
+    stay unit-covered.
+    """
+    shots = _cminor_frames(probe, artifact)
+    for name, types, rig in (
+        ("cold-cow", ("minecraft:cow",), "cold_cow"),
+        ("cold-calf", ("minecraft:cow",), "cold_cow_baby"),
+        ("warm-cow", ("minecraft:cow",), "warm_cow"),
+        ("warm-calf", ("minecraft:cow",), "warm_cow_baby"),
+    ):
+        entry = _cminor_subject(probe, artifact, shots, name, types, rig)
+        probe.check(f"{rig}_authored_rig_selected", entry is not None)
+        if entry is None:
+            continue
+        _record, layer, spans = entry
+        _cminor_floor(probe, name, layer)
+        probe.report[f"cminor_{name}_height_over_width"] = (
+            round(spans[1] / spans[0], 4) if spans[0] else None)
+    probe.report["visual_review_required"] = [
+        "Inspect cold-cow/cold-calf/warm-cow/warm-calf frames: the rig name proves which model "
+        "drew, the bounds its envelope; the horn bends and muzzle island stay unit-covered."
+    ]
+
+
+def check_cminor_nautilus(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-WARM-NAUTILUS-ROOT: the authored warm nautilus rig draws down at its feet.
+
+    The pre-image ships no `warm_zombie_nautilus` rig, so the warm variant's model cannot
+    resolve and the frame has no warm shell at all. The fixed frame names
+    `minecraft:warm_zombie_nautilus#main` and its layer's lowest geometry sits on the pad
+    top, so the shell reaches the feet instead of floating.
+    """
+    shots = _cminor_frames(probe, artifact)
+    nautilus = _cminor_subject(probe, artifact, shots, "nautilus",
+                               ("minecraft:zombie_nautilus",), "warm_zombie_nautilus")
+    probe.check("warm_nautilus_authored_rig_selected", nautilus is not None)
+    if nautilus is not None:
+        _record, layer, spans = nautilus
+        _cminor_floor(probe, "nautilus", layer)
+        probe.report["cminor_nautilus_depth_over_width"] = (
+            round(spans[2] / spans[0], 4) if spans[0] else None)
+    probe.report["visual_review_required"] = [
+        "Inspect the nautilus frame: the rig name and bounds prove which model drew and that "
+        "its shell reaches the feet, not the face's heading."
+    ]

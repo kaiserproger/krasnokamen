@@ -1,0 +1,262 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule doMobLoot false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        10
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        10
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {Age:-24000,NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "chicken"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-chicken-entities",
+        "types": [
+          "minecraft:chicken"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:chicken,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "cold-chicken"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-cold-chicken-entities",
+        "types": [
+          "minecraft:chicken"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:chicken,distance=..16]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "cold-cow"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-cold-cow-entities",
+        "types": [
+          "minecraft:cow"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:cow,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "cold-calf"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-cold-calf-entities",
+        "types": [
+          "minecraft:cow"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:cow,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {variant:'minecraft:warm',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "warm-cow"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-warm-cow-entities",
+        "types": [
+          "minecraft:cow"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:cow,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:warm',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "warm-calf"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-warm-calf-entities",
+        "types": [
+          "minecraft:cow"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:cow,distance=..16]"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "summon minecraft:zombie_nautilus 1000.5 160 1003.5 {variant:'minecraft:warm',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "nautilus"
+    },
+    {
+      "require_entities": {
+        "name": "cminor-nautilus-entities",
+        "types": [
+          "minecraft:zombie_nautilus"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:zombie_nautilus,distance=..16]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    }
+  ]
+}
