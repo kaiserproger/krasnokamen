@@ -250,20 +250,34 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
         && access::projects_of(&state.settlements, id).count() == 1;
     let protected = protected_gatherer(state, id, ordered);
     // A native Builder already on the settlement takes the first unbound
-    // project directly; no recruitment and no profession change. It must still
-    // be able to reach storage, or a walled builder would hold the project.
-    let mut ready_cache = crate::settlements::allocator::PoiCache::default();
-    let mut ready_path = Vec::new();
-    let mut candidates: Vec<(u32, EntitySlot)> = residents(state, id)
-        .filter(|&slot| free_native_builder(state, id, slot) && !storage_unreached(state, slot))
-        .map(|slot| (0, slot))
-        .collect();
-    let mut tried = candidates.len();
-    for (_, slot) in candidates.drain(..) {
-        if probe_storage(state, id, slot, &mut ready_cache, &mut ready_path) {
-            bind_first_unbound(state, id, slot);
-            return false;
+    // project directly, with no recruitment and no profession change; it must
+    // still reach storage, or a walled builder would hold the project. A
+    // resident the stall watcher just released from this project is chosen
+    // after every candidate that was not released from it, whichever group it
+    // comes from: otherwise a shunned Builder beats a fresh retrain and the
+    // stall repeats for its own uuid. Inside each of those two groups the
+    // native Builder still comes before a retrain, and its usual priority
+    // order stands. The shun list is read once, on the simulation clock.
+    let game = state.tick_control.game_ticks(state.tick);
+    let shun_list = state
+        .settlements
+        .builder_watch
+        .get(&(id, target.clone()))
+        .map(|watch| watch.shunned.clone())
+        .unwrap_or_default();
+    let released = |uuid: uuid::Uuid| {
+        shun_list
+            .iter()
+            .any(|&(known, until)| known == uuid && game < until)
+    };
+    // (shunned, group, priority): group 0 is a native Builder, 1 a retrain.
+    let mut candidates: Vec<(u32, u32, u32, EntitySlot)> = Vec::new();
+    for slot in residents(state, id) {
+        if !free_native_builder(state, id, slot) || storage_unreached(state, slot) {
+            continue;
         }
+        let uuid = state.entities.row(slot).uuid;
+        candidates.push((u32::from(released(uuid)), 0, 0, slot));
     }
     for slot in residents(state, id) {
         if storage_unreached(state, slot) {
@@ -272,23 +286,23 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
         let Some(priority) = recruit_priority(state, id, slot, may_borrow, protected) else {
             continue;
         };
-        let shunned = state
-            .settlements
-            .builder_watch
-            .get(&(id, target.clone()))
-            .is_some_and(|watch| {
-                watch.shunned.iter().any(|&(uuid, until)| {
-                    uuid == state.entities.row(slot).uuid && state.tick < until
-                })
-            });
-        candidates.push((priority + if shunned { 10 } else { 0 }, slot));
+        let uuid = state.entities.row(slot).uuid;
+        candidates.push((u32::from(released(uuid)), 1, priority, slot));
     }
-    // Stable: residents of equal priority keep their index order.
-    candidates.sort_by_key(|&(priority, _)| priority);
+    // Stable: equal keys keep the resident order.
+    candidates.sort_by_key(|&(shunned, group, priority, _)| (shunned, group, priority));
     let mut cache = crate::settlements::allocator::PoiCache::default();
     let mut path = Vec::new();
+    let mut tried = 0;
+    let mut retrains = 0;
     let mut chosen = None;
-    for (_, slot) in candidates.into_iter().take(BUILDER_CANDIDATES) {
+    for (_, group, _, slot) in candidates {
+        if group == 1 {
+            if retrains == BUILDER_CANDIDATES {
+                continue;
+            }
+            retrains += 1;
+        }
         tried += 1;
         if probe_storage(state, id, slot, &mut cache, &mut path) {
             chosen = Some(slot);
@@ -298,8 +312,6 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
     let Some(slot) = chosen else {
         return tried > 0;
     };
-    // Ordinary recruits keep the authored builder career. Only extraction
-    // workers are loaned to construction and restored on completion.
     let profession = state
         .entities
         .row(slot)
@@ -308,6 +320,12 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
         .unwrap()
         .data
         .profession;
+    if profession == Profession::Builder {
+        bind_first_unbound(state, id, slot);
+        return false;
+    }
+    // Ordinary recruits keep the authored builder career. Only extraction
+    // workers are loaned to construction and restored on completion.
     let borrowed = match profession {
         Profession::Miner | Profession::Lumberjack => Some(profession),
         _ => None,
