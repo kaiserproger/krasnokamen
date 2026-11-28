@@ -4,6 +4,7 @@ title = "The Java agent's attack tool sends a plain entity attack while holding 
 area = "harness"
 severity = "major"
 status = "fixed"
+promotion = "docs/bugs/promotions/JAVA-BATTLE-SPEAR-PLAIN-ATTACK.json"
 source = "Stage3 LoaderObs seed-46 Java battle: 8 NeoForge attacks unconfirmed and the Fabric player died after unconfirmed spear attacks; kits carry iron_spear (piercing_weapon)"
 repro = "source"
 regression = ["loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftSpearPacketTest"]
