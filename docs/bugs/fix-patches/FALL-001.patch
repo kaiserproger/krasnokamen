@@ -1,0 +1,28 @@
+diff --git a/crates/mc-core/src/tick/input/interact.rs b/crates/mc-core/src/tick/input/interact.rs
+index 3d1ff88cc..4a4586347 100644
+--- a/crates/mc-core/src/tick/input/interact.rs
++++ b/crates/mc-core/src/tick/input/interact.rs
+@@ -78,6 +78,15 @@ pub(in crate::tick) fn dig(
+     if current == state.registry.states.air {
+         return;
+     }
++    if *action == DigAction::Start
++        && state
++            .players
++            .get(&entity)
++            .is_some_and(|player| !player.creative())
++        && crate::vanilla_interact::dragon_egg(state, entity, *position)
++    {
++        return;
++    }
+     if *action == DigAction::Finish {
+         crate::tick::mining::trace_finish(state, entity, *position, current);
+     }
+@@ -167,6 +176,7 @@ pub(in crate::tick) fn use_item_on(
+         || crate::armor_stand::use_on(state, entity, *hand, *position, *face)
+         || crate::item_frame::use_on(state, entity, *hand, *position, *face)
+         || crate::painting::use_on(state, entity, *hand, *position, *face)
++        || crate::vanilla_interact::dragon_egg(state, entity, *position)
+     {
+         return;
+     }

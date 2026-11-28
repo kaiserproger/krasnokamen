@@ -84,3 +84,52 @@ HARNESS-ADMIN-TEST-TEMP-DIR-LEAK.
   (the two "pin accepted" refs test the surviving pin path) and `DIMENSION-SWITCH`
   (`dimension_reset_fences_queued_old_world_explosions_at_real_writer` exercises the writer
   fence, a different sub-fix).
+
+## D154/D154b re-audit (2026-11-28, after Main's 48f50c842 withdrawals)
+
+Criterion applied: each hunk's **old-side block** (its `-` payload plus ` ` context, in hunk
+order) must appear byte-for-byte, contiguously, in `git show <fix>^1:<path>`; insertion-only
+hunks are judged on their `+` payload instead (it must be a line the fix added, and absent
+from the parent). Script: `/tmp/audit7.py` (retained only in this session; method above).
+
+FALL-001 rebuilt (commit `c1ac1f061b`): the old patch replaced
+`vanilla_interact::dragon_egg` with a `false` stub, but
+`git show 35308579c^1:crates/mc-core/src/tick/input/interact.rs | grep -cF dragon_egg` = **0**
+— the fix added the dispatch, not the helper. The new patch removes only the two call sites
+(dig `DigAction::Start` guard and the `use_item_on` chain), keeping `vanilla_interact.rs`
+untouched. `git apply -R --numstat` = `0 10 crates/mc-core/src/tick/input/interact.rs`.
+Reversed: `interact_parity_dragon_egg_use_teleports` FAILED at
+`crates/mc-core/src/interact_parity_tests.rs:79` (`assertion left != right failed`);
+`interact_parity_dragon_egg_conserves_block_before_falling` stayed `ok` (it calls the helper
+directly at line 593, so it is not expected to flip). Restored: both `ok` (2 passed).
+
+Verdict per row (byte-exact test). The twelve NOT_A_CONTROL rows were reverted to their
+original `fix_commit` in this pass (the patch files stay on disk as evidence, but no row
+points at a patch that fails the test). FALL-001's row still names its old digest
+`f16c4344…`; the rebuilt patch is sha256
+`007f538d4b7f3e2b96c6b88ccb3f89b47d709403af4f11609775efec400c13f3`, for Main to set.
+
+| row | verdict | first differing line / evidence |
+|---|---|---|
+| FALL-001 (rebuilt) | OK (insertion only) | + dispatch is the fix's own line; parent has no `dragon_egg` (grep 0) |
+| HARNESS-CIV-GATE-LOCAL-SCAN-UNLOADED | OK | old-side blocks byte-exact |
+| HARNESS-CIV-GATE-PLANNER-READ-BLOCKED-BY-STATUS-DIALOG | OK | old-side blocks byte-exact |
+| HARNESS-CIV-GATE-REMOTE-SCAN-UNLOADED | OK | old-side blocks byte-exact |
+| HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT | OK | old-side blocks byte-exact |
+| SETTLEMENT-HOUSE-BILL-STALLS-BELOW-COBBLESTONE-DEMAND | OK | old-side blocks byte-exact |
+| VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER | OK | old-side block byte-exact |
+| DIMENSION-SWITCH-KNOCKBACK-DISCONNECT | OK | 14-line old side byte-exact |
+| BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT | OK (insertion only) | payload `continue;` is the fix's own added line; the enclosing `exposure` guard postdates the fix, so no historical parent site (class c) |
+| CIV-IRON-CAPTURE-OUTPUT-COLLECTED | NOT_A_CONTROL | `"state_id": container.get("container_state_id")}` grep = 0 in `d7f98cd4^1`; kept test calls the fix's new `capture_iron_menu(probe, "server", …)` |
+| HARNESS-CIV-GATE-BIRTH-CAPTURE-HITS-THE-WALL | NOT_A_CONTROL | `raise _BabyLeftView("baby left the client-visible set before its capture")` grep = 0; parent has `raise RuntimeError("baby no longer visible for milestone capture")` |
+| HARNESS-CIV-GATE-OBSERVER-WAIT-HANGS | NOT_A_CONTROL | `else hi[0] + OBSERVER_STAND_MARGIN,` grep = 0; also test calls fix-created `qa.move_observer` (0 in parent) |
+| HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK | NOT_A_CONTROL | plus line `# Lock order: a scene slot …` is not the fix's own added comment (reworded later); two further context blocks drifted |
+| HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR | NOT_A_CONTROL | old side keeps the fix-created `xp = {key: player[native] …}` mapping, so it is not the pre-image block |
+| HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK | NOT_A_CONTROL | `for key, _ in selector.select(None if deadline is None else …)` grep = 0 in `ef508fc78^1` |
+| HARNESS-REGRESSIONS-CLIENT-REBUILDS | NOT_A_CONTROL | invented build fallback: `'path': str(binary), 'sha256': digest, …` grep = 0, and no `cargo build` block existed there |
+| HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION | NOT_A_CONTROL | predicate text exists (grep = 1) but at 8-space indent inside `verdicts[...] = (`; the patch has 4-space `return (` — indentation/receiver differs |
+| PERF-RECEIPT-HAS-NO-CLIENT-OBSERVED-TICK-ARRIVAL | NOT_A_CONTROL | invented `client_tick_arrival` body; the name grep = 0 in `2941bc91f^1` |
+| PLACE-001 | NOT_A_CONTROL | `crates/mc-core/src/spawn_protection.rs` absent in `35308579c^1`; `protected -> false` invented |
+| SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES | NOT_A_CONTROL | `gate_due` grep = 0 tree-wide in `44aa3d95a^1`; invented helper retained only so the HEAD test compiles |
+| TEST-NATIVE-HEALTH | NOT_A_CONTROL | invented lenient `HealthInterval.finish`; `HealthInterval` grep = 0 in `ef67d139e^1` |
+
