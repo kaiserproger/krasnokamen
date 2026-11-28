@@ -136,6 +136,11 @@ pub struct Registry {
     /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
     /// discards it and restarts the sweep from the persisted cursor.
     pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
+    /// Phase-log rate limit for one town's planner verdict; never persisted.
+    pub(super) plan_log: BTreeMap<SettlementId, super::decision_log::Window>,
+    /// Courtship gate counters between two phase-log samples, per town; never
+    /// persisted.
+    pub(crate) courtship_log: BTreeMap<SettlementId, super::decision_log::Courtship>,
     /// Settlements whose funded new building searches for a site, with the
     /// sequence of the order searched last; derived and never persisted
     /// (`construction::site_turn`).
@@ -676,6 +681,8 @@ impl Registry {
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
         self.site_sweep.remove(&id);
+        self.plan_log.remove(&id);
+        self.courtship_log.remove(&id);
         self.site_orders.remove(&id);
         self.order_refusal
             .retain(|(settlement, _), _| *settlement != id);
@@ -729,6 +736,8 @@ impl Registry {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
             self.site_sweep.remove(&image.id);
+            self.plan_log.remove(&image.id);
+            self.courtship_log.remove(&image.id);
             self.site_orders.remove(&image.id);
             self.order_refusal
                 .retain(|(settlement, _), _| *settlement != image.id);

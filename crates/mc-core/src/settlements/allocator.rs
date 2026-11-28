@@ -1727,6 +1727,47 @@ pub(crate) fn free_bed(
     slot: EntitySlot,
     path: &mut Vec<BlockPos>,
 ) -> Option<BlockPos> {
+    search_free_bed(state, cache, slot, path).bed()
+}
+
+/// Why a spare-bed search ended. The courtship phase log counts these; the
+/// callers that only need a bed read [`BedSearch::bed`].
+pub(crate) enum BedSearch {
+    Found(BlockPos),
+    /// No bed was a legal candidate at all.
+    NoCandidate,
+    /// Candidates existed but none was reachable within the route budget.
+    RouteFailed,
+    /// The search stopped because the shared node allowance ran out; the next
+    /// cadence retries.
+    BudgetDeferred,
+}
+
+impl BedSearch {
+    pub(crate) fn bed(&self) -> Option<BlockPos> {
+        match *self {
+            Self::Found(pos) => Some(pos),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn count(&self, counts: &mut super::decision_log::BedCounts) {
+        match self {
+            Self::Found(_) => counts.found += 1,
+            Self::NoCandidate => counts.no_candidate += 1,
+            Self::RouteFailed => counts.route_failed += 1,
+            Self::BudgetDeferred => counts.budget_deferred += 1,
+        }
+    }
+}
+
+pub(crate) fn search_free_bed(
+    state: &mut TickState,
+    cache: &mut PoiCache,
+    slot: EntitySlot,
+    path: &mut Vec<BlockPos>,
+) -> BedSearch {
+    let mut miss = BedSearch::NoCandidate;
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
     let row = state.entities.row(slot);
@@ -1755,7 +1796,7 @@ pub(crate) fn free_bed(
         }
         if !cache.spend_path(state, Consumer::Brain) {
             cache.search_deferred = true;
-            return None;
+            return BedSearch::BudgetDeferred;
         }
         let mut ctx = RouteCtx {
             world: &state.world,
@@ -1767,7 +1808,7 @@ pub(crate) fn free_bed(
         if find_path_ctx(
             &mut ctx, cache, pos, poi.pos, half_width, height, path, false, 48, 16, true,
         ) {
-            return Some(poi.pos);
+            return BedSearch::Found(poi.pos);
         }
         if ctx
             .budget
@@ -1775,8 +1816,9 @@ pub(crate) fn free_bed(
             == 0
         {
             cache.search_deferred = true;
-            return None;
+            return BedSearch::BudgetDeferred;
         }
+        miss = BedSearch::RouteFailed;
     }
     // A settlement resident's spare bed is any free bed of its settlement's
     // certified houses (docs/settlements/breeding.md), not only one inside the
@@ -1787,7 +1829,7 @@ pub(crate) fn free_bed(
     let (HousingScope::Bound { .. }, Some(record)) =
         (scope, settlement.and_then(|id| state.settlements.get(id)))
     else {
-        return None;
+        return miss;
     };
     let mut candidates = std::mem::take(&mut cache.candidates);
     candidates.clear();
@@ -1817,10 +1859,12 @@ pub(crate) fn free_bed(
     }
     cache.candidates = candidates;
     for _ in 0..FAR_BED_ROUTES {
-        let (_, poi) = cache.candidates.pop()?;
+        let Some((_, poi)) = cache.candidates.pop() else {
+            break;
+        };
         if !cache.spend_path(state, Consumer::Brain) {
             cache.search_deferred = true;
-            return None;
+            return BedSearch::BudgetDeferred;
         }
         let (horizontal, vertical) = route_bounds(at(pos), poi.pos);
         let mut ctx = RouteCtx {
@@ -1834,7 +1878,7 @@ pub(crate) fn free_bed(
             &mut ctx, cache, pos, poi.pos, half_width, height, path, false, horizontal, vertical,
             true,
         ) {
-            return Some(poi.pos);
+            return BedSearch::Found(poi.pos);
         }
         let exhausted = ctx
             .budget
@@ -1843,10 +1887,11 @@ pub(crate) fn free_bed(
         cache.far_bed_tried.entry(owner).or_default().push(poi.pos);
         if exhausted {
             cache.search_deferred = true;
-            return None;
+            return BedSearch::BudgetDeferred;
         }
+        miss = BedSearch::RouteFailed;
     }
-    None
+    miss
 }
 
 /// One refresh feeds allocation and the following brain phase. Runtime indexes

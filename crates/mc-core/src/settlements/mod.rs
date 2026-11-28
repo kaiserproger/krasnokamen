@@ -18,6 +18,7 @@ pub(crate) mod commands;
 mod commerce;
 pub mod construction;
 pub(crate) mod construction_crafting;
+pub(crate) mod decision_log;
 pub(crate) mod economy;
 pub(crate) mod economy_commands;
 pub(crate) mod economy_customization;

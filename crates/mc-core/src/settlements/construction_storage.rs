@@ -103,19 +103,33 @@ fn is_storehouse(state: &TickState, blueprint: &str) -> bool {
 }
 
 pub(super) fn needed(state: &TickState, record: &SettlementRecord, images: &[Image]) -> bool {
-    if access::projects(record).any(|project| is_storehouse(state, &project.blueprint))
-        || access::orders(record).any(|order| is_storehouse(state, &order.blueprint))
-    {
+    if scheduled(state, record) {
         return false;
     }
-    let missing = !has_storage(record);
+    let (free, total) = slot_counts(images);
+    !has_storage(record) || pressured(free, total)
+}
+
+/// A storehouse or one of its orders already owns the lane.
+fn scheduled(state: &TickState, record: &SettlementRecord) -> bool {
+    access::projects(record).any(|project| is_storehouse(state, &project.blueprint))
+        || access::orders(record).any(|order| is_storehouse(state, &order.blueprint))
+}
+
+/// Fewer than a quarter of the physical bank slots are empty.
+fn pressured(free: usize, total: usize) -> bool {
+    total != 0 && free * 4 < total
+}
+
+/// (empty slots, physical slots) across the settlement's own images.
+fn slot_counts(images: &[Image]) -> (usize, usize) {
     let total: usize = images.iter().map(|image| image.slots.len()).sum();
     let free = images
         .iter()
         .flat_map(|image| &image.slots)
         .filter(|stack| stack.is_empty())
         .count();
-    missing || (total != 0 && free * 4 < total)
+    (free, total)
 }
 
 /// Some means storage owns the next autonomous admission, including its wait.
@@ -125,20 +139,35 @@ pub(super) fn plan(
     id: SettlementId,
     budget: &mut site_turn::SiteBudget,
     images: &[Image],
+    mut diagnostic: Option<&mut decision_log::Plan>,
 ) -> Option<bool> {
     let record = state.settlements.get(id)?;
     if !has_storage(record) || !needed(state, record, images) {
         return None;
     }
-    if state.settlements.member_count(id) == 0
-        || claim_slot(state, id).is_err()
-        || unbound_project(&state.settlements, id).is_some()
-        || !builder_free(state, id)
-    {
+    let gate = if state.settlements.member_count(id) == 0 {
+        Some("storage_no_residents")
+    } else if claim_slot(state, id).is_err() {
+        Some("storage_no_slot")
+    } else if unbound_project(&state.settlements, id).is_some() {
+        Some("storage_unbound")
+    } else if !builder_free(state, id) {
+        Some("storage_no_builder")
+    } else {
+        None
+    };
+    if let Some(reason) = gate {
+        if let Some(log) = diagnostic {
+            log.storage_slots = Some(slot_counts(images));
+            log.verdict = reason;
+        }
         return Some(false);
     }
     let blueprint =
         catalog(state, record).find(|blueprint| blueprint.kind == BuildingKind::Storage)?;
+    if let Some(log) = diagnostic.as_deref_mut() {
+        log.storage_slots = Some(slot_counts(images));
+    }
     let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
     let record = state.settlements.get(id).expect("planning storehouse");
     let pass = site_project(
@@ -154,6 +183,10 @@ pub(super) fn plan(
     // `step_sites` repeats only the autonomous scan, and a storehouse wait is
     // one of the states that blocks it.
     state.settlements.site_sweep.insert(id, sweeps);
+    if let Some(log) = diagnostic {
+        log.storage_site = Some(pass.summary());
+        log.verdict = "storage_turn";
+    }
     site_refusals::observe(state, id, &blueprint.id, pass.report);
     let record = state.settlements.get_mut(id).expect("planning storehouse");
     if record.construction_cursor != pass.cursor {
@@ -187,13 +220,8 @@ impl<'a> Capacity<'a> {
         if blueprint.kind != BuildingKind::Storage || !has_storage(record) {
             return None;
         }
-        let total: usize = images.iter().map(|image| image.slots.len()).sum();
-        let free = images
-            .iter()
-            .flat_map(|image| &image.slots)
-            .filter(|stack| stack.is_empty())
-            .count();
-        if total == 0 || free * 4 >= total {
+        let (free, total) = slot_counts(images);
+        if !pressured(free, total) {
             return None;
         }
         Some(Self {

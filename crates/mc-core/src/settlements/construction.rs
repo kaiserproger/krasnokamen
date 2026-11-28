@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::blueprints::{self, Rotation};
 use super::buildings::{self, BuildingId, BuildingKind};
+use super::decision_log;
 use super::{SettlementId, SettlementRecord, layout};
 use crate::plugin_structures::settlement_builds as executor;
 use crate::tick::TickState;
@@ -1629,6 +1630,46 @@ fn plan(state: &mut TickState, id: SettlementId) {
 /// The settlement's planner pass; its site slices come from `budget`. True
 /// when it opened an autonomous project past the builder gate.
 fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) -> bool {
+    // Sampled under `MC_CORE_PHASE_LOG` only: one record per town per minute of
+    // simulation, carrying the verdict of the pass that made it.
+    if decision_log::enabled()
+        && state.settlements.get(id).is_some()
+        && state
+            .settlements
+            .plan_log
+            .entry(id)
+            .or_default()
+            .claim(state.tick)
+    {
+        let mut diagnostic = decision_log::Plan::default();
+        let started = plan_pass_observed(state, id, budget, Some(&mut diagnostic));
+        diagnostic.emit(
+            id.0,
+            state.tick,
+            state.tick_control.game_ticks(state.tick),
+            started,
+        );
+        return started;
+    }
+    plan_pass_observed(state, id, budget, None)
+}
+
+/// The planner pass itself, with the branch that decided written to
+/// `diagnostic` when one is sampled.
+fn plan_pass_observed(
+    state: &mut TickState,
+    id: SettlementId,
+    budget: &mut site_turn::SiteBudget,
+    mut diagnostic: Option<&mut decision_log::Plan>,
+) -> bool {
+    macro_rules! finish {
+        ($verdict:literal, $result:expr) => {{
+            if let Some(log) = diagnostic {
+                log.verdict = $verdict;
+            }
+            return $result;
+        }};
+    }
     // The settlement's own admission pass owns its stepping flag, and every
     // early return below (a head order, the storehouse, the founding handover,
     // the builder gate, no residents) must leave it cleared: a pass that cannot
@@ -1645,38 +1686,41 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         .is_some_and(|record| access::head_order(record).is_some())
         && founding::plan(state, id)
     {
-        return false;
+        finish!("ordered_founding", false);
     }
     // With a pending order, iron_demand considers only that order's bill.
     if furnace::plan(state, id) {
-        return false;
+        finish!("furnace", false);
     }
     if plan_order(state, id, budget) {
-        return false;
+        finish!("owner_order", false);
     }
     let images = executor::source_images(state, id);
-    if let Some(started) = storage::plan(state, id, budget, &images) {
+    if let Some(started) = storage::plan(state, id, budget, &images, diagnostic.as_deref_mut()) {
         return started;
     }
     if founding::plan(state, id) {
-        return false;
+        finish!("founding", false);
     }
     let Some(record) = state.settlements.get(id) else {
-        return false;
+        finish!("missing_town", false);
     };
     // Autonomous work opens a site only when every active project has its
     // builder and a resident could take one more: a site nobody can build only
     // parks a slot and a lot and holds the planner (Spain seed 100: eight
     // projects for three builders; later a fourth house unbound for 30k ticks).
-    if claim_slot(state, id).is_err()
-        || unbound_project(&state.settlements, id).is_some()
-        || !builder_free(state, id)
-    {
-        return false;
+    if claim_slot(state, id).is_err() {
+        finish!("no_slot", false);
+    }
+    if unbound_project(&state.settlements, id).is_some() {
+        finish!("unbound", false);
+    }
+    if !builder_free(state, id) {
+        finish!("no_builder", false);
     }
     let residents = state.settlements.member_count(id);
     if residents == 0 {
-        return false;
+        finish!("no_residents", false);
     }
     // Keep the priority material worker out of optional street work, not out
     // of the entire planner: another resident can build a funded later kind.
@@ -1688,7 +1732,16 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
     let scan = {
         let record = state.settlements.get(id).expect("planned settlement");
-        scan_sites(state, id, record, &images, &mut sweeps, budget, None)
+        scan_sites(
+            state,
+            id,
+            record,
+            &images,
+            &mut sweeps,
+            budget,
+            diagnostic.as_deref_mut(),
+            None,
+        )
     };
     // Only a pass that ended with no candidate while a walk it advanced still
     // holds a legal lot leaves the settlement stepping (review round 3 C3).
@@ -1704,7 +1757,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     );
     state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
-        return begin_cells(state, site.project, site.bounds, site.cells);
+        finish!(
+            "priority_house_site",
+            begin_cells(state, site.project, site.bounds, site.cells)
+        );
     }
     let funded_kinds = funded_site.is_some();
     if let Some(pass) = funded_site {
@@ -1712,7 +1768,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         record.construction_cursor = pass.cursor;
         record.revision = record.revision.saturating_add(1);
         if let Some(site) = pass.site {
-            return begin_cells(state, site.project, site.bounds, site.cells);
+            finish!(
+                "ordinary_l1_site",
+                begin_cells(state, site.project, site.bounds, site.cells)
+            );
         }
     }
     // A kind's sweep is still running and already holds a legal candidate: its
@@ -1726,7 +1785,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 record.revision = record.revision.saturating_add(1);
             }
         }
-        return false;
+        finish!("sweep_waiting", false);
     }
     let cursor = house_cursor;
     // A funded new building may have no legal lot. Existing houses must still
@@ -1742,11 +1801,23 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // unbound for good and the gate above refuses everything (review B1).
     if access::projects_of(&state.settlements, id).next().is_none()
         && builders::upgrade_staffable(state, id)
-        && let Some((project, species, color)) =
-            preparation::upgrade_project(state, record, &images)
-        && begin(state, project, &species, color)
+        && let Some((project, species, color)) = preparation::upgrade_project_observed(
+            state,
+            record,
+            &images,
+            diagnostic.as_deref_mut().map(|log| &mut log.upgrades),
+        )
     {
-        return true;
+        let started = begin(state, project, &species, color);
+        if let Some(log) = diagnostic.as_deref_mut()
+            && log.upgrades.count != 0
+        {
+            let last = log.upgrades.count - 1;
+            log.upgrades.funded[last].1 = if started { "started" } else { "begin_refused" };
+        }
+        if started {
+            finish!("upgrade", true);
+        }
     }
     if !funded_kinds {
         let record = state.settlements.get_mut(id).expect("planned settlement");
@@ -1766,10 +1837,13 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // verbatim because it is the control patch's `+` side (review wave 2,
     // minor 4).
     let Some(record) = state.settlements.get(id) else {
-        return false;
+        finish!("missing_town_after_upgrade", false);
     };
     if let Some(site) = meadow_site(state, record, residents, &images) {
-        return begin_cells(state, site.project, site.bounds, site.cells);
+        finish!(
+            "meadow",
+            begin_cells(state, site.project, site.bounds, site.cells)
+        );
     }
     // The wall, its gates and the well come before street work: the streets
     // reach every standing building in the radius and owe work without end,
@@ -1779,15 +1853,21 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // 2026-11-24 perimeter gate stood still for 1580 s with a staffed Miner (a
     // certified natural Mine) while 768 cobblestone waited in storage.
     if let Some(site) = fortification_site(state, record, residents, &images) {
-        return begin_cells(state, site.project, site.bounds, site.cells);
+        finish!(
+            "infrastructure",
+            begin_cells(state, site.project, site.bounds, site.cells)
+        );
     }
     if gathering {
-        return false;
+        finish!("gathering", false);
     }
     let Some(site) = street_site(state, record, &images) else {
-        return false;
+        finish!("no_admissible_project", false);
     };
-    begin_cells(state, site.project, site.bounds, site.cells)
+    finish!(
+        "infrastructure",
+        begin_cells(state, site.project, site.bounds, site.cells)
+    )
 }
 /// The next funded piece of the perimeter wall, its gates or the well, from
 /// [`FORTIFY_RESIDENTS`] residents. Each wall stretch, gatehouse or well is a
@@ -3578,6 +3658,9 @@ mod durability_tests;
 #[path = "construction_planner_tests.rs"]
 mod planner_tests;
 
+#[cfg(test)]
+#[path = "construction_diagnostics_tests.rs"]
+mod diagnostics_tests;
 #[cfg(test)]
 #[path = "construction_queue_tests.rs"]
 mod queue_tests;
