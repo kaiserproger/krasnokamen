@@ -37,11 +37,6 @@ def _refused_column(origin: tuple[int, int, int]) -> tuple[int, int]:
     return own, demanded[0]
 
 
-def _entity_rows(steps: ProbeSteps) -> list[dict[str, Any]]:
-    """The client's own entity rows (they carry `passengers`/`vehicle`; the tool rows do not)."""
-    return ((steps.observe().get("entities") or {}).get("entities")) or []
-
-
 def _boat(steps: ProbeSteps, x: float, z: float, radius: float = 3.0) -> dict[str, Any] | None:
     return next((row for row in _rows(steps, 24)
                  if row.get("entity_type") == "minecraft:oak_boat"
@@ -50,6 +45,14 @@ def _boat(steps: ProbeSteps, x: float, z: float, radius: float = 3.0) -> dict[st
 
 def _identity(row: dict[str, Any]) -> dict[str, Any]:
     return {key: row[key] for key in ("entity_id", "entity_uuid", "entity_type")}
+
+
+def _scan_visited_refused_column(state: dict[str, Any], chunk_x: int, chunk_z: int) -> bool:
+    scan = state.get("boat_ground_scan") or {}
+    return (scan.get("reply") in ("land", "air")
+            and scan.get("truncated") is False
+            and any(cell is not None and cell[0] // 16 == chunk_x and cell[2] // 16 == chunk_z
+                    for cell in scan.get("unheld_cells") or []))
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
@@ -70,55 +73,62 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     walk_to_refused_column(steps, origin, chunk_x)
     state = steps.observe()
     x, y, z = state["player"]["x"], state["player"]["y"], state["player"]["z"]
-    # Away from the refused column, so approaching the boat never walks the body into it.
-    # Away from the refused column: east when it lies west of the player, west when it lies east.
+    # Place the boat just clear of the refused column. Its bounding geometry must
+    # include that column in the ground scan's range; this does not prove the scan ran.
+    # The earlier two-block offset let the reverted client move 0.81 blocks and pass.
     side = 1.0 if chunk_x < own else -1.0
-    steps.fixture(f"summon minecraft:oak_boat {x + side * 2.0} {y} {z}")
+    boat_x = x + side * 0.8
+    yaw = 90 if chunk_x < own else -90
+    steps.fixture(f"summon minecraft:oak_boat {boat_x} {y} {z} "
+                  f"{{Rotation:[{yaw}f,0f]}}")
     steps.call("minecraft_wait_ticks", {"ticks": 4})
     receipt = _echo(steps, "mount_refused_column_boat_summon")
     listing = steps.call("minecraft_list_entities", {"radius": 32, "limit": 64})
     steps.report["mount_refused_column_summon"] = {
-        "at": [x + side * 2.0, y, z],
+        "at": [boat_x, y, z],
         "chat": (receipt or {}).get("recent_chat", [])[-4:],
         "types": sorted({row.get("entity_type") for row in listing.get("entities") or []}),
         "count": len(listing.get("entities") or []),
     }
-    steps.wait(lambda _: _boat(steps, x + side * 2.0, z) is not None,
+    steps.wait(lambda _: _boat(steps, boat_x, z) is not None,
                "mount_refused_column_boat_received", timeout_seconds=min(60.0, steps.remaining()))
-    row = _boat(steps, x + side * 2.0, z)
+    row = _boat(steps, boat_x, z)
+    face = chunk_x * 16 + 16 if chunk_x < own else chunk_x * 16
+    bounds = row["bounding_box"]
+    if chunk_x < own:
+        scan_range_includes = bounds["min_x"] >= face and math.floor(bounds["min_x"]) - 1 < face
+    else:
+        scan_range_includes = bounds["max_x"] <= face and math.ceil(bounds["max_x"]) + 1 > face
+    steps.check("mount_refused_column_scan_range_includes_refused_cell", scan_range_includes)
     steps.report["mount_refused_column_boat"] = {
         key: row.get(key) for key in ("entity_id", "entity_uuid", "x", "y", "z")}
     # The approach tool declares only entity_id (its own schema has no entity_type).
     steps.call("minecraft_approach_entity", {"entity_id": row["entity_id"]})
     steps.call("minecraft_interact_entity", {**_identity(row), "hand": "main_hand"})
     steps.call("minecraft_wait_ticks", {"ticks": 3})
-    rows = _entity_rows(steps)
-    boat_rows = [entry for entry in rows if entry.get("type") == "minecraft:oak_boat"]
-    boarded = [entry for entry in boat_rows if entry.get("passengers")]
-    yaw = 0 if chunk_x < own else 180
-    # A boat moves only when its rider drives it, so a short press that moves the boat is the
-    # riding proof (the observation's rows carry no vehicle field for the local player).
-    probe_before = _boat(steps, row["x"], row["z"], radius=6.0)
+    player_id = steps.observe()["player"]["entity_id"]
+    steps.wait(
+        lambda _: player_id in ((_boat(steps, row["x"], row["z"], radius=6.0) or {})
+                                .get("passenger_ids") or []),
+        "mount_beside_refused_column_riding",
+    )
     steps.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
-    steps.call("minecraft_press_inputs", {"keys": ["right"], "ticks": 8})
-    steps.call("minecraft_wait_ticks", {"ticks": 3})
-    probe_after = _boat(steps, row["x"], row["z"], radius=6.0)
-    boat_moved = (probe_before is not None and probe_after is not None
-                  and abs(probe_after["x"] - probe_before["x"]) > 0.05)
-    steps.report["mount_refused_column_riding"] = {
-        "boats": [{key: entry.get(key) for key in ("network_id", "passengers", "vehicle")}
-                  for entry in boat_rows],
-        "boat_before": (probe_before or {}).get("x"),
-        "boat_after": (probe_after or {}).get("x"),
-    }
-    steps.check("mount_beside_refused_column_riding", bool(boarded) or boat_moved)
-    before = steps.observe()
-    # The client's own key mapping: at yaw 0 "right" walks toward -x (see walk_to_refused_column).
-    steps.call("minecraft_press_inputs", {"keys": ["right"], "ticks": 40})
+    before = steps.wait(
+        lambda state: state["player"].get("movement_blocked") is not None
+        or _scan_visited_refused_column(state, chunk_x, origin[2] // 16),
+        "mount_ground_scan_or_refusal_observed",
+    )
+    steps.report["mount_refused_ground_scan"] = before.get("boat_ground_scan")
+    steps.report["mount_refused_ground_scan_blocked"] = before["player"].get("movement_blocked")
+    steps.check("mount_beside_refused_column_not_blocked",
+                before["player"].get("movement_blocked") is None)
+    steps.check("mount_ground_scan_visited_refused_column",
+                _scan_visited_refused_column(before, chunk_x, origin[2] // 16))
+    # Boats use left/right to steer; forward supplies thrust along the fixture's heading.
+    steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 40})
     # Ordered receipt: the read below must be causally after the drive, not a race with it.
     steps.call("minecraft_wait_ticks", {"ticks": 2})
     after = steps.observe()
-    face = chunk_x * 16 + 16 if chunk_x < own else chunk_x * 16
     steps.report["mount_refused_column_drive"] = {
         "refused_chunk": chunk_x, "face": face,
         "before": [before["player"].get("x"), before["player"].get("z")],
