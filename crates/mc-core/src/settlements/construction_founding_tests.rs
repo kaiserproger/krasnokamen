@@ -187,7 +187,14 @@ fn an_outpost_builder_outside_the_civil_radius_still_places_paid_cells() {
     if let Some(record) = state.settlements.get_mut(parent) {
         super::super::bind_builder(record, &project.structure, Some((uuid, None)));
     }
-    executor::fetch(&mut state, uuid, &project.structure, [1, 201, 1], item).unwrap();
+    executor::fetch(
+        &mut state,
+        uuid,
+        &project.structure,
+        executor::Pickup::bank([1, 201, 1]),
+        item,
+    )
+    .unwrap();
     state
         .world
         .ensure_blocking(&rustc_hash::FxHashMap::from_iter([(

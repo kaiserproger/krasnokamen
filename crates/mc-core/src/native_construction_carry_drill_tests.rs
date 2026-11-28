@@ -20,12 +20,29 @@ fn handoff_cut(published: bool) {
     }
     let (state, id, donor, builder, handle) = retained_release(drill.state, true);
     drill.state = state;
+    let fence = item(&drill.state, "minecraft:acacia_fence");
+    let donor_uuid = drill.state.entities.row(donor).uuid;
+    let builder_uuid = drill.state.entities.row(builder).uuid;
+    // Six carried, six owed, four wanted: a full duty must survive part-paid.
+    drill
+        .state
+        .entities
+        .row_mut(donor)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(mc_data::ItemStack::new(fence, 6));
+    drill
+        .state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .carry_pending
+        .insert(donor_uuid, vec![(fence, 6)]);
     drill.state.entities.set_pos(builder, [13.5, 201.0, 14.5]);
     drill.state.tick_control.set_frozen(true);
     drill.run(&[]).unwrap();
     drill.checkpoint();
-    let donor_uuid = drill.state.entities.row(donor).uuid;
-    let builder_uuid = drill.state.entities.row(builder).uuid;
     let donor_endpoint = Endpoint::VillagerCarry { uuid: donor_uuid };
     let builder_endpoint = Endpoint::VillagerCarry { uuid: builder_uuid };
     let donor_before = inventory::load(&drill.state, &donor_endpoint)
@@ -35,12 +52,11 @@ fn handoff_cut(published: bool) {
         .unwrap()
         .slots;
     let before = accounted(&drill.state, id, &handle);
-    let fence = item(&drill.state, "minecraft:acacia_fence");
     crate::plugin_structures::settlement_builds::fetch(
         &mut drill.state,
         builder_uuid,
         &handle,
-        [14, 201, 14],
+        crate::plugin_structures::settlement_builds::Pickup::debtor(donor_uuid, [14, 201, 14]),
         fence,
     )
     .unwrap();
@@ -52,15 +68,6 @@ fn handoff_cut(published: bool) {
         .slots;
     assert_ne!(donor_before, donor_after);
     assert_ne!(builder_before, builder_after);
-    assert!(
-        !drill
-            .state
-            .settlements
-            .get(id)
-            .unwrap()
-            .carry_pending
-            .contains_key(&donor_uuid)
-    );
     assert_eq!(accounted(&drill.state, id, &handle), before);
     let batch = drill.capture_tick(&[]);
     if published {
@@ -97,9 +104,9 @@ fn handoff_cut(published: bool) {
         .carry_pending
         .get(&donor_uuid);
     if published {
-        assert!(duty.is_none());
+        assert_eq!(duty, Some(&vec![(fence, 2)]), "the unpaid duty replays");
     } else {
-        assert_eq!(duty, Some(&vec![(fence, 4)]));
+        assert_eq!(duty, Some(&vec![(fence, 6)]));
     }
     assert_eq!(accounted(&reopened.state, id, &handle), before);
 }

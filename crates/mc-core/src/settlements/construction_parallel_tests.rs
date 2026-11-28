@@ -351,7 +351,13 @@ fn an_unbound_project_cannot_pay_or_haul() {
         .iter()
         .find(|stack| stack.count > 0)
         .map_or(1, |stack| stack.item_id);
-    let fetched = executor::fetch(&mut state, uuid, &handle, [1, 201, 1], item);
+    let fetched = executor::fetch(
+        &mut state,
+        uuid,
+        &handle,
+        executor::Pickup::bank([1, 201, 1]),
+        item,
+    );
     assert!(fetched.is_err(), "an unbound project hauls nothing");
     assert_eq!(chest(&mut state), &stock, "stock is untouched");
 }
