@@ -10,4 +10,9 @@ regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::append_failure
 failing_first = "reported"
 fix_commit = "de1a323b435c304dc84450fc2f48b8133bb8f9cf"
 repro_check = "The fix de1a323b4 is test-only (native_checkpoint_crash_tests.rs joins the journal thread before the tempdir goes); its commit has no non-test hunks, so the patch-mode control has nothing to reverse and a reversal would only restore a teardown race whose failure is a hidden late panic, never an assertion (README:203-208: crash/timeout cannot be a control). The earlier ordering defect (400 ms sleep vs a 2 s injected commit delay) is now structurally gone: the test waits on entered_rx with a 10 s timeout and joins the writer. Kept open: no honest red exists; the ref is green on every tree (20261120T055005-test-vgedac9p and 20/20 repeats under load)."
+# Rejected route (Main, 2026-11-28): a patch that deletes `let work_rx = work_rx;` is not a control.
+# That line exists before the fix too (`git show de1a323b4^:crates/mc-core/src/core/journal.rs` line
+# 720) and on HEAD (journal.rs:793), so removing it injects a new defect instead of reversing the
+# fix. A red run from it proves nothing about this row's teardown/ordering symptom. The row stays
+# open until a test compiles on the real pre-fix tree and fails at its own assertion.
 
