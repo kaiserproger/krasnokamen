@@ -1,0 +1,8 @@
+CIVILIZATION-STREET-VERGE
+  scenario: settlement-map-qa (--scenario verge)
+  assertion: verge_connected = all of ('verge_project_admitted_on_the_status_page', 'verge_obstacle_stands')
+  ref: harness:settlement-map-qa:verge_connected  graphical=True
+  RED observation (funded Mine not admitted on the status page) -> False
+  GREEN observation (both assertions true) -> True
+  ledger read (red): not met, value=False
+  ledger read (green): verdict met

@@ -1,0 +1,6 @@
+test_skip_line_satisfies_the_assertion (tools.harness.test_datapack_worldgen_skip.WorldgenSkipTest.test_skip_line_satisfies_the_assertion) ... ok
+test_start_refusal_does_not_satisfy_the_assertion (tools.harness.test_datapack_worldgen_skip.WorldgenSkipTest.test_start_refusal_does_not_satisfy_the_assertion) ... ok
+test_the_scenario_check_is_false_unless_the_start_completes_and_is_named (tools.harness.test_datapack_worldgen_skip.WorldgenSkipTest.test_the_scenario_check_is_false_unless_the_start_completes_and_is_named) ... ok
+test_writes_the_pack_the_cargo_oracle_uses (tools.harness.test_datapack_worldgen_skip.WorldgenSkipTest.test_writes_the_pack_the_cargo_oracle_uses) ... ok
+Ran 4 tests in 0.403s
+OK
