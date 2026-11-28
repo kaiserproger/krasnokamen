@@ -6,4 +6,12 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Re-port family of receipts/D142/SPAIN-DISPOSITION.md (owner D142/D143: port feature by feature, no wholesale merge; branch wt/SpainInteg 99b3bf0154da vs main 2123 commits ahead). Source commits: 0cd64cdbe (rotate builders across the shun and read the watch once), e1d84f9c5 (count the builder stall window in simulated ticks). Added symbols the disposition table marks missing on main: SHUNNED_PRIORITY, a_builder_shun_lifts_on_its_game_tick_deadline, a_frozen_simulation_does_not_lift_a_builder_shun, a_sole_shunned_native_builder_is_still_assigned, an_unshunned_retrain_candidate_is_bound_before_a_shunned_native_builder, a_frozen_simulation_adds_no_builder_stall_window, a_held_day_clock_does_not_stop_the_builder_stall_window, a_released_builder_is_not_rebound_before_an_unshunned_builder. Nothing is retired from the branch and nothing is merged yet."
-regression = []
+regression = [
+  "cargo:mc-core:settlements::construction::stall_tests::a_builder_shun_lifts_on_its_game_tick_deadline",
+  "cargo:mc-core:settlements::construction::stall_tests::a_frozen_simulation_does_not_lift_a_builder_shun",
+  "cargo:mc-core:settlements::construction::stall_tests::a_sole_shunned_native_builder_is_still_assigned",
+  "cargo:mc-core:settlements::construction::stall_tests::an_unshunned_retrain_candidate_is_bound_before_a_shunned_native_builder",
+  "cargo:mc-core:settlements::construction::stall_tests::a_frozen_simulation_adds_no_builder_stall_window",
+  "cargo:mc-core:settlements::construction::stall_tests::a_held_day_clock_does_not_stop_the_builder_stall_window",
+  "cargo:mc-core:settlements::construction::stall_tests::a_released_builder_is_not_rebound_before_an_unshunned_builder",
+]
