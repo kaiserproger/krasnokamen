@@ -1,12 +1,13 @@
 # D154 — the refreshed patches, audited against their Git pre-images
 
 Owner D154, 2026-11-28 18:05. Source: `0bf88beb5` (PatchRefresh) merged as `e0b771447`.
-Method the owner set: for every symbol a patch's minus side removes,
-`git show <fix>^1:<path> | grep -F '<symbol>'` must find it. A symbol that only ever
-appears on the plus side, or a call the fix itself introduced, means the patch is not a
-control.
+The source commit changed 21 patch files: 20 additions and one modification.
+For each original patch, check its old-side symbols against `git show <fix>^1:<path>`.
+A fallback or helper invented on the old side is not a control. If the fix added
+calls to a helper, reversing those calls without replacing the helper restores
+the original dispatch behavior.
 
-## Result: 8 of 20 are not controls, and all 8 are back to `open`
+## Result: 8 of 21 are not controls, and all 8 are `open`
 
 | row | fix | first symbol the pre-image lacks | note |
 |---|---|---|---|
@@ -23,7 +24,7 @@ Each row keeps its real `fix_commit`, stays `open`, and carries the finding in i
 text. Withdrawn in `48f50c842` (seven patches) and `d35ddfee7` (the perf **patch** — the
 earlier wording "withdrew the receipt" was wrong).
 
-## The 12 that pass
+## The 13 without missing old-side code
 
 `BATTLE-DISMOUNTED-RIDER-SKATES-TO-SWEEP-POINT`, `HARNESS-CIV-GATE-BIRTH-CAPTURE-HITS-THE-WALL`,
 `HARNESS-CIV-GATE-LOCAL-SCAN-UNLOADED`, `HARNESS-CIV-GATE-OBSERVER-WAIT-HANGS`,
@@ -31,11 +32,13 @@ earlier wording "withdrew the receipt" was wrong).
 `HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT`, `HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK`,
 `HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR`,
 `HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK`, `SETTLEMENT-HOUSE-BILL-STALLS-BELOW-COBBLESTONE-DEMAND`,
-`VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER`.
+`VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER`, `DIMENSION-SWITCH-KNOCKBACK-DISCONNECT`.
 
-Every identifier on their minus side is present in `git show <fix>^1:<path>`. They are
-promotable in form; whether each can be promoted today depends on its own receipt shape
-(the civ-gate and java-matrix rows are client-surface and need their graphical run).
+An independent comparison of the original patch blobs, trimming indentation and
+ignoring comments, found their removed code lines in `git show <fix>^1:<path>`.
+This includes the modified dimension-switch patch (`5810902c7^1`,
+`crates/mc-edge/src/server/pump.rs`). A textual match is not a red/green run
+and does not make a row promotable on its own.
 
 ## FALL-001 rebuild
 
@@ -51,3 +54,30 @@ A line-level comparison (`the removed line must exist verbatim in the preimage`)
 a legitimate pre-image line can differ by whitespace or by a later refactor. The identifier
 test is the one that matches the owner's rule, and it is what this table uses. Both tests
 agreed on all eight rejections.
+
+## D154b correction (owner, 18:10)
+
+The owner sharpened the criterion: a symbol on the minus side can exist and still not
+be the pre-image — `FALL-001`'s minus side *replaces* the real `dragon_egg` call with a
+stub `false`, so `grep <symbol>` passes while the control is void. The authoritative test
+is byte-exact: each hunk's minus side must equal the corresponding pre-image lines; one
+differing line makes the patch no control and the row stays `open`.
+
+Status of that stricter pass:
+- The 8 rejections above stand: for each, the minus side names code the pre-image does
+  not contain *at all* (`FALL-001`, `PLACE-001` name files absent at `^1`;
+  `PERF-RECEIPT` and `TEST-NATIVE-HEALTH` name functions the fix created;
+  `CIV-IRON`, `HARNESS-REGRESSIONS-CLIENT-REBUILDS`,
+  `HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION` and
+  `SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES` name invented identifiers).
+- The byte-exact comparison of the remaining 13 is running in the `PatchRefresh` lane on
+  the real trees (`git apply -R`, then compare the touched regions with
+  `git show <fix>^1:<path>`). My own textual screen is not authoritative: a hunk's minus
+  lines can be split by context lines, and context comes from HEAD, so a naive
+  contiguous-block match over-flags. Any row that pass turns red gets withdrawn the same
+  way and listed here.
+- `FALL-001`'s red set is narrower than I first wrote: reversing the calls in
+  `crates/mc-core/src/tick/input/interact.rs` must red
+  `interact_parity_dragon_egg_use_teleports` (`crates/mc-core/src/interact_parity_tests.rs:75`);
+  `interact_parity_dragon_egg_conserves_block_before_falling` (line 590) calls the helper
+  directly at line 593, so a green there is not a control failure.

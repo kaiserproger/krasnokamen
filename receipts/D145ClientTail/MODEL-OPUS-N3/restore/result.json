@@ -1,0 +1,198 @@
+{
+  "client": "native",
+  "client_binary": {
+    "dirty": false,
+    "head": "bc7429a36c29d09429a0c84bd66cf0ba0e6b983e",
+    "manifest_path": "/run/media/kaiserroman/games/solaris-work/pins/bc7429a36c29-client-x86_64-unknown-linux-gnu-incr/manifest.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/pins/bc7429a36c29-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client",
+    "sha256": "0613be9d0298673792dd4e6fd153db31a3a769367842842abaa1c27ee51c1c38"
+  },
+  "commands": [
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/6d3f1306b309-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+      "--config",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/scene-shot.toml",
+      "--no-console"
+    ],
+    [
+      "/run/media/kaiserroman/games/solaris-work/pins/bc7429a36c29-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client",
+      "play",
+      "--profile",
+      "offline-test",
+      "--server",
+      "127.0.0.1:48175",
+      "--username",
+      "SceneShot",
+      "--automation",
+      "--mcp-http",
+      "127.0.0.1:0",
+      "--windowed",
+      "--data-dir",
+      "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data",
+      "--runtime-dir",
+      "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/runtime",
+      "--artifact-dir",
+      "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/artifacts"
+    ]
+  ],
+  "details": {
+    "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/artifacts",
+    "binary_path": "/run/media/kaiserroman/games/solaris-work/pins/bc7429a36c29-client-x86_64-unknown-linux-gnu-incr/krasnokamen-client",
+    "binary_sha256": "0613be9d0298673792dd4e6fd153db31a3a769367842842abaa1c27ee51c1c38",
+    "binary_status": "ready",
+    "client_latency_ms": 0,
+    "command_index": 1,
+    "descriptor": {
+      "endpoint": "http://127.0.0.1:39869/mcp",
+      "instance_id": "native-3829300-1795863462949730714",
+      "pid": 3829300,
+      "profile": "offline-test",
+      "protocol_versions": [
+        "2025-11-25"
+      ],
+      "started_unix_ms": "1795863465231",
+      "token_file": "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/runtime/native-3829300-1795863462949730714.token"
+    },
+    "descriptor_path": "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/runtime/native-3829300-1795863462949730714.json",
+    "head_skin_pack": "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/head-skin-pack",
+    "headless": false,
+    "initialized": true,
+    "launch_status": "ready",
+    "log": "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/native-client.log",
+    "named_scenario": {
+      "commands_cwd": [
+        "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail",
+        "/run/media/kaiserroman/games/solaris-work/wt/CTailModels"
+      ],
+      "does_not_prove": "one fixture and one camera per shot; the visual review of each frame stays with the operator",
+      "evidence": "graphical",
+      "expected_tests": [],
+      "fixture": "private native client on the scene's own fixture world, windowed capture",
+      "id": "native-player-head",
+      "manifest": null,
+      "prerequisites": [
+        "xvfb"
+      ],
+      "profile": "scene-shot",
+      "proves": "checks the received player-head pose and the framed shots",
+      "repo_revisions": {
+        "krasnokamen": "6d3f1306b30991535eff7be40208369df6cd12d8",
+        "krasnokamen-default-plugins": "635a05dc93552df3e0e69c96970cf3402c94caf7",
+        "krasnokamen-loader": "d508697926173402fb8b52ca4a2d90492127c675"
+      },
+      "scenario_id": "native-player-head",
+      "seed": null,
+      "selector": [],
+      "sources": [
+        "tools/harness/player_head_scene.json"
+      ]
+    },
+    "operator_fixture": [
+      {
+        "bypassesPlayerLimit": false,
+        "level": 4,
+        "name": "SceneShot",
+        "uuid": "313555a5-c3e0-3d79-b235-d5e2250f2842"
+      }
+    ],
+    "operator_fixture_path": "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/ops.json",
+    "pid": 3829300,
+    "protocol_version": "2025-11-25",
+    "resource_paths": {
+      "KRASNOKAMEN_CLIENT_ASSET_INDEX": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets/asset-index.json",
+      "KRASNOKAMEN_CLIENT_ASSET_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/assets",
+      "KRASNOKAMEN_CLIENT_DATA_DIR": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/data/vanilla",
+      "KRASNOKAMEN_CLIENT_RESOURCE_ROOT": "/run/media/kaiserroman/games/solaris-work/qa-armada/template-data/resources"
+    },
+    "root": "/run/media/kaiserroman/games/solaris-work/wt/CTailModels",
+    "runtime_dir": "/run/media/kaiserroman/games/solaris-work/wt/CTailModels/.analysis/harness-runs/native-rb8jifjl/runtime",
+    "scenario": {
+      "assertions": {
+        "head-block_gpu_complete": true,
+        "head-block_image_size": true,
+        "head-empty_gpu_complete": true,
+        "head-empty_image_size": true,
+        "head-none_gpu_complete": true,
+        "head-none_image_size": true,
+        "head-worn_gpu_complete": true,
+        "head-worn_image_size": true,
+        "head_back_camera_unchanged": true,
+        "head_front_camera_unchanged": true,
+        "in_play": true,
+        "placed_head_hat_layer_pixels": true,
+        "placed_head_renders": true,
+        "teleport_arrived": true,
+        "worn_head_back_unchanged": true,
+        "worn_head_renders": true
+      },
+      "bare_head_back_hat_pixels": 46,
+      "fixture_commands": [],
+      "id": "scene-shot",
+      "passed": true,
+      "placed_head_changed_pixels": 12738,
+      "placed_head_hat_layer_pixels": 9822,
+      "placed_head_roi": [
+        580,
+        520,
+        700,
+        655
+      ],
+      "worn_head_added_back_hat_pixels": 0,
+      "worn_head_back_changed_pixels": 59,
+      "worn_head_back_hat_pixels": 44,
+      "worn_head_back_roi": [
+        600,
+        400,
+        680,
+        510
+      ],
+      "worn_head_changed_pixels": 8929,
+      "worn_head_hat_layer_pixels": 6887
+    },
+    "screenshots": [
+      "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/screenshots/head-empty.png",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/screenshots/head-block.png",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/screenshots/head-worn.png",
+      "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/screenshots/head-none.png"
+    ],
+    "seed": 100,
+    "server_binary_path": "/run/media/kaiserroman/games/solaris-work/pins/6d3f1306b309-server-x86_64-unknown-linux-gnu-incr/krasnokamen",
+    "server_binary_sha256": "df6bd41cfa7cb40b6e2e0a133f357319ea0270cd41da0c8973ca487add7887ce",
+    "settings": {
+      "fov": 70,
+      "graphics_preset": "low",
+      "render_distance": 8
+    },
+    "settings_path": "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/xdg/krasnokamen-client/client-settings.json",
+    "settings_sha256": "4a5237e504963c6a0c67f2176644453a11348da2d79ba93d0739df87cebb5a37",
+    "validation_mode": "graphical",
+    "window_focus": {
+      "display": ":113",
+      "mechanism": "XRaiseWindow+XSetInputFocus",
+      "pid": 3829300,
+      "window_id": 2097154,
+      "x_server_focus_verified": true
+    }
+  },
+  "duration_seconds": 43.593,
+  "ended_at": "2026-11-28T10:58:17+00:00",
+  "error": null,
+  "exits": [
+    0,
+    -15
+  ],
+  "logs": [
+    "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/server.log",
+    "/run/media/kaiserroman/games/solaris-work/wt/D145ClientTail/.analysis/validation/20261128T105733-native-player-head-fkhr8a0b/xvfb.log",
+    ".analysis/validation/20261128T105733-native-player-head-fkhr8a0b/native-client.log"
+  ],
+  "profile": "scene-shot",
+  "scope": "real-client",
+  "started_at": "2026-11-28T10:57:31+00:00",
+  "status": "passed",
+  "tree": {
+    "dirty": false,
+    "head": "6d3f1306b30991535eff7be40208369df6cd12d8",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
