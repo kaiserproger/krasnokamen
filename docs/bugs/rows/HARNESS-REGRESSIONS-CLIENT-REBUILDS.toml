@@ -14,6 +14,6 @@ regression = [
   "python:tools.harness.test_regressions:ReleasePinTests.test_explicit_unregistered_pin_is_refused_without_building",
   "python:tools.harness.test_regressions:ReleasePinTests.test_negative_control_accepts_only_its_own_registered_pin",
 ]
-fix_commit = "patch:c245a8f6e98965f3673f067dba2ff7d7e318f3043c128273496173cb62625ab6"
+fix_commit = "a39164dc9"
 repro_check = "Blocked for a real reason only (the earlier \"defect-injection mode\" claim was wrong: patch mode never needed it). The fix (a39164dc9) is a pin-lookup rewrite plus removals; later commits rewrote the same lines (no HEAD equivalent), and at the fix commit the refs need APIs added later, so their control is unrunnable. Evidence of the runner-lane contract the fix established: receipts/HarnessPins/main-target-fence-{red,green}.log, receipts/HarnessPins/main-relabel-{red,green}.log, receipts/HarnessPins/refusal.log, receipts/HarnessPins/unit.log and receipts/HarnessPins/negative-pin.log; the refs themselves are ReleasePinTests, green on HEAD."
 failing_first = "not recorded"
