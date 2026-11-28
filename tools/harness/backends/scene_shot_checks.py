@@ -1748,3 +1748,117 @@ def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("crowd_entities_rendered",
                 probe.report["crowd_eligible"] >= 1000 and probe.report["crowd_submitted"] >= 1000)
     probe.check("crowd_stream_bounded", probe.report["crowd_dropped_over_budget"] > 0)
+
+
+def check_cminor_models(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-BABY-CHICKEN-LAYOUT, CLIENT-CLIMATE-COW-HORNS, CLIENT-WARM-NAUTILUS-ROOT.
+
+    One pad, one camera and one CPU-path subject per shot (the private native client is
+    asked to summon only the shot's own entity). `entity_extraction.entities` names the
+    rig each binding selected and `entity_layer_geometry` carries that rig's own world
+    bounds, so a frame proves which authored rig drew and what silhouette it submitted:
+
+    * baby chicken: the child rig (`chicken_baby`) with its feet on the pad top, not the
+      adult-style stack that floated above it;
+    * climate cows: the `cold_cow` / `warm_cow` (and `*_baby`) rigs the climate variant
+      selects, with the jar's own height-to-width silhouette, instead of the temperate
+      `cow` rig the pre-image fell back to;
+    * warm zombie nautilus: the authored `warm_zombie_nautilus` rig with geometry down at
+      its feet, instead of an unresolvable binding that drew no warm shell at all.
+
+    A rig the client cannot resolve lands in `unrendered` and reports no layer, so a
+    missing authored model is the row's own symptom, never a fixture miss; the scene's
+    `require_entities` dumps plus `eligible` keep a summon that never reached the client
+    out of the green path.
+    """
+    names = ("empty", "chicken", "cold-cow", "cold-calf", "warm-cow", "warm-calf", "nautilus")
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    for name in names[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    probe.check("empty_frame_has_no_entity_layer", not empty_layers)
+    # The pad top is y=160; every subject is summoned standing on it.
+    ground = 160.0
+
+    def subject(name: str, types: tuple[str, ...], rig: str):
+        frame = shots[name][0]
+        extraction = frame.get("entity_extraction") or {}
+        records = extraction.get("entities") or []
+        dump = artifact / f"cminor-{name}-entities.json"
+        dumped = []
+        if dump.is_file():
+            dumped = (json.loads(dump.read_text()).get("entities") or [])
+        record = next((entry for entry in records
+                       if entry.get("entity_type") in types and entry.get("rig") == rig), None)
+        layers = [layer for layer in (extraction.get("entity_layer_geometry") or [])
+                  if str(layer.get("material") or "") == "EntityCutout"
+                  and int(layer.get("indices") or 0) > 0]
+        layer = max(layers, key=lambda entry: int(entry.get("indices") or 0)) if layers else None
+        probe.report[f"cminor_{name}_records"] = records
+        probe.report[f"cminor_{name}_unrendered"] = extraction.get("unrendered")
+        probe.report[f"cminor_{name}_dump_entities"] = [entry.get("entity_type") for entry in dumped]
+        probe.report[f"cminor_{name}_crowd"] = int(extraction.get("crowd") or 0)
+        probe.check(f"{name}_reached_client",
+                    int(extraction.get("eligible") or 0) >= 1
+                    and any(entry.get("entity_type") in types for entry in dumped))
+        probe.check(f"{name}_cpu_path", int(extraction.get("crowd") or 0) == 0)
+        probe.report[f"cminor_{name}_rig"] = (record or {}).get("rig")
+        if record is not None:
+            probe.report[f"cminor_{name}_texture"] = record.get("texture")
+        if layer is None:
+            probe.report[f"cminor_{name}_spans"] = None
+            return None
+        spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 5)
+                 for axis in range(3)]
+        probe.report[f"cminor_{name}_indices"] = int(layer.get("indices") or 0)
+        probe.report[f"cminor_{name}_spans"] = spans
+        probe.report[f"cminor_{name}_min_y"] = round(float(layer["min"][1]), 4)
+        return record, layer, spans
+
+    chicken = subject("chicken", ("minecraft:chicken",), "chicken_baby")
+    probe.check("baby_chicken_authored_rig_selected", chicken is not None)
+    chick_ground = None
+    if chicken is not None:
+        _record, layer, spans = chicken
+        chick_ground = round(float(layer["min"][1]) - ground, 4)
+        probe.report["cminor_chicken_ground_offset"] = chick_ground
+        probe.check("baby_chicken_feet_stand_on_the_floor",
+                    abs(float(layer["min"][1]) - ground) <= 0.02)
+        height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
+        probe.report["cminor_chicken_height_over_width"] = height_over_width
+        probe.check("baby_chicken_child_silhouette",
+                    height_over_width is not None and 0.4 <= height_over_width <= 1.6)
+
+    for name, types, rig in (
+        ("cold-cow", ("minecraft:cow",), "cold_cow"),
+        ("cold-calf", ("minecraft:cow",), "cold_cow_baby"),
+        ("warm-cow", ("minecraft:cow",), "warm_cow"),
+        ("warm-calf", ("minecraft:cow",), "warm_cow_baby"),
+    ):
+        entry = subject(name, types, rig)
+        probe.check(f"{rig}_authored_rig_selected", entry is not None)
+        if entry is None:
+            continue
+        _record, layer, spans = entry
+        probe.check(f"{rig}_stands_on_the_floor",
+                    abs(float(layer["min"][1]) - ground) <= 0.02)
+        height_over_width = round(spans[1] / spans[0], 4) if spans[0] else None
+        probe.report[f"cminor_{name}_height_over_width"] = height_over_width
+
+    nautilus = subject("nautilus", ("minecraft:zombie_nautilus",), "warm_zombie_nautilus")
+    probe.check("warm_nautilus_authored_rig_selected", nautilus is not None)
+    if nautilus is not None:
+        _record, layer, spans = nautilus
+        probe.report["cminor_nautilus_ground_offset"] = round(float(layer["min"][1]) - ground, 4)
+        probe.check("warm_nautilus_shell_reaches_its_feet",
+                    abs(float(layer["min"][1]) - ground) <= 0.02)
+        depth_over_width = round(spans[2] / spans[0], 4) if spans[0] else None
+        probe.report["cminor_nautilus_depth_over_width"] = depth_over_width
+    probe.report["visual_review_required"] = [
+        "Inspect chicken/cold-cow/cold-calf/warm-cow/warm-calf/nautilus frames: the rig name "
+        "and bounds prove which model drew and its extent, not every texel."
+    ]

@@ -32,6 +32,7 @@ from .scene_shot_checks import (
     check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
     check_toasts,
     check_use_pose,
+    check_cminor_models,
     check_worn_head,
     player_head_skin_pack,
 )
@@ -64,6 +65,7 @@ NAMED_FIXTURES = {
     "native-entity-falling-block": "entity_falling_block_scene.json",
     "native-entity-lightning": "entity_lightning_scene.json",
     "native-baby-armor": "baby_armor_scene.json",
+    "native-cminor-models": "cminor_models_scene.json",
     "native-entity-bogged": "bogged_scene.json",
     "native-entity-stray": "stray_scene.json",
     "native-wither-skull": "wither_skull_scene.json",
@@ -406,6 +408,8 @@ def run(
                 check_entity_lightning(probe, artifact)
             elif ctx.scenario_id == "native-baby-armor":
                 check_baby_armor(probe, artifact)
+            elif ctx.scenario_id == "native-cminor-models":
+                check_cminor_models(probe, artifact)
             elif ctx.scenario_id == "native-entity-bogged":
                 check_entity_bogged(probe, artifact)
             elif ctx.scenario_id == "native-entity-stray":

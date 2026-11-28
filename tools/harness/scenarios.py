@@ -1049,6 +1049,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the armour layer's own bbox (`entity_extraction.entity_layer_geometry`, CM-4, the largest `Armor*` slice) as the scale-free ratio depth/width (`armour_z_over_x_in_range` 1.00..1.15): measured on the pair's own pinned clients before the ledger pair, the jar's `createBabyArmorMeshSet` shells span 9.02 x 12.86 x 9.66 px, ratio 1.071, against the hand-fitted pre-image's 16.38 x 16.13 x 10.50, ratio 0.641; `baby_armor_cpu_path` holds the fixture on the CPU path and the yaw-0 summon keeps x and z apart",
         limits="the drowned family's shells' own bounding depths only; the shoulder texels (the see-through row), the legging band under the boots and the generic `armor_baby_*` reachability stay with MODEL-OPUS-N5/N7 and their own witnesses, and the pair is recorded in docs/bugs/promotions/MODEL-OPUS-N1.hunks.md",
     ),
+    "native-cminor-models": _entry(
+        id="native-cminor-models", summary="A baby chicken, climate cows and the warm nautilus draw their authored rigs",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-cminor-models", requires=("xvfb",),
+        sources=("tools/harness/cminor_models_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one CPU-path subject per shot at a fixed pad and camera, HUD default: a baby temperate chicken (`IsBaby:1b`), the cold and warm adult cow and calf (`variant:'minecraft:cold'`/`'minecraft:warm'`), and a warm zombie nautilus (`variant:'minecraft:warm'`), each summoned `NoAI` with `Rotation:[0f,0f]`; no subject is a `crowd::KINDS` member, so every rig reports its own layer geometry",
+        proves="per shot, `entity_extraction.entities` names the rig the binding selected (`chicken_baby`, `cold_cow`, `cold_cow_baby`, `warm_cow`, `warm_cow_baby`, `warm_zombie_nautilus`) and the largest `EntityCutout` layer's world bounds show that rig standing on the pad top (y=160) - the child chick's planar feet, the climate cows' hooves and the warm nautilus's shell/feet; the baby chick's height/width band separates the child assembly from the adult-style stack",
+        limits="one camera and one frame per subject; the cold muzzle's pink island, the warm horn bends and every texel stay unit-covered (krasnokamen_models::tests), and the frames still need a visual review",
+    ),
     "native-entity-bogged": _entry(
         id="native-entity-bogged", summary="A bogged submits the 26.3 rig's own cube layer",
         owner="core:harness", evidence="graphical", profile="scene-shot",
