@@ -38,10 +38,11 @@ Loader that ships, the code path the row blames is absent.
 
 ## Consequence
 
-Not a blocker for the release, and not a fixable queue item by promotion. If a
-26.1.2 Fabric admission is required, it belongs to the A8 multi-version gate,
-which runs a real 26.1.2 client; that run — not a ledger promotion — is what
-would close this row.
+Not a known failure of Loader `main`. To verify the original failure, run
+Fabric 26.1.2 with API 0.155.2 through startup and entry to Play on the Loader
+fix and its pre-image. A8's mixed-version check counts toward this proof only
+if it uses that Fabric/API pair. A passing run is evidence, not a ledger
+promotion; the row remains open.
 
 The 26.3 counterpart (`harness:loader-live:loader-fabric-screen-admission` on
 Loader `d50869792617`) passes and is recorded on
