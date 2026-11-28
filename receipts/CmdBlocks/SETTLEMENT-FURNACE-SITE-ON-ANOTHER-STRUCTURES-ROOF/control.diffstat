@@ -1,0 +1,4 @@
+== row SETTLEMENT-FURNACE-SITE-ON-ANOTHER-STRUCTURES-ROOF
+== reverse docs/bugs/fix-patches/SETTLEMENT-FURNACE-SITE-ON-ANOTHER-STRUCTURES-ROOF.patch
+ .../src/settlements/construction_furnace.rs        | 30 +---------------------
+ 1 file changed, 1 insertion(+), 29 deletions(-)

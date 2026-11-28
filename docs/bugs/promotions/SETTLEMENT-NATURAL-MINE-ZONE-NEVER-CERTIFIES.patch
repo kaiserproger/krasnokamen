@@ -2,24 +2,6 @@ diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/set
 index 0e2c120f2..06ce4baf0 100644
 --- a/crates/mc-core/src/settlements/autonomy.rs
 +++ b/crates/mc-core/src/settlements/autonomy.rs
-@@ -65,6 +65,17 @@ struct NaturalCandidate {
-     after_resident: Option<uuid::Uuid>,
- }
- 
-+/// Game ticks a candidate may wait for a *resident but unsimulated* entrance
-+/// chunk before it is dropped. The bound is its age (`queued_at`), not a pass
-+/// counter: one probe queues a Mine plus up to sixteen LumberCamp candidates, and
-+/// a per-candidate counter would multiply the stall by that batch. The chunk is
-+/// simulated again as soon as the player walks over the village - that is what
-+/// the wait is for. An entrance chunk that is no longer resident is dropped at
-+/// once: nothing can simulate it until a ticket reaches the zone, and that branch
-+/// only happens after eviction (the entrance column was read when the candidate
-+/// was queued).
-+const NATURAL_ZONE_ENTRANCE_HOLD_TICKS: u64 = 3200;
-+
- fn adopted_marker(source: &str) -> String {
-     format!("settlement-village:{source}")
- }
 @@ -273,7 +284,9 @@ fn advance(
          }
      }

@@ -1,0 +1,2 @@
+ crates/mc-core/src/settlements/construction_site_refusals.rs | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)

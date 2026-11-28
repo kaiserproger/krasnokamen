@@ -1,0 +1,4 @@
+== row SETTLEMENT-HARVEST-REOPENS-FARM-REPAIR
+== reverse docs/bugs/fix-patches/SETTLEMENT-HARVEST-REOPENS-FARM-REPAIR.patch
+ crates/mc-core/src/plugin_structures/settlement_builds.rs | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)

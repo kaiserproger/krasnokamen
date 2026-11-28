@@ -1,0 +1,23 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -399,7 +399,10 @@
+             0
+         };
+         for cell in record.cells[index].iter().take(completed).rev() {
+-            if !seen.insert(cell.at) || free_soil_work(target, cell) {
++            if !seen.insert(cell.at)
++                || free_soil_work(target, cell)
++                || harvestable_crop(target, cell)
++            {
+                 continue;
+             }
+             let now = target
+@@ -648,6 +651,7 @@
+         if !seen.insert(cell.at)
+             || cell.state == target.registry.states.air
+             || free_soil_work(target, cell)
++            || harvestable_crop(target, cell)
+         {
+             continue;
+         }

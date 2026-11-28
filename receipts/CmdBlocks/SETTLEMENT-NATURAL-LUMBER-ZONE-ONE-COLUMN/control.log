@@ -1,0 +1,200 @@
+mem-run: 299G free, below 300G: running slot-gc --delete on idle slots
+mem-run: slot-gc: mimalloc: option 'show_errors': 0
+mem-run: slot-gc: mimalloc: option 'show_stats': 1
+mem-run: slot-gc: mimalloc: option 'verbose': 1
+mem-run: slot-gc: mimalloc: option 'eager_commit': 1
+mem-run: slot-gc: mimalloc: option 'arena_eager_commit': 2
+mem-run: slot-gc: mimalloc: option 'purge_decommits': 1
+mem-run: slot-gc: mimalloc: option 'allow_large_os_pages': 0
+mem-run: slot-gc: mimalloc: option 'reserve_huge_os_pages': 0
+mem-run: slot-gc: mimalloc: option 'reserve_huge_os_pages_at': -1
+mem-run: slot-gc: mimalloc: option 'reserve_os_memory': 0
+mem-run: slot-gc: mimalloc: option 'deprecated_segment_cache': 0
+mem-run: slot-gc: mimalloc: option 'deprecated_page_reset': 0
+mem-run: slot-gc: mimalloc: option 'abandoned_page_purge': 0
+mem-run: slot-gc: mimalloc: option 'deprecated_segment_reset': 0
+mem-run: slot-gc: mimalloc: option 'eager_commit_delay': 1
+mem-run: slot-gc: mimalloc: option 'purge_delay': 10
+mem-run: slot-gc: mimalloc: option 'use_numa_nodes': 0
+mem-run: slot-gc: mimalloc: option 'limit_os_alloc': 0
+mem-run: slot-gc: mimalloc: option 'os_tag': 100
+mem-run: slot-gc: mimalloc: option 'max_errors': 16
+mem-run: slot-gc: mimalloc: option 'max_warnings': 16
+mem-run: slot-gc: mimalloc: option 'max_segment_reclaim': 8
+mem-run: slot-gc: mimalloc: option 'destroy_on_exit': 0
+mem-run: slot-gc: mimalloc: option 'arena_reserve': 1048576
+mem-run: slot-gc: mimalloc: option 'arena_purge_mult': 10
+mem-run: slot-gc: mimalloc: option 'purge_extend_delay': 1
+mem-run: slot-gc: mimalloc: process init: 0x7081d51e8200
+mem-run: slot-gc: mimalloc: secure level: 0
+mem-run: slot-gc: mimalloc: mem tracking: none
+mem-run: slot-gc: slot-a: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 18 superseded incremental sessions (2.3 GiB); kept units by reason: foreign 1797, live 23, none 475; 393 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-aa: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-ab: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-ac: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-ad: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-ae: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-af: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-ag: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-b: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-c: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-d: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-e: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-f: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-g: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-h: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-i: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-j: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-k: BUSY (CARGO_TARGET_DIR of pid 2705127, 2721112, 2722364), skipped
+mem-run: slot-gc: slot-l: BUSY (CARGO_TARGET_DIR of pid 2827321, 2827393, 2827394), skipped
+mem-run: slot-gc: slot-m: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-n: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-o: BUSY (pool lock held), skipped
+mem-run: slot-gc: slot-p: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: foreign 766, live 8, none 55; 65 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-q: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-r: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: foreign 725, live 4, none 132; 140 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-s: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: foreign 602, live 8, none 57; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-t: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-u: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-v: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-w: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-x: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-y: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: slot-z: deleted 0 dead units (0.0 GiB), 0 dead incremental dirs (0.0 GiB) and 0 superseded incremental sessions (0.0 GiB); kept units by reason: -; 0 incremental dirs unattributed (kept)
+mem-run: slot-gc: total: deleted 2.3 GiB
+mem-run: slot-gc: heap stats:     peak       total       freed     current        unit       count   
+mem-run: slot-gc:   reserved:     0           0           0           0                                ok
+mem-run: slot-gc:  committed:     0           0           0           0                                ok
+mem-run: slot-gc:      reset:     0      
+mem-run: slot-gc:     purged:     0      
+mem-run: slot-gc:    touched:     0           0           0           0                                ok
+mem-run: slot-gc:   segments:     0           0           0           0                                ok
+mem-run: slot-gc: -abandoned:     0           0           0           0                                ok
+mem-run: slot-gc:    -cached:     0           0           0           0                                ok
+mem-run: slot-gc:      pages:     0           0           0           0                                ok
+mem-run: slot-gc: -abandoned:     0           0           0           0                                ok
+mem-run: slot-gc:  -extended:     0      
+mem-run: slot-gc:  -noretire:     0      
+mem-run: slot-gc:      mmaps:     0      
+mem-run: slot-gc:    commits:     0      
+mem-run: slot-gc:     resets:     0      
+mem-run: slot-gc:     purges:     0      
+mem-run: slot-gc:    threads:     0           0           0           0                                ok
+mem-run: slot-gc:   searches:     0.0 avg
+mem-run: slot-gc: mimalloc: using 1 numa regions
+mem-run: slot-gc: numa nodes:     1
+mem-run: slot-gc:    elapsed:    57.490 s
+mem-run: slot-gc:    process: user: 16.087 s, system: 15.222 s, faults: 1, rss: 88.6 MiB
+mem-run: slot-gc: mimalloc: process done: 0x7081d51e8200
+mem-run: scope -p MemoryMax=12G -p MemorySwapMax=1G -p CPUQuota=800% -p CPUWeight=50 nice=19 exclusive=0 perf=0 cpus=all slice=solaris-heavy.slice target=/run/media/kaiserroman/games/solaris-work/targets/slot-l expect=10368MiB key='python3 -m tools.harness run test -p mc-core --lib natural_lumber_camp_certifies_the_grove_not_one_tree_column'
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x7477d8b7d200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:     0.028 s
+   process: user: 0.019 s, system: 0.010 s, faults: 0, rss: 13.3 MiB
+mimalloc: process done: 0x7477d8b7d200
+mimalloc: option 'show_errors': 0
+mimalloc: option 'show_stats': 1
+mimalloc: option 'verbose': 1
+mimalloc: option 'eager_commit': 1
+mimalloc: option 'arena_eager_commit': 2
+mimalloc: option 'purge_decommits': 1
+mimalloc: option 'allow_large_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages': 0
+mimalloc: option 'reserve_huge_os_pages_at': -1
+mimalloc: option 'reserve_os_memory': 0
+mimalloc: option 'deprecated_segment_cache': 0
+mimalloc: option 'deprecated_page_reset': 0
+mimalloc: option 'abandoned_page_purge': 0
+mimalloc: option 'deprecated_segment_reset': 0
+mimalloc: option 'eager_commit_delay': 1
+mimalloc: option 'purge_delay': 10
+mimalloc: option 'use_numa_nodes': 0
+mimalloc: option 'limit_os_alloc': 0
+mimalloc: option 'os_tag': 100
+mimalloc: option 'max_errors': 16
+mimalloc: option 'max_warnings': 16
+mimalloc: option 'max_segment_reclaim': 8
+mimalloc: option 'destroy_on_exit': 0
+mimalloc: option 'arena_reserve': 1048576
+mimalloc: option 'arena_purge_mult': 10
+mimalloc: option 'purge_extend_delay': 1
+mimalloc: process init: 0x7007c161a200
+mimalloc: secure level: 0
+mimalloc: mem tracking: none
+[harness] run profile=test artifact=/run/media/kaiserroman/games/solaris-work/wt/CmdBlocks/.analysis/validation/20261128T085525-test-h0jp3cnb
+[harness] stage=test starting pid=2841819 command=cargo nextest run --profile default --ignore-default-filter --no-fail-fast --no-tests=fail -p mc-core --lib natural_lumber_camp_certifies_the_grove_not_one_tree_column log=.analysis/validation/20261128T085525-test-h0jp3cnb/test.log
+[harness] stage=test exit=100 in 68.9s log=.analysis/validation/20261128T085525-test-h0jp3cnb/test.log
+[harness] FAIL profile=test status=failed artifact=/run/media/kaiserroman/games/solaris-work/wt/CmdBlocks/.analysis/validation/20261128T085525-test-h0jp3cnb in 68.9s
+[harness] error: cargo nextest run --profile default --ignore-default-filter --no-fail-fast --no-tests=fail -p mc-core --lib natural_lumber_camp_certifies_the_grove_not_one_tree_column exited 100; see /run/media/kaiserroman/games/solaris-work/wt/CmdBlocks/.analysis/validation/20261128T085525-test-h0jp3cnb/test.log
+heap stats:     peak       total       freed     current        unit       count   
+  reserved:     0           0           0           0                                ok
+ committed:     0           0           0           0                                ok
+     reset:     0      
+    purged:     0      
+   touched:     0           0           0           0                                ok
+  segments:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+   -cached:     0           0           0           0                                ok
+     pages:     0           0           0           0                                ok
+-abandoned:     0           0           0           0                                ok
+ -extended:     0      
+ -noretire:     0      
+     mmaps:     0      
+   commits:     0      
+    resets:     0      
+    purges:     0      
+   threads:     0           0           0           0                                ok
+  searches:     0.0 avg
+mimalloc: using 1 numa regions
+numa nodes:     1
+   elapsed:    69.059 s
+   process: user: 0.094 s, system: 0.011 s, faults: 0, rss: 24.8 MiB
+mimalloc: process done: 0x7007c161a200
