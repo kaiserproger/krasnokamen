@@ -12,7 +12,7 @@ regression = [
   "cargo:mc-core:settlements::autonomy::tests::every_pending_village_takes_its_gate_clock_turn",
 ]
 
-fix_commit = "44aa3d95a"
+fix_commit = "patch:7b9ddbcbb6e17f4921956268a3e18abb04ee7b30b109ee2a3c4a75cae1d1f932"
 repro_check = ["`cargo nextest run -p mc-core --lib every_pending_village_takes_its_gate_clock_turn`: simulates the `pop_front`/`push_back` rotation for 1..=16 pending villages over 400 ticks and asserts every village took a turn on a `tick % 20 == 0` tick. Reversal control observed red with the plain `min(pending, VILLAGES_PER_TICK)` batch (queue of 5 starves)."]
 # fix_commit is 44aa3d95a, the commit that is an ancestor of main; b6cd4918b is the same change on a
 # side line (its diff against 44aa3d95a for autonomy.rs and autonomy_tests.rs is empty).

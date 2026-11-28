@@ -1,0 +1,64 @@
+diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
+index 06ce4baf0..15729fb7f 100644
+--- a/crates/mc-core/src/settlements/autonomy.rs
++++ b/crates/mc-core/src/settlements/autonomy.rs
+@@ -52,6 +52,14 @@ struct PendingVillage {
+     /// so a permanently unreadable column cannot hold the village's queue alive.
+     piece_attempts: Vec<u8>,
+     zone_cursor: usize,
++    /// The village's own 20-tick gate clock: `prove_natural` and the zone
++    /// probe run when the world tick reaches it, then it moves 20 ticks on.
++    /// Written against this counter rather than `tick % 20`, because the queue
++    /// rotates a fixed batch and a village's turn is fixed to the tick's
++    /// parity: with eight pending villages the `tick % 20` gates ran for half
++    /// of them only (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES).
++    /// Runtime only - the queue is rebuilt from region queries.
++    next_gate: u64,
+     natural_candidates: VecDeque<NaturalCandidate>,
+ }
+ 
+@@ -154,6 +162,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+                     known_residents: BTreeSet::new(),
+                     meeting_bell: None,
+                     zone_cursor: 0,
++                    next_gate: 0,
+                     natural_candidates: VecDeque::new(),
+                 });
+                 queue.villages.back_mut().expect("queued village")
+@@ -183,6 +192,17 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+     state.autonomy_queue = queue;
+ }
+ 
++/// Whether this village's 20-tick gates run now. The clock is the village's
++/// own, so a fixed batch rotation cannot starve a turn of the tick-numbered
++/// gate. Extraction keeps `advance`'s work at a fixed four villages a tick.
++fn gate_due(next_gate: &mut u64, tick: u64) -> bool {
++    if *next_gate > tick {
++        return false;
++    }
++    *next_gate = tick.saturating_add(20);
++    true
++}
++
+ fn belongs_to_site(site: &GeneratedVillageSite, marker: &GeneratedEntityMarker) -> bool {
+     let Some((owner, placement)) = marker.claim.split_once('@') else {
+         return false;
+@@ -397,7 +417,8 @@ fn advance(
+     }
+     // Chunk adoption only queues terrain candidates. Ordinary route proof is
+     // deferred to later planner passes, one resident/candidate per pass.
+-    if state.tick.is_multiple_of(20) {
++    let gate = gate_due(&mut pending.next_gate, state.tick);
++    if gate {
+         prove_natural(
+             state,
+             id,
+@@ -412,7 +433,7 @@ fn advance(
+         .map_or(0, |record| zone_probe_limit(record.radius));
+     if pending.natural_candidates.is_empty()
+         && pending.zone_cursor < zone_limit
+-        && (pending.zone_cursor == 0 || state.tick.is_multiple_of(20))
++        && (pending.zone_cursor == 0 || gate)
+     {
+         for _ in 0..ZONE_PROBES_PER_PASS {
+             if pending.zone_cursor == zone_limit {
