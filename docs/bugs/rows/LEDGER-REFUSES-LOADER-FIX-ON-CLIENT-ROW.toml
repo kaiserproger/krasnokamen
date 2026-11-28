@@ -1,0 +1,11 @@
+[[bug]]
+id = "LEDGER-REFUSES-LOADER-FIX-ON-CLIENT-ROW"
+title = "ledger promote cannot close a client-surface row whose fix lives in the Loader repository, even when a graphical real-client receipt exists"
+area = "harness"
+severity = "major"
+repro = "manual"
+status = "open"
+source = "tools/harness/ledger.py:2913-2924 refuses `loader:<sha>` when `regressions.needs_real_client(row)` is true, before any receipt is consulted: a Loader fix proves only its loader ref and a client-surface row needs a graphical real-client ref this promotion cannot supply. Found on LOADER-ZOMBIE-SHIELD-MIXIN (area client, repro client), 2026-11-28."
+regression = []
+failing_first = "recorded"
+repro_check = "The gap is a proof-shape hole, not a missing gate. receipts/D145Client/LOADER-ZOMBIE-SHIELD-MIXIN/candidate-result.json holds a passing `harness:loader-live:loader-fabric-screen-admission` run on a clean core (server SHA256 ec650c260bfa18ca1be375e6f25535fe44e640363178a16320987b11b17c8425, Loader d50869792617) with a red named-selector control (control.xml) and a green restore (restore.xml); the row still cannot be promoted because the Loader branch of `promote` refuses the client-surface shape outright. Two honest resolutions: (a) teach `_promote_loader_fix` the graphical path the `client-test:` branch already has, so a Loader fix plus a named-selector red/green pair and a graphical client receipt promote; or (b) record the policy that such rows are proved only by a Loader-side ref and let the owner accept them through an explicit written decision instead of leaving them silently unpromotable. Until one is chosen the row stays open and LOADER-ZOMBIE-SHIELD-MIXIN stays open with its evidence attached. Not a test-only change: the tooling's refusal is the deliverable."
