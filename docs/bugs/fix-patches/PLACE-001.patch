@@ -1,0 +1,31 @@
+diff --git a/crates/mc-core/src/spawn_protection.rs b/crates/mc-core/src/spawn_protection.rs
+index 4bd33a43e..9fa813149 100644
+--- a/crates/mc-core/src/spawn_protection.rs
++++ b/crates/mc-core/src/spawn_protection.rs
+@@ -4,8 +4,22 @@ use crate::tick::TickState;
+ use mc_domain::EntityId;
+ 
+ pub(crate) fn protected(state: &TickState, actor: EntityId, pos: BlockPos) -> bool {
+-    // PLACE-001 before the fix: the spawn radius is not enforced, so a
+-    // non-operator inside it may break and place blocks.
+-    let _ = (state, actor, pos);
+-    false
++    if state.dimension != crate::dimensions::Dimension::Overworld
++        || state.spawn_protection == 0
++        || state.spawn_operators.is_empty()
++    {
++        return false;
++    }
++    if state.entities.slot_of(actor).is_some_and(|slot| {
++        state
++            .spawn_operators
++            .contains(&state.entities.row(slot).uuid)
++    }) {
++        return false;
++    }
++    let [x, _, z] = state.world.world_spawn();
++    i64::from(pos.x)
++        .abs_diff(i64::from(x))
++        .max(i64::from(pos.z).abs_diff(i64::from(z)))
++        <= u64::from(state.spawn_protection)
+ }

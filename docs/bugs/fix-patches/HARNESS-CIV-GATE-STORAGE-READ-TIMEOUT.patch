@@ -1,0 +1,20 @@
+diff --git a/tools/harness/backends/village_autonomy_qa.py b/tools/harness/backends/village_autonomy_qa.py
+index 54d33fa5c..edebcfe29 100644
+--- a/tools/harness/backends/village_autonomy_qa.py
++++ b/tools/harness/backends/village_autonomy_qa.py
+@@ -528,6 +528,15 @@ def _read_storage_container(
+         for line in lines:
+             if line.startswith(prefix):
+                 return True, line
++            # The console reply is appended to the log without a guaranteed leading
++            # newline: the final-pin run 20261126T101004 logged
++            # `... post=0.0398, 67, -155 has the following block data: {Items: [], ...}`
++            # - the reply embedded in a partially written perf line. A startswith-only
++            # match then timed out after 15 s on a reply that was on disk
++            # (HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT).
++            embedded = line.find(prefix)
++            if embedded > 0:
++                return True, line[embedded:]
+             if line in ("That position is not loaded", "The target block is not a block entity") or line.startswith("Command failed:"):
+                 raise RuntimeError(f"storage read refused {command!r}: {line}")
+         return False, ""

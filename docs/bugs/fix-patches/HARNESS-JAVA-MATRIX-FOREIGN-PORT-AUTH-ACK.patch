@@ -1,0 +1,13 @@
+diff --git a/tools/harness/runtime.py b/tools/harness/runtime.py
+index 311167824..229843f7f 100755
+--- a/tools/harness/runtime.py
++++ b/tools/harness/runtime.py
+@@ -586,7 +586,7 @@ def _wait_port(port: int, timeout_seconds: float | None, process: subprocess.Pop
+                     f"port {port} did not become ready within "
+                     f"{timeout_seconds:.1f}s; log {log_path}: {tail[-2000:]}"
+                 )
+-            if _probe_port(port, remaining):
++            if _probe_port(port, remaining) and _owns_listener(process, port):
+                 return
+             # Only log growth or process exit wakes us to probe again.
+             for key, _ in selector.select(None if deadline is None else max(0.0, deadline - time.monotonic())):

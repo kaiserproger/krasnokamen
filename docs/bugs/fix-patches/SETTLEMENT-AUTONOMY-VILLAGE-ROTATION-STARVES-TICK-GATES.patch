@@ -1,0 +1,26 @@
+diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
+index 4fba97424..ec6dd6b3d 100644
+--- a/crates/mc-core/src/settlements/autonomy.rs
++++ b/crates/mc-core/src/settlements/autonomy.rs
+@@ -192,12 +192,15 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+     state.autonomy_queue = queue;
+ }
+ 
+-/// Whether the village's 20-tick gates run now: written against the world tick
+-/// number, so a fixed batch rotation fixes a village's turn to the tick's
+-/// parity and with eight pending villages only half of them ever see a gate
+-/// (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES).
+-fn gate_due(_next_gate: &mut u64, tick: u64) -> bool {
+-    tick.is_multiple_of(20)
++/// Whether this village's 20-tick gates run now. The clock is the village's
++/// own, so a fixed batch rotation cannot starve a turn of the tick-numbered
++/// gate. Extraction keeps `advance`'s work at a fixed four villages a tick.
++fn gate_due(next_gate: &mut u64, tick: u64) -> bool {
++    if *next_gate > tick {
++        return false;
++    }
++    *next_gate = tick.saturating_add(20);
++    true
+ }
+ 
+ fn belongs_to_site(site: &GeneratedVillageSite, marker: &GeneratedEntityMarker) -> bool {

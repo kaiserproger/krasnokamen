@@ -1,0 +1,105 @@
+diff --git a/tools/harness/backends/civilization_seed_qa.py b/tools/harness/backends/civilization_seed_qa.py
+index 0c2cf5947..0720b86cc 100644
+--- a/tools/harness/backends/civilization_seed_qa.py
++++ b/tools/harness/backends/civilization_seed_qa.py
+@@ -27,6 +27,9 @@ def _bound_ticks(default: int = 96000) -> int:
+ 
+ 
+ MAX_TICKS = _bound_ticks()
++# A console teleport of the observer is scaffolding for the block scan, never
++# evidence: it may cost this long, not the rest of the scenario deadline.
++OBSERVER_MOVE_TIMEOUT = 30.0
+ OBSERVER_STAND_MARGIN = 4.0
+ BABY_CAPTURE_ATTEMPTS = 12
+ FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
+@@ -858,6 +861,42 @@ def fund(probe: ProbeSteps, detail: dict[str, Any], server: Any,
+     })
+     probe.call("minecraft_close_screen", {})
+ 
++def _observer_horizontal(probe: ProbeSteps, destination: dict[str, float]) -> bool:
++    try:
++        player = probe.observe().get("player") or {}
++        return all(abs(float(player[axis]) - float(destination[axis])) < 1.0 for axis in ("x", "z"))
++    except Exception:
++        return False
++
++
++def move_observer(probe: ProbeSteps, destination: dict[str, float]) -> bool:
++    """Wait, bounded, for a console `tp` to land the observer at `destination`.
++
++    Only the horizontal position is compared: a teleport to a point above a site
++    lands the player on whatever ground the server picks, so an exact `y` is not
++    a property of a successful move (`hi[1] + 3` over a farm leaves the observer
++    on the field). A move that does not land - a refused teleport, or a client
++    still holding a screen - costs at most `OBSERVER_MOVE_TIMEOUT`, never the
++    rest of the scenario: the observer position only loads the chunks the scan
++    reads, so a failed move must not hide a milestone. Run 20261124T170423 spent
++    its last 1 h 45 min in the unbounded wait while the observed house completed
++    at server tick 99 816.
++    """
++    try:
++        deadline = time.monotonic() + probe.remaining(limit=OBSERVER_MOVE_TIMEOUT)
++    except TimeoutError:
++        return False
++    while True:
++        if _observer_horizontal(probe, destination):
++            return True
++        if time.monotonic() >= deadline:
++            return False
++        try:
++            probe.call("minecraft_wait_ticks", {"ticks": 5})
++        except Exception:
++            return _observer_horizontal(probe, destination)
++
++
+ def _wait_scan_loaded(probe: ProbeSteps, lo: list[int], hi: list[int]) -> None:
+     """Wait, event-driven, until the client holds every chunk the scan will read.
+ 
+@@ -887,8 +926,12 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
+         initial = probe.observe()["player"]
+         remote = max(abs(coord - initial[axis]) for coord, axis in (
+             (lo[0], "x"), (hi[0], "x"), (lo[2], "z"), (hi[2], "z"))) > 48
++        moved = None
+         try:
+             if remote:
++                # A menu holds the observer where it stands: close it before the
++                # teleport, as the founding transfer and the furnace capture do.
++                probe.call("minecraft_close_screen", {})
+                 # Land outside the footprint: a creative observer dropped inside
+                 # the bounds mutates the world under observation (tramples crops
+                 # on a farm, review M1), and the scan is a read that needs only
+@@ -897,9 +940,7 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
+                                else hi[0] + OBSERVER_STAND_MARGIN,
+                                "y": hi[1] + 3, "z": (lo[2] + hi[2]) / 2}
+                 item_merge._console(server, f"tp {village.USERNAME} {destination['x']} {destination['y']} {destination['z']}")
+-                probe.wait(lambda state: all(abs(state["player"][axis] - value) < 1
+-                                             for axis, value in zip(("x", "y", "z"), destination)),
+-                           "building_scan_observer_arrived")
++                moved = move_observer(probe, destination)
+                 _wait_scan_loaded(probe, lo, hi)
+             else:
+                 # A local building is not auto-loaded: the client can still be
+@@ -916,18 +957,19 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
+         finally:
+             if remote:
+                 item_merge._console(server, f"tp {village.USERNAME} {initial['x']} {initial['y']} {initial['z']}")
+-                probe.wait(lambda state: all(abs(state["player"][axis] - initial[axis]) < 1
+-                                             for axis in ("x", "y", "z")),
+-                           "building_scan_observer_returned")
++                returned = move_observer(probe, initial)
++                moved = returned if moved is None else moved and returned
+                 probe.call("minecraft_wait_for_loaded_block", {
+                     **{axis: math.floor(initial[axis]) for axis in ("x", "y", "z")},
+                     "timeout_seconds": min(120.0, probe.remaining()),
+                 })
++                probe.call("minecraft_close_screen", {})
+         relevant = [block for block in scan.get("blocks", [])
+                     if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
+         evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False),
+                          "solid": [block for block in scan.get("blocks", [])
+-                                   if block.get("is_air") is False and block.get("collision_empty") is False]})
++                                   if block.get("is_air") is False and block.get("collision_empty") is False],
++                         "observer_teleported": remote, "observer_moved": moved})
+     return evidence
+ 
+ 

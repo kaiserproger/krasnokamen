@@ -7,5 +7,5 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-001"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_use_teleports", "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_conserves_block_before_falling", "harness:entities:native-v2-ledger-dragon-egg"]
-fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
+fix_commit = "patch:f16c4344dfb42a44512c771530552a294127df5627e6619c63b1b6f2fe944e00"
 repro_check = "Product verified 2026-11-24: the server teleports the egg (temporary server-side print on a throwaway pin: dragon_egg teleport {192,77,-446} -> {194,79,-447}); the registered gate native-v2-ledger-dragon-egg was red because its scene could not observe it (11x19 pad, gravity, 16^3 scan boxes returned empty). Gate fixed in e560a87189 and green on pin e560a8718904 (20261124T013937). No product fix to promote: see receipts/D123/OWNER-DECISIONS-NEEDED.md POL-2."

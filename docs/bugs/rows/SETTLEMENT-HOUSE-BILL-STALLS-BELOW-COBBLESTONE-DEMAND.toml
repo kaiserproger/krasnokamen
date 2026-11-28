@@ -9,6 +9,6 @@ source = "civilization-seed-qa series on the merged pin (de356989816d, artifacts
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::growth_tests::the_house_reserve_is_netted_per_item_of_the_upgrade_bill", "cargo:mc-core:settlements::construction::growth_tests::a_house_upgrade_is_not_reserved_against_itself", "cargo:mc-core:settlements::construction::growth_tests::the_house_reserve_refuses_an_upgrade_on_its_shared_items", "cargo:mc-core:settlements::construction::growth_tests::a_birch_village_admits_its_upgrade", "cargo:mc-core:settlements::construction::growth_tests::logs_only_do_not_admit_an_upgrade"]
 
-fix_commit = "7925c7bdc"
+fix_commit = "patch:a56fc51469c32e5d0eecce5f2a7c9b293867151f75d812836420cf74d675c552"
 repro_check = ["Filed from the series of HANDOFF-47 (mine-zone fix on de356989816d): not reproduced under a cargo control yet, read from the two artifacts named in `source`. Proof shape: a dense adopted-village cargo fixture that certifies a Mine, fills the settlement's cobblestone above a House bill's demand, then asserts a House project gets a site - today `site_for`/the ranked sweep returns None with those refusal counts, so a cargo test that drives a funded House to a site (or pins the first legal frontage) reds on the current tree and greens on the fix."]
 
