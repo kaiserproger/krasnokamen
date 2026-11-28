@@ -961,6 +961,44 @@ class LoaderFixTests(unittest.TestCase):
             f'fix_commit = "loader:{self.fix[:12]}"\nregression = ["{self.REF}"]\n'
             f'control_files = {control_files}\n')
 
+    GRAPHICAL = 'harness:loader-live:loader-fabric-screen-admission'
+
+    def write_client_row(self, *, area='client', repro='source', graphical=True):
+        refs = [f'"{self.REF}"'] + ([f'"{self.GRAPHICAL}"'] if graphical else [])
+        (self.root / 'docs/bugs/rows').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\n'
+            f'area = "{area}"\nrepro = "{repro}"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{self.fix[:12]}"\n'
+            f'regression = [{", ".join(refs)}]\n'
+            'control_files = ["tools/battle.py"]\n')
+
+    def client_receipt(self, *, scenario='loader-fabric-screen-admission', loader_head='fix',
+                       assertions=None, status='passed', loader_key='krasnokamen-loader'):
+        import json
+
+        tree = ledger.tree_fingerprint(self.root)
+        server_sha = 'a' * 64
+        builds = self.root / '.analysis/ledger-builds'
+        builds.mkdir(parents=True, exist_ok=True)
+        (builds / f'{server_sha}-{tree["sha256"]}.json').write_text(json.dumps({
+            'sha256': server_sha, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}))
+        named = {'id': scenario,
+                 'assertions': assertions if assertions is not None else {'fabric_screen_service_admitted': True}}
+        if loader_head == 'fix':
+            loader_head = self.fix
+        if loader_head is not None:
+            named['repo_revisions'] = {loader_key: loader_head}
+        path = self.base / 'result.json'
+        path.write_text(json.dumps({
+            'status': status,
+            'tree': {'head': tree['head'], 'sha256': tree['sha256'], 'dirty': False},
+            'server_binary_sha256': server_sha,
+            'details': {'named_scenario': named},
+        }))
+        return path
+
     def ctx(self):
         artifact = self.base / 'artifacts'
         artifact.mkdir(exist_ok=True)
@@ -1027,6 +1065,89 @@ class LoaderFixTests(unittest.TestCase):
                                         'error': 'AssertionError'}} for ref in refs}
         with self.assertRaises(ledger.Refused) as refused:
             ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=run)
+        self.assertIn('stayed green', str(refused.exception))
+
+    def test_refuses_a_client_surface_row_without_a_receipt(self):
+        """The new path never makes the no-receipt case passable (acceptance a)."""
+        self.write_client_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner())
+        self.assertIn('which this promotion cannot supply', str(refused.exception))
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'open')
+
+    def test_promotes_a_client_surface_row_with_a_bound_graphical_receipt(self):
+        """A loader reversal plus a passing graphical receipt of the same fixed Loader promotes (b)."""
+        self.write_client_row()
+        calls = []
+        promoted = ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(),
+                                  loader_runner=self.runner(calls), client_receipt=self.client_receipt())
+        self.assertEqual(promoted['control'], 'loader_reversal')
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(promoted['graphical_assertions'],
+                         {self.GRAPHICAL: ['fabric_screen_service_admitted']})
+        self.assertEqual(promoted['client_receipt']['covers'], [self.GRAPHICAL])
+        self.assertEqual(promoted['client_receipt']['loader_head'], self.fix)
+        self.assertEqual(promoted['loader_checkout']['head'], self.fix)
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'fixed')
+
+    def test_refuses_a_graphical_receipt_of_another_scenario(self):
+        """A passed, graphical-looking receipt that covers no row ref is unrelated evidence (c)."""
+        self.write_client_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt(scenario='loader-v2-settlements-smoke'))
+        self.assertIn('does not pass any of the row', str(refused.exception))
+
+    def test_refuses_a_receipt_without_a_passing_graphical_assertion(self):
+        """A passed receipt whose scenario report records no assertion is not the graphical proof (c)."""
+        self.write_client_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt(assertions={}))
+        self.assertIn('records no passing assertion', str(refused.exception))
+
+    def test_refuses_a_receipt_on_a_row_that_is_not_client_surface(self):
+        """A loader fix with a client receipt on a non-client row stays refused as it was."""
+        self.write_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt())
+        self.assertIn('not client-surface', str(refused.exception))
+
+    def test_refuses_a_client_surface_row_without_a_graphical_ref(self):
+        """A client-surface row's receipt needs a graphical harness ref to name its assertion."""
+        self.write_client_row(graphical=False)
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt())
+        self.assertIn('needs a graphical harness ref', str(refused.exception))
+
+    def test_refuses_a_receipt_from_another_loader_revision(self):
+        """The receipt has to name the fixed Loader checkout, not a foreign or older build."""
+        self.write_client_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt(loader_head='b' * 40))
+        self.assertIn('not the checkout', str(refused.exception))
+
+    def test_refuses_a_receipt_that_names_no_loader_revision(self):
+        """A receipt that does not say which Loader it saw cannot be bound to the fix."""
+        self.write_client_row()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(),
+                           client_receipt=self.client_receipt(loader_head=None))
+        self.assertIn('names no Loader revision', str(refused.exception))
+
+    def test_refuses_a_loader_ref_that_stays_green_in_the_reversed_copy(self):
+        """The receipt never substitutes for the reversal: a green loader ref refuses (d)."""
+        self.write_client_row()
+
+        def run(refs, tree):
+            return {ref: {'state': ledger.GREEN, 'detail': ''} for ref in refs}
+
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=run,
+                           client_receipt=self.client_receipt())
         self.assertIn('stayed green', str(refused.exception))
 
     def test_loader_ref_parses_and_rejects_a_traversal(self):
