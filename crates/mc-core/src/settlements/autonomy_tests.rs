@@ -2393,29 +2393,54 @@ fn review_generated_village_adoption_respects_an_active_expedition_claim() {
     crate::settlements::persistence::finish_recovery(&mut state).unwrap();
 }
 
-/// The village gate clock must not starve the 20-tick gates: every pending
-/// village takes them, whatever the queue length, while the queue keeps
-/// stepping only a fixed batch a tick. Eight pending villages with a fixed
-/// batch of four used to alternate [0..3] / [4..7], so villages 4..7 never saw
-/// `tick % 20 == 0` (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES).
+/// The village gate must not starve the 20-tick gates: every pending village
+/// takes one, whatever the queue length, while the queue keeps stepping only a
+/// fixed batch a tick. Eight pending villages with a fixed batch of four used
+/// to alternate [0..3] / [4..7], so villages 4..7 never saw `tick % 20 == 0`
+/// (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES). Measured through
+/// the production `autonomy::tick` over generated sites, so this module also
+/// compiles against a tree without the per-village clock.
 #[test]
 fn every_pending_village_takes_its_gate_clock_turn() {
     for pending in 1..=16usize {
-        let mut queue: std::collections::VecDeque<(usize, u64)> =
-            (0..pending).map(|village| (village, 0)).collect();
-        let mut gated = vec![false; pending];
-        for tick in 0..400u64 {
-            for _ in 0..super::VILLAGES_PER_TICK.min(queue.len()) {
-                let (village, mut next_gate) = queue.pop_front().expect("counted village");
-                if super::gate_due(&mut next_gate, tick) {
-                    gated[village] = true;
-                }
-                queue.push_back((village, next_gate));
+        let layout: Vec<(i32, i32)> = (0..pending)
+            .map(|village| (100 + 4 * village as i32, 100))
+            .collect();
+        let (mut state, chunks) = rotation_fixture(&layout);
+        let mut changes = ChangeSet::default();
+        crate::villager::generated::load(&mut state, &chunks, &mut changes);
+        changes.chunks_loaded.extend_from_slice(&chunks);
+        tick(&mut state, &mut changes);
+        // The first tick queries eight chunks and later ticks two, so a longer
+        // queue is complete a few ticks in.
+        for _ in 0..16 {
+            if state.autonomy_queue.villages.len() == pending {
+                break;
             }
+            state.tick += 1;
+            state.tick_budget.reset(state.tick);
+            tick(&mut state, &mut ChangeSet::default());
         }
+        assert_eq!(
+            state.autonomy_queue.villages.len(),
+            pending,
+            "queue of {pending}: every loaded village site is pending"
+        );
+        for _ in 0..48 {
+            state.tick += 1;
+            state.tick_budget.reset(state.tick);
+            tick(&mut state, &mut ChangeSet::default());
+        }
+        let starved: Vec<_> = state
+            .autonomy_queue
+            .villages
+            .iter()
+            .filter(|pending| pending.zone_cursor < 2 * super::ZONE_PROBES_PER_PASS)
+            .map(|pending| (pending.site.start_chunk, pending.zone_cursor))
+            .collect();
         assert!(
-            gated.iter().all(|seen| *seen),
-            "queue of {pending} pending villages starves some village's 20-tick gate"
+            starved.is_empty(),
+            "queue of {pending} pending villages starves some village's 20-tick gate: {starved:?}"
         );
     }
 }
@@ -2463,12 +2488,12 @@ const ROTATION_CHUNKS: [(i32, i32); 8] = [
     (112, 104),
 ];
 
-fn rotation_fixture() -> (TickState, Vec<ChunkPos>) {
+fn rotation_fixture(layout: &[(i32, i32)]) -> (TickState, Vec<ChunkPos>) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let mut bells = Vec::new();
     let mut villagers = Vec::new();
     let mut sites = Vec::new();
-    for &(cx, cz) in &ROTATION_CHUNKS {
+    for &(cx, cz) in layout {
         let bell = [cx * 16 + 7, 202, cz * 16 + 7];
         let min = mc_world::BlockPos {
             x: cx * 16 + 4,
@@ -2546,10 +2571,7 @@ fn rotation_fixture() -> (TickState, Vec<ChunkPos>) {
         [8, 201, 8],
         mc_world::OVERWORLD_GEOMETRY,
     );
-    let chunks: Vec<ChunkPos> = ROTATION_CHUNKS
-        .iter()
-        .map(|&(x, z)| ChunkPos { x, z })
-        .collect();
+    let chunks: Vec<ChunkPos> = layout.iter().map(|&(x, z)| ChunkPos { x, z }).collect();
     world.ensure_blocking(&chunks.iter().map(|chunk| (*chunk, 0)).collect());
     let mut state = TickState::new(registry, world, 2, 512);
     state.refresh_active_chunks(0);
@@ -2565,7 +2587,7 @@ fn rotation_fixture() -> (TickState, Vec<ChunkPos>) {
 #[test]
 fn every_pending_village_gate_steps_within_the_rotation_window() {
     const WINDOW: usize = 120;
-    let (mut state, chunks) = rotation_fixture();
+    let (mut state, chunks) = rotation_fixture(&ROTATION_CHUNKS);
     let mut changes = ChangeSet::default();
     crate::villager::generated::load(&mut state, &chunks, &mut changes);
     changes.chunks_loaded.extend_from_slice(&chunks);
