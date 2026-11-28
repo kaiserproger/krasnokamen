@@ -429,6 +429,17 @@ _DAMAGE_ZOMBIE_UUID = "00000000-0000-0000-0000-00000001e242"  # UUID:[I;0,0,0,12
 
 def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
+    # Read back the actual server rule before dealing damage. The echo fences both
+    # replies, so a rejected set reports the old value instead of timing out on an ack.
+    steps.fixture("gamerule natural_health_regeneration false")
+    steps.fixture("gamerule natural_health_regeneration")
+    regeneration = _echo(steps, "damage_regeneration_readback_ordered")
+    feedback = [line for line in regeneration["recent_chat"]
+                if "regeneration" in line.lower() or "unknown" in line.lower()]
+    steps.report["regeneration_fixture_feedback"] = feedback
+    steps.check("damage_regeneration_disabled_on_server",
+                "Game rule natural_health_regeneration is now set to false" in feedback
+                and "Game rule natural_health_regeneration is currently set to false" in feedback)
     # The night below would otherwise spawn zombies that kill the survival player
     # during the long environment rows; authored mobs are summoned by command.
     _disable_gamerule(steps, "spawn_mobs")
@@ -606,7 +617,6 @@ def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # Provoke a real warden with ordinary lever vibrations, then observe its
     # sonic attack on the native connection (not a /damage identity alias).
     steps.fixture("gamemode creative @s")
-    _disable_gamerule(steps, "natural_health_regeneration")
     steps.fixture("effect clear @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
