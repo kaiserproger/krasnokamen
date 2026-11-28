@@ -1,8 +1,10 @@
 # MODEL-OPUS-N3
 
-Disposition: fixed-unproven on the integration tree. On clean core `6d3f1306b30991535eff7be40208369df6cd12d8`, the graphical `native-player-head` pair flipped at `placed_head_hat_layer_pixels`; Main must repeat the pair on the integration head before promotion.
+Disposition: open, not restored from published client main. On clean core `6d3f1306b30991535eff7be40208369df6cd12d8`, the `native-player-head` graphical pair flipped at `placed_head_hat_layer_pixels`, but the standalone restore is not an ancestor of published client main and cannot close the row.
 
 The client control `035c0dadf4e122723d3624fb1416af3dae0f44db` restores the exact historical `e8fe40c2^` player-head model blob at its renamed asset path. Its child `bc7429a36c29d09429a0c84bd66cf0ba0e6b983e` restores the fixed model. The two commits differ only in `assets/krasnokamen/models/entity/player_head.json`; their input fingerprints include assets and differ. Their immutable release pins are `pins/035c0dadf4e1-client-x86_64-unknown-linux-gnu-incr` (SHA-256 `47dac35059ec73b0fce10a50dfff100b4c3b43ae2afaf7a034a5ed7a45ca98f4`) and `pins/bc7429a36c29-client-x86_64-unknown-linux-gnu-incr` (SHA-256 `0613be9d0298673792dd4e6fd153db31a3a769367842842abaa1c27ee51c1c38`). Both runs used `pins/6d3f1306b309-server-x86_64-unknown-linux-gnu-incr` (SHA-256 `df6bd41cfa7cb40b6e2e0a133f357319ea0270cd41da0c8973ca487add7887ce`).
+
+The historical published fix is `e8fe40c20f6b`. A pin attempt on that exact commit failed before building: `pin-release: /run/media/kaiserroman/games/solaris-work/wt/CTailHeadHistorical is not a krasnokamen-client tree; omit --client for the server`. Its package and binary are still named `solaris-client`. The complete refusal log is `/run/media/kaiserroman/games/solaris-work/receipts/CTailHeadHistorical/pin.log`. No published restore leg was measured, and no promotion is claimed.
 
 The control failed exactly `placed_head_hat_layer_pixels`: the placed head rendered with 10,750 changed pixels but zero magenta hat pixels. The restore passed with 9,822 magenta hat pixels; its worn-head checks passed as well. The retained placed-head frames show the cyan head without the magenta shell on control and with it on restore. The assertion covers this authored offline skin and fixture, not all profile-loading paths.
 

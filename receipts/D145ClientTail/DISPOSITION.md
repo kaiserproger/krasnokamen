@@ -20,4 +20,4 @@ No graphical run was performed for either row; neither is claimed fixed.
 
 ## Player head model
 
-- MODEL-OPUS-N3: fixed-unproven on integration. The real-client control failed the hat-pixel assertion and the restored client passed on core 6d3f1306; Main owns promotion. See [evidence and logs](MODEL-OPUS-N3/evidence.md).
+- MODEL-OPUS-N3: open, not restored from published client main. The local real-client pair flips the hat-pixel assertion, but its restore is unpublished and the published historical client cannot be pinned by the current tool. See [evidence and logs](MODEL-OPUS-N3/evidence.md).
