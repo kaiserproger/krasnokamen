@@ -271,6 +271,17 @@ _BOOLEAN_PROFILE_VERDICTS = {
         # Adoption certifies the generated Houses before any construction; not a
         # milestone of the four, but the only direct measurement of that fact.
         'adopted_houses_certified',
+        # One per open civilization row (backends/civ_row_signals.ROWS): each is a named
+        # assertion over the same run's client observations, and its False is the row's
+        # own documented stall. `test_civ_row_signals` holds both sides together.
+        'lumberjack_delivers_logs_within_a_day',
+        'first_farm_gets_seeds_from_cleared_ground',
+        'wool_reaches_a_wool_bill_without_a_shepherd',
+        'funded_project_advances_within_a_day',
+        'no_worker_stranded_past_the_simulated_boundary',
+        'mixed_wood_load_reaches_storage',
+        'natural_forest_site_is_felled_and_housing_grows',
+        'street_completion_releases_the_builder',
     }),
     # backends/settlement_map_qa.py VERDICTS plus the quickwins-c1-race verdict
     # (settlement_quickwins_qa.C1_RACE_VERDICT); a test keeps them in step.
