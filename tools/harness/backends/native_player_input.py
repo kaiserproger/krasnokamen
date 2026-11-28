@@ -553,7 +553,6 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         if after["y"] == before["y"]:
             break
         before = after
-    steps.fixture("tick rate 20")
     second = _shot(steps, "sand-descended")
     after = sample()
     steps.report.update(falling_windows=windows, falling_before_step=before,
@@ -578,6 +577,7 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     with Image.open(first["retained_path"]) as a, Image.open(second["retained_path"]) as b:
         steps.check("sand_fall_changes_pixels",
                     ImageChops.difference(a.convert("RGB"), b.convert("RGB")).getbbox() is not None)
+    steps.fixture("tick rate 20")
     steps.fixture("tick unfreeze")
     _block(steps, {"x": x, "y": y, "z": z + 3}, "minecraft:sand")
     _block(steps, {"x": x, "y": y + 30, "z": z + 3}, "minecraft:air")
