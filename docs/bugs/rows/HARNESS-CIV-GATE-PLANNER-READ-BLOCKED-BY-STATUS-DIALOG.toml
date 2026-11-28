@@ -10,6 +10,7 @@ failing_first = "reported"
 regression = [
   "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_status_dialog_over_the_view_is_closed_and_the_read_retried",
   "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_dialog_that_never_closes_names_itself_in_the_storage_error",
+  "harness:civilization-seed-qa:all",
 ]
 repro_check = [
   "Final-pin run 20261126T101004 (receipts/D123/D123CivGates/FINAL-SERIES.md) repeated the stall with the same payload shape: `project_ui` carries `dialog/title` label `Status`; the failing key there was `storage_error` (see HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT), so both reads are now retried once after the covering screen is closed, and a screen that survives the close is named in the error.",

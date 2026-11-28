@@ -1,0 +1,163 @@
+diff --git b/tools/harness/backends/civilization_seed_qa.py a/tools/harness/backends/civilization_seed_qa.py
+index ab4be17f9..0720b86cc 100644
+--- b/tools/harness/backends/civilization_seed_qa.py
++++ a/tools/harness/backends/civilization_seed_qa.py
+@@ -38,6 +38,39 @@ FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
+ 
+ STAGES = ("new_house", "births", "second_building", "iron_smelted")
+ BIRTHS_LIMITATION = "Birth proof requires retained server claim/birth audit events and a current clean checkpoint."
++IRON_INGOT = "minecraft:iron_ingot"
++NBT_WRITE_TOKENS = ("data merge", "data modify", "recipes_used", "recipesused")
++
++
++def iron_evidence(furnace: dict[str, Any], *, baseline: bool) -> str | None:
++    """Which observation proves the town smelted iron, or `None`.
++
++    `output_slot` is the stronger evidence (a menu capture with a screenshot);
++    `furnace_recipes` is the block entity's persistent RecipesUsed counter, which
++    survives the resident collecting an ingot between samples. A furnace that
++    stood before the fixture (`baseline`) may carry a counter an earlier world
++    wrote, so it proves nothing; only a furnace the town built does.
++    """
++    if baseline:
++        return None
++    if (furnace.get("container_totals") or {}).get(IRON_INGOT, 0) > 0:
++        return "output_slot"
++    if village.iron_smelted_by_recipes(furnace.get("recipes_used")):
++        return "furnace_recipes"
++    return None
++
++
++def assert_no_evidence_writes(commands: list[str]) -> None:
++    """Fail closed when a fixture command writes block-entity NBT.
++
++    `data merge`, `data modify` or `setblock{...}` would forge a furnace's
++    RecipesUsed counter (and with it the iron proof), so the gate refuses to run
++    with such a command in its own transcript.
++    """
++    for command in commands:
++        text = str(command).lower()
++        if any(token in text for token in NBT_WRITE_TOKENS):
++            raise RuntimeError(f"fixture writes block-entity NBT, the iron proof would be forged: {command!r}")
+ 
+ 
+ def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, bool]:
+@@ -1168,6 +1201,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server:
+     iron_captured: set[tuple[int, int, int]] = set()
+     advanced = 0
+     while True:
++        assert_no_evidence_writes(probe.report.get("fixture_commands") or [])
+         project_shot: dict[str, Any] = {}
+         def capture_project() -> None:
+             project_shot.update(native_client.capture(probe.client, artifact, f"civilization-project-{advanced:06d}"))
+@@ -1197,6 +1231,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server:
+                 furnace["container_observation"] = "read-only data get block; totals across slots"
+             except Exception as exc:
+                 furnace["container_error"] = str(exc)
++            try:
++                furnace["recipes_used"] = village.read_recipes(
++                    server, server_log, pos, min(15.0, probe.remaining()))
++            except Exception as exc:
++                furnace["recipes_error"] = str(exc)
+             if pos not in seen_furnaces:
+                 probe.call("minecraft_close_screen", {})
+                 player = probe.observe()["player"]
+@@ -1208,18 +1247,27 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server:
+                 workstation_shots.append(native_client.capture(
+                     probe.client, artifact, f"civilization-workstation-{advanced:06d}"))
+                 seen_furnaces.add(pos)
+-            if ((furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0
+-                    and pos not in baseline_furnaces and pos not in iron_captured):
+-                iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
+-                if iron_menu is None:
+-                    furnace["iron_menu_skipped"] = "output collected before the simulation hold"
+-                    continue
+-                furnace["iron_menu"] = iron_menu
+-                iron_captured.add(pos)
+-                detail["milestones"].setdefault("iron_smelted", {
+-                    "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
+-                    "furnace": pos, "menu": iron_menu["container"],
+-                })
++            if "iron_smelted" not in detail["milestones"]:
++                evidence = iron_evidence(furnace, baseline=pos in baseline_furnaces)
++                if evidence == "output_slot" and pos not in iron_captured:
++                    iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
++                    if iron_menu is None:
++                        furnace["iron_menu_skipped"] = "output collected before the simulation hold"
++                    else:
++                        furnace["iron_menu"] = iron_menu
++                        iron_captured.add(pos)
++                        detail["milestones"]["iron_smelted"] = {
++                            "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
++                            "furnace": pos, "menu": iron_menu["container"],
++                            "source": "output_slot",
++                        }
++                if "iron_smelted" not in detail["milestones"] and evidence == "furnace_recipes":
++                    detail["milestones"]["iron_smelted"] = {
++                        "sprint_ticks": advanced, "furnace": pos,
++                        "recipes_used": furnace["recipes_used"],
++                        "source": "furnace_recipes",
++                        "note": "persistent RecipesUsed counter; the ingot was collected between samples",
++                    }
+         shot = native_client.capture(probe.client, artifact, f"civilization-{advanced:06d}")
+         row = {"sprint_ticks": advanced, "elapsed_seconds": time.monotonic() - started,
+                "client_game_time": village._gametime(probe),
+diff --git b/tools/harness/backends/village_autonomy_qa.py a/tools/harness/backends/village_autonomy_qa.py
+index 13174f332..edebcfe29 100644
+--- b/tools/harness/backends/village_autonomy_qa.py
++++ a/tools/harness/backends/village_autonomy_qa.py
+@@ -443,6 +443,54 @@ def _snbt_fields(source: str) -> dict[str, str]:
+     return fields
+ 
+ 
++IRON_SMELT_RECIPE = "minecraft:iron_ingot_from_smelting_raw_iron"
++
++
++def iron_smelted_by_recipes(recipes: dict[str, int] | None) -> bool:
++    """A furnace's persistent counter proves a smelt even when the output was collected.
++
++    The counter lives in the block entity for the world's life, so it survives the
++    resident collecting an ingot between samples (seed-24 gate 20261124T212153:
++    two ingots smelted, shears in storage, no ingot in a slot at any sample).
++    """
++    return (recipes or {}).get(IRON_SMELT_RECIPE, 0) >= 1
++
++
++def _recipe_counts(source: str) -> dict[str, int]:
++    """`RecipesUsed: {"minecraft:...": N}` from one block-entity read."""
++    match = re.search(r"RecipesUsed: \{([^}]*)\}", source)
++    if match is None:
++        return {}
++    return {key: int(count) for key, count in re.findall(r'"([^"]+)"\s*:\s*(\d+)', match.group(1))}
++
++
++def read_recipes(
++    server: subprocess.Popen[Any], log_path: Path, pos: tuple[int, int, int], timeout: float,
++) -> dict[str, int]:
++    """Read one block entity's persistent RecipesUsed counters (read-only)."""
++    if server.stdin is None:
++        raise RuntimeError("server console is unavailable for a recipe read")
++    offset = log_path.stat().st_size
++    x, y, z = pos
++    command = f"data get block {x} {y} {z}"
++    prefix = f"{x}, {y}, {z} has the following block data: "
++    server.stdin.write((command + "\n").encode())
++    server.stdin.flush()
++
++    def replied() -> tuple[bool, str]:
++        with log_path.open("rb") as stream:
++            stream.seek(offset)
++            lines = stream.read().decode(errors="replace").splitlines()
++        for line in lines:
++            if line.startswith(prefix):
++                return True, line
++            if line in ("That position is not loaded", "The target block is not a block entity") or line.startswith("Command failed:"):
++                raise RuntimeError(f"recipe read refused {command!r}: {line}")
++        return False, ""
++
++    return _recipe_counts(runtime.wait_for_path_condition(log_path, timeout, replied))
++
++
+ def _container_totals(source: str) -> dict[str, int]:
+     """Read one physical block's live Items; absent Items means an empty block."""
+     items = _snbt_fields(source).get("Items", "[]").strip()

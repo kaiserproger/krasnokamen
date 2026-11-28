@@ -9,6 +9,7 @@ source = "civilization-seed-qa artifact wt/D123Gate47/.analysis/validation/20261
 failing_first = "reported"
 regression = [
   "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_console_reply_embedded_in_a_perf_line_is_accepted",
+  "harness:civilization-seed-qa:all",
 ]
 repro_check = ["Final-pin run 20261126T101004 settled the mechanism: the reply was on disk but embedded in a perf line without a leading newline (`server.log:5436644 ... post=0.0398, 67, -155 has the following block data: {Items: [], ...}`), so the startswith-only matcher timed out after 15 s. The matcher now accepts the reply anywhere in a line and `_planner_status` retries both reads once after closing a covering screen.", "Next gate run: the TimeoutError now names the container position and the log tail read after it (diagnostic added on wt/D123CivStock); a cargo/source control is not available for a filesystem wait, so the proof is the next artifact's error text."]
 fix_commit = "a0c0f89026e9b1bd6b6d09fbfc54fedda2ee1d9c"
