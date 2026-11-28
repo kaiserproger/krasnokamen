@@ -67,7 +67,7 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {IsBaby:1b,NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {Age:-24000,NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
     },
     {
       "wait_ticks": 40
@@ -94,7 +94,7 @@
       "wait_ticks": 20
     },
     {
-      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {IsBaby:1b,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+      "cmd": "summon minecraft:chicken 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
     },
     {
       "wait_ticks": 40
@@ -151,7 +151,7 @@
       "wait_ticks": 20
     },
     {
-      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {IsBaby:1b,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:cold',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
     },
     {
       "wait_ticks": 40
@@ -205,7 +205,7 @@
       "wait_ticks": 20
     },
     {
-      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {IsBaby:1b,variant:'minecraft:warm',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+      "cmd": "summon minecraft:cow 1000.5 160 1003.5 {Age:-24000,variant:'minecraft:warm',NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
     },
     {
       "wait_ticks": 40
